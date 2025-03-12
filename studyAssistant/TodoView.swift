@@ -1,58 +1,55 @@
 import SwiftUI
 
 struct TodoView: View {
+    @State private var selectedDate = Date()
     @State private var tasks: [Task] = []
     @State private var showingAddTask = false
     
-    struct WeekCalendarView: View {
-        @Binding var currentDate: Date
-        private let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-        var body: some View {
-            VStack(spacing: 15) {
-                HStack {
-                    ForEach(weekdays, id: \.self) { day in
-                        Text(day).font(.system(size: 18, weight: .bold)).frame(maxWidth: .infinity)
-                    }
-                }
-
-                HStack {
-                    ForEach(0..<7) { index in
-                        let date = getDate(for: index)
-                        VStack {
-                            Text("\(Calendar.current.component(.day, from: date))")
-                                .font(.system(size: 28, weight: .bold))
-                                .foregroundColor(isToday(date) ? .white : .primary)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(isToday(date) ? Color.primary : Color.clear))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-            }
-        }
-
-        private func getDate(for index: Int) -> Date {
-            let calendar = Calendar.current
-            let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: currentDate)?.start ?? Date()
-            return calendar.date(byAdding: .day, value: index, to: startOfWeek) ?? Date()
-        }
-
-        private func isToday(_ date: Date) -> Bool {
-            return Calendar.current.isDateInToday(date)
-        }
+    // 倒數 50 天的目標日期
+    private let countdownTargetDate = Calendar.current.date(byAdding: .day, value: 50, to: Date())!
+    
+    // 計算倒數天數
+    private var daysRemaining: Int {
+        let today = Calendar.current.startOfDay(for: Date())
+        let target = Calendar.current.startOfDay(for: countdownTargetDate)
+        return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
     }
-
     
     var body: some View {
         NavigationStack {
-            VStack {
-                WeekCalendarView(currentDate: .constant(Date()))
-                    .padding(.bottom, 10)
+            VStack(alignment: .leading) {
+                // 左上角顯示「考研倒數 50 天」，字體放大
+                HStack {
+                    Text("考研倒數 \(daysRemaining) 天")
+                        .font(.largeTitle) // 放大字體
+                        .bold()
+                        .foregroundColor(.red)
+                        .padding(.all)
+                    Spacer()
+                }
+                
+                // 顯示當前年月日
+                Text(selectedDate, format: Date.FormatStyle().year().month().day())
+                    .font(.title)
+                    .bold()
+                    .padding()
+                
+                // 一週日曆
+                WeekCalendarView(selectedDate: $selectedDate)
+                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 
                 List {
                     // 今日待辦事項
-                    Section(header: Text("今日待辦")) {
+                    Section(header: HStack {
+                        Text("今日待辦")
+                        Spacer()
+                        Button(action: {
+                            showingAddTask = true
+                        }) {
+                            Image(systemName: "plus")
+                        }
+                    }) {
                         ForEach(tasks.filter { !$0.isCompleted }) { task in
                             TaskRow(task: task) { updatedTask in
                                 if let index = tasks.firstIndex(where: { $0.id == updatedTask.id }) {
@@ -75,19 +72,11 @@ struct TodoView: View {
                         .onDelete(perform: deleteTasks)
                     }
                 }
-                
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            showingAddTask = true
-                        }) {
-                            Image(systemName: "plus")
-                        }
-                    }
-                }
                 .sheet(isPresented: $showingAddTask) {
                     AddTaskView(tasks: $tasks)
                 }
+                
+                Spacer()
             }
         }
     }
@@ -118,19 +107,19 @@ struct TaskRow: View {
             }) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(task.isCompleted ? .green : .gray)
-                                }
+            }
             
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading) {
                 Text(task.title)
                     .strikethrough(task.isCompleted)
                     .font(.title3)
                     .bold()
                     .foregroundColor(task.isCompleted ? .gray : .primary)
-
+                
                 Text(task.startDate.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundColor(.gray)
-            }.padding(.vertical, 10)
+            }
             
             Spacer()
         }
@@ -178,48 +167,34 @@ struct AddTaskView: View {
     }
 }
 
-struct StatusBarView: View {
-    @State private var currentTime = Date()
+// 一週日曆視圖
+struct WeekCalendarView: View {
+    @Binding var selectedDate: Date
+    private let calendar = Calendar.current
     
-    let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    private var weekDates: [Date] {
+        let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? selectedDate
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+    }
     
     var body: some View {
         HStack {
-            Text(timeString).font(.system(size: 34, weight: .bold))
-            Spacer()
-            
-            HStack(spacing: 10) {
-                SignalView()
-                Text("4G").fontWeight(.bold)
-                BatteryView()
+            ForEach(weekDates, id: \.self) { date in
+                VStack {
+                    Text(date, format: .dateTime.weekday(.abbreviated))
+                        .font(.caption)
+                    Text(date, format: .dateTime.day())
+                        .font(.headline)
+                        .foregroundColor(calendar.isDate(date, inSameDayAs: selectedDate) ? .white : .primary)
+                        .frame(width: 40, height: 40)
+                        .background(calendar.isDate(date, inSameDayAs: selectedDate) ? Color.black : Color.clear)
+                        .clipShape(Circle())
+                        .onTapGesture {
+                            selectedDate = date
+                        }
+                }
             }
         }
-        .padding()
-        .onReceive(timer) { _ in
-            currentTime = Date()
-        }
-    }
-
-    private var timeString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "H:mm"
-        return formatter.string(from: currentTime)
-    }
-}
-
-struct SignalView: View {
-    var body: some View {
-        Image(systemName: "antenna.radiowaves.left.and.right")
-            .font(.system(size: 20))
-            .foregroundColor(.gray)
-    }
-}
-
-struct BatteryView: View {
-    var body: some View {
-        Image(systemName: "battery.100")
-            .font(.system(size: 20))
-            .foregroundColor(.green)
     }
 }
 
