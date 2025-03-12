@@ -3,6 +3,7 @@ import SwiftUI
 struct TimerView: View {
     @State private var timeRemaining = 25 * 60 // 25分鐘
     @State private var isRunning = false
+    @State private var isCountdown = true 
     
     var body: some View {
         NavigationStack {
@@ -11,6 +12,8 @@ struct TimerView: View {
                     .font(.system(size: 70, weight: .bold))
                     .padding()
                 
+                
+
                 HStack(spacing: 30) {
                     Button(action: {
                         isRunning.toggle()
@@ -34,8 +37,26 @@ struct TimerView: View {
                             .foregroundColor(.white)
                             .clipShape(Capsule())
                     }
+                    
+                    
                 }
+                HStack(spacing: 30) {
+                    
+                    Button {
+                        isCountdown.toggle()
+                    } label: {
+                        Text(isCountdown ? "倒計時" : "正計時")
+                            .font(.title)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
+                    }
+                    
+                    
+                }.padding(.top)
             }
+            
             .navigationTitle("專注計時")
         }
     }
@@ -45,4 +66,8 @@ struct TimerView: View {
         let remainingSeconds = seconds % 60
         return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
+}
+
+#Preview{
+    TimerView()
 }

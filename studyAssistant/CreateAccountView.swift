@@ -1,11 +1,8 @@
-
-
 import SwiftUI
 
-struct ContenAccountView: View {
+struct CreateAccountView: View {
     var body: some View {
         VStack {
-            
             
             Spacer() // This will push the buttons to the bottom
             
@@ -39,5 +36,5 @@ struct ContenAccountView: View {
 }
 
 #Preview {
-    ContentView()
+    CreateAccountView()
 }

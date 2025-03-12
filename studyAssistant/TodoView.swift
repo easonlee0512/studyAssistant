@@ -3,7 +3,6 @@ import SwiftUI
 struct TodoView: View {
     @State private var tasks: [Task] = []
     @State private var showingAddTask = false
-    @State private var newTaskTitle = ""
     
     var body: some View {
         NavigationStack {
@@ -57,15 +56,8 @@ struct TodoView: View {
 struct Task: Identifiable {
     let id = UUID()
     var title: String
-    var dueDate: Date
+    var startDate: Date
     var isCompleted: Bool
-    var priority: Priority
-    
-    enum Priority: String, CaseIterable {
-        case high = "高"
-        case medium = "中"
-        case low = "低"
-    }
 }
 
 // 任務列表項
@@ -87,40 +79,12 @@ struct TaskRow: View {
                 Text(task.title)
                     .strikethrough(task.isCompleted)
                 
-                Text(task.dueDate.formatted(date: .abbreviated, time: .shortened))
+                Text(task.startDate.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundColor(.gray)
             }
             
             Spacer()
-            
-            PriorityBadge(priority: task.priority)
-        }
-    }
-}
-
-// 優先級標籤
-struct PriorityBadge: View {
-    let priority: Task.Priority
-    
-    var body: some View {
-        Text(priority.rawValue)
-            .font(.caption)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(priorityColor.opacity(0.2))
-            .foregroundColor(priorityColor)
-            .clipShape(Capsule())
-    }
-    
-    var priorityColor: Color {
-        switch priority {
-        case .high:
-            return .red
-        case .medium:
-            return .orange
-        case .low:
-            return .blue
         }
     }
 }
@@ -130,20 +94,18 @@ struct AddTaskView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var tasks: [Task]
     @State private var title = ""
-    @State private var dueDate = Date()
-    @State private var priority: Task.Priority = .medium
+    @State private var startTime = Date()
+    @State private var durationHours = 1
     
     var body: some View {
         NavigationStack {
             Form {
                 TextField("任務名稱", text: $title)
                 
-                DatePicker("截止日期", selection: $dueDate)
+                DatePicker("開始時間", selection: $startTime, displayedComponents: .hourAndMinute)
                 
-                Picker("優先級", selection: $priority) {
-                    ForEach(Task.Priority.allCases, id: \.self) { priority in
-                        Text(priority.rawValue).tag(priority)
-                    }
+                Stepper(value: $durationHours, in: 1...24) {
+                    Text("持續時間: \(durationHours) 小時")
                 }
             }
             .navigationTitle("新增任務")
@@ -157,7 +119,7 @@ struct AddTaskView: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("新增") {
-                        let task = Task(title: title, dueDate: dueDate, isCompleted: false, priority: priority)
+                        let task = Task(title: title, startDate: startTime, isCompleted: false)
                         tasks.append(task)
                         dismiss()
                     }
