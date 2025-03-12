@@ -18,20 +18,20 @@ struct ContentView: View {
                 .tabItem {
                     Label("待辦", systemImage: "checklist")
                 }
-                .tag(2)
+                .tag(0)
             // 計時頁面
             TimerView()
                 .tabItem {
                     Label("計時", systemImage: "timer")
                 }
-                .tag(0)
+                .tag(1)
             
             // 日曆頁面
             CalendarView()
                 .tabItem {
                     Label("日曆", systemImage: "calendar")
                 }
-                .tag(1)
+                .tag(2)
             
             
             
