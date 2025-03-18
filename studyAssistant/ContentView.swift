@@ -1,15 +1,11 @@
-//
-//  ContentView.swift
-//  studyAssistant
-//
-//  Created by 李翊辰 on 2025/3/5.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     @State private var selectedTab = 0
     
+    // 假設有一個共享的待辦事項數據
+    @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]
+
     var body: some View {
         TabView(selection: $selectedTab) {
 
@@ -19,6 +15,7 @@ struct ContentView: View {
                     Label("待辦", systemImage: "checklist")
                 }
                 .tag(0)
+
             // 計時頁面
             TimerView()
                 .tabItem {
@@ -33,18 +30,23 @@ struct ContentView: View {
                 }
                 .tag(2)
             
-            
-            
+            // 統計頁面 (新增)
+            StatisticsView(todos: todos)
+                .tabItem {
+                    Label("統計", systemImage: "chart.bar")
+                }
+                .tag(3)
+
             // 設定頁面
             SettingsView()
                 .tabItem {
                     Label("設定", systemImage: "gear")
                 }
-                .tag(3)
+                .tag(4)
         }
     }
 }
+
 #Preview {
     ContentView()
 }
-
