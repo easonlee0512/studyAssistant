@@ -5,28 +5,37 @@ struct TodoView: View {
     @State private var selectedDate = Date() // 儲存當前選擇的日期
     @State private var tasks: [Task] = [] // 儲存待辦事項列表
     @State private var showingAddTask = false // 控制是否顯示添加任務的視圖
-    
-    // 設定倒數目標日期（50 天後）
-    private let countdownTargetDate = Calendar.current.date(byAdding: .day, value: 50, to: Date())!
+    @State private var userGoal: String = ""  // 存儲用戶設定的目標
+    @State private var targetDate: Date? = nil  // 存儲目標日期
     
     // 計算從今天到目標日期還剩下多少天
     private var daysRemaining: Int {
-        let today = Calendar.current.startOfDay(for: Date()) // 取得今天的日期，忽略時間部分
-        let target = Calendar.current.startOfDay(for: countdownTargetDate) // 目標日期的開始時間
+        let today = Calendar.current.startOfDay(for: Date())
+        // 如果有目標日期就使用目標日期，否則默認使用50天後
+        let targetDate = self.targetDate ?? Calendar.current.date(byAdding: .day, value: 50, to: Date())!
+        let target = Calendar.current.startOfDay(for: targetDate)
         return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
     }
     
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading) {
-                // 顯示倒數天數（考研倒數 50 天），字體加大
+                // 顯示用戶目標或默認倒數天數
                 HStack {
-                    Text("考研倒數 \(daysRemaining) 天")
-                        .font(.largeTitle) // 字體加大
-                        .bold()
-                        .foregroundColor(.red) // 顯示紅色
-                        .padding(.all)
-                    Spacer() // 右邊空白
+                    if !userGoal.isEmpty {
+                        Text(userGoal)  // 顯示用戶設定的目標
+                            .font(.largeTitle)
+                            .bold()
+                            .foregroundColor(.red)
+                            .padding(.all)
+                    } else {
+                        Text("考試倒數 \(daysRemaining) 天")  // 默認顯示
+                            .font(.largeTitle)
+                            .bold()
+                            .foregroundColor(.red)
+                            .padding(.all)
+                    }
+                    Spacer()
                 }
                 
                 // 顯示選擇的日期（年-月-日格式）
@@ -83,6 +92,20 @@ struct TodoView: View {
                 
                 Spacer() // 使內容底部空間自適應
             }
+            .onAppear {
+                loadUserSettings()  // 載入用戶設定
+            }
+        }
+    }
+    
+    // 載入用戶設定
+    private func loadUserSettings() {
+        // 從 UserDefaults 讀取用戶設定的目標
+        userGoal = UserDefaults.standard.string(forKey: "userGoal") ?? ""
+        
+        // 從 UserDefaults 讀取目標日期
+        if let savedDate = UserDefaults.standard.object(forKey: "targetDate") as? Date {
+            targetDate = savedDate
         }
     }
     
