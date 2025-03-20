@@ -22,12 +22,14 @@ class ChatViewModel: ObservableObject {
     private func getCurrentTime() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/M/d"  // 設定日期格式為：年/月/日
+        formatter.timeZone = TimeZone.current  // 設定為本地時區
         return formatter.string(from: Date())  // 將當前時間轉換為字串
     }
     
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/M/d"  // 設定日期格式為：年/月/日
+        formatter.timeZone = TimeZone.current  // 設定為本地時區
         return formatter.string(from: date)  // 將輸入的日期轉換為字串
     }
     
@@ -42,6 +44,7 @@ class ChatViewModel: ObservableObject {
         let dateFormatter = DateFormatter()
         // 設定日期格式為 "yyyy-MM-dd"，例如 "2025-03-21"
         dateFormatter.dateFormat = "yyyy-MM-dd"
+        dateFormatter.timeZone = TimeZone.current  // 設定為本地時區
         
         // 遍歷每一行回應
         for line in lines {
@@ -60,10 +63,11 @@ class ChatViewModel: ObservableObject {
             let title = content
             
             // 創建日曆實例，用於處理日期時間
-            let calendar = Calendar.current
+            var calendar = Calendar.current
+            calendar.timeZone = TimeZone.current  // 確保日曆使用本地時區
             
-            // 設定開始時間為當天的早上9點
-            var startTimeComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+            // 設定開始時間為當天的上午 9 點
+            var startTimeComponents = calendar.dateComponents([.year, .month, .day], from: date)
             startTimeComponents.hour = 9
             startTimeComponents.minute = 0
             startTimeComponents.second = 0
@@ -83,13 +87,17 @@ class ChatViewModel: ObservableObject {
             }
         }
         
-        // 除錯：印出所有解析結果
+        // 除錯：印出所有解析結果，使用格式化日期
         print("=== TodoItems 解析結果 ===")
+        let debugFormatter = DateFormatter()
+        debugFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        debugFormatter.timeZone = TimeZone.current
+        
         for (index, item) in items.enumerated() {
             print("項目 \(index + 1):")
             print("  標題: \(item.title)")
-            print("  日期: \(item.date)")
-            print("  開始時間: \(item.startTime)")
+            print("  日期: \(debugFormatter.string(from: item.date))")
+            print("  開始時間: \(debugFormatter.string(from: item.startTime))")
             print("  持續時間: \(item.durationHours)小時")
             print("  完成狀態: \(item.isCompleted)")
             print("---")
@@ -124,7 +132,7 @@ class ChatViewModel: ObservableObject {
 1. 計算從今天（含）到截止日期（含）之間的總天數。
 2. 根據「閱讀範圍總量」的實際單位（如頁數或章節），將其平均分配到這些天數，並依序列出每一天對應的閱讀區段（例如，第 1-10 頁、第 11-20 頁；或第 1-2 章、第 3-4 章）。
 3. 若有餘數或拆分不均，請將剩餘部分分配到其中一些天，使得所有閱讀都能在截止日期之前完成。若平均分配後仍不足以在截止日前讀完，則在部分天數上額外增加更大區段。
-4. 最後，請僅使用以下格式逐日列出結果（無須任何額外解釋或其他文字）：
+4. 最後，請僅使用以下格式逐日列出結果（無須任何額外解釋或其他文字），輸出日期前先加上***，輸出完後加上***：
 {YYYY-MM-DD}: {閱讀標題} - {該日對應的閱讀區段}
 
 例如：
@@ -132,7 +140,7 @@ class ChatViewModel: ObservableObject {
 2025-03-22: 計算機科學導論 - 第 11～20 頁
 ... 以此類推，直到全部範圍分配完畢。
 
-請謹記：不得添加與此無關的內容，否則後果將非常嚴重。務必確保在截止日前可讀完所有內容。
+請謹記：不得添加與此無關的內容，否則後果將非常嚴重。務必確保在截止日前可讀完所有內容。並且只能輸出規定{YYYY-MM-DD}: {閱讀標題} - {該日對應的閱讀區段}，絕對不能有任何解釋。並且只印出第四點的格式，絕對不能有任何解釋。前三點的內容不要印出來。
 """
         
         // 先顯示 prompt

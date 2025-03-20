@@ -24,7 +24,7 @@ class OpenAIService {
         let parameters = OpenAIChatRequest(
             model: "gpt-4o",
             messages: [
-                ["role": "system", "content": " "],
+                ["role": "system", "content": "You are a smart study assistant that helps students create effective study plans. You analyze the student's requirements and create personalized study schedules."],
                 ["role": "user", "content": prompt]
             ]
         )
