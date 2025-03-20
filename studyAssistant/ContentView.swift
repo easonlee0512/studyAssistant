@@ -37,20 +37,13 @@ struct ContentView: View {
                     Label("計時", systemImage: "timer")
                 }
                 .tag(3)
-            
-            // 統計頁面
-            StatisticsView(todos: todos)
-                .tabItem {
-                    Label("統計", systemImage: "chart.bar")
-                }
-                .tag(4)
 
             // 設定頁面
-            SettingsView()
+            SettingsView(todos: todos)
                 .tabItem {
                     Label("設定", systemImage: "gear")
                 }
-                .tag(5)
+                .tag(4)
         }
     }
 }

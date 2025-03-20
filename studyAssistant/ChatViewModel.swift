@@ -22,14 +22,12 @@ class ChatViewModel: ObservableObject {
     private func getCurrentTime() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/M/d"  // 設定日期格式為：年/月/日
-        formatter.timeZone = TimeZone.current  // 設定為本地時區
         return formatter.string(from: Date())  // 將當前時間轉換為字串
     }
     
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/M/d"  // 設定日期格式為：年/月/日
-        formatter.timeZone = TimeZone.current  // 設定為本地時區
         return formatter.string(from: date)  // 將輸入的日期轉換為字串
     }
     
@@ -44,7 +42,6 @@ class ChatViewModel: ObservableObject {
         let dateFormatter = DateFormatter()
         // 設定日期格式為 "yyyy-MM-dd"，例如 "2025-03-21"
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.timeZone = TimeZone.current  // 設定為本地時區
         
         // 遍歷每一行回應
         for line in lines {
@@ -63,12 +60,11 @@ class ChatViewModel: ObservableObject {
             let title = content
             
             // 創建日曆實例，用於處理日期時間
-            var calendar = Calendar.current
-            calendar.timeZone = TimeZone.current  // 確保日曆使用本地時區
+            let calendar = Calendar.current
             
-            // 設定開始時間為當天的上午 9 點
-            var startTimeComponents = calendar.dateComponents([.year, .month, .day], from: date)
-            startTimeComponents.hour = 9
+            // 設定開始時間為當天的早上9點
+            var startTimeComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+            startTimeComponents.hour = 0+8 //因為是UTC+8
             startTimeComponents.minute = 0
             startTimeComponents.second = 0
             
@@ -87,17 +83,13 @@ class ChatViewModel: ObservableObject {
             }
         }
         
-        // 除錯：印出所有解析結果，使用格式化日期
+        // 除錯：印出所有解析結果
         print("=== TodoItems 解析結果 ===")
-        let debugFormatter = DateFormatter()
-        debugFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        debugFormatter.timeZone = TimeZone.current
-        
         for (index, item) in items.enumerated() {
             print("項目 \(index + 1):")
             print("  標題: \(item.title)")
-            print("  日期: \(debugFormatter.string(from: item.date))")
-            print("  開始時間: \(debugFormatter.string(from: item.startTime))")
+            print("  日期: \(item.date)")
+            print("  開始時間: \(item.startTime)")
             print("  持續時間: \(item.durationHours)小時")
             print("  完成狀態: \(item.isCompleted)")
             print("---")

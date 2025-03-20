@@ -7,7 +7,8 @@ struct SettingsView: View {
     @State private var showingProfileSettings = false
     @State private var iscountdownnoti = true
     @State private var isshockEnabled = true
-
+    @State private var showingStatistics = false
+    var todos: [Date: [(task: String, isCompleted: Bool)]]
     
     var body: some View {
         NavigationStack {
@@ -22,10 +23,21 @@ struct SettingsView: View {
                             Image(systemName:"chevron.right")
                                 .foregroundColor(.gray)
                         }
-                        
                     }
-
+                }
+                
+                Section("數據分析") {
+                    Button (action:{
+                        showingStatistics = true
+                    } ){
+                        HStack {
+                            Label("統計資料", systemImage: "chart.bar")
+                            Spacer()
+                            Image(systemName:"chevron.right")
+                                .foregroundColor(.gray)
+                        }
                     }
+                }
                 
                 Section("一般設定") {
                     Toggle("深色模式", isOn: $isDarkMode)
@@ -49,7 +61,17 @@ struct SettingsView: View {
             .sheet(isPresented: $showingProfileSettings){
                 ProfileSettingsView()
             }
+            .sheet(isPresented: $showingStatistics){
+                StatisticsView(todos: todos)
+            }
         }
+    }
+}
+
+// 為了預覽提供一個初始化方法
+extension SettingsView {
+    init() {
+        self.todos = [:]
     }
 }
 
