@@ -111,6 +111,8 @@ struct TodoItemRow: View {
 
 // MARK: - 日曆主視圖
 struct CalendarView: View {
+    @EnvironmentObject private var dataStore: AppDataStore
+    
     // MARK: 狀態變量
     @State private var selectedDate = Date()  // 當前選中的日期
     @State private var showingDetail = false  // 控制詳情視圖顯示
@@ -126,7 +128,19 @@ struct CalendarView: View {
     // MARK: 計算屬性
     /// 過濾選中日期的任務
     var filteredTodos: [TodoItem] {
-        todos.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+        combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+    
+    /// 結合本地任務和全局數據存儲的任務
+    var combinedTodoItems: [TodoItem] {
+        var combined = todos
+        combined.append(contentsOf: dataStore.todoItems)
+        return combined
+    }
+    
+    /// 過濾選中日期的所有任務（包括本地和全局）
+    var todosForSelectedDate: [TodoItem] {
+        combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
     
     // MARK: 視圖體
@@ -184,9 +198,9 @@ struct CalendarView: View {
                                     Text("\(Calendar.current.component(.day, from: date))")
                                         .font(.system(size: 20))
 
-                                    // 顯示當天的任務列表
+                                    // 顯示當天的任務列表 - 現在包含全局數據
                                     VStack(alignment: .leading) {
-                                        ForEach(todos.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }) { todo in
+                                        ForEach(combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }) { todo in
                                             Text(todo.title)
                                                 .font(.caption2)
                                                 .foregroundColor(.gray)
@@ -314,46 +328,31 @@ struct CalendarView: View {
         return formatter.string(from: selectedDate)
     }
     
-    /// 獲取年份字符串
+    /// 格式化年份
     private var yearString: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy年"
+        formatter.dateFormat = "yyyy"
         return formatter.string(from: selectedDate)
     }
     
-    /// 獲取月份字符串
+    /// 格式化月份
     private var monthString: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "M月"
+        formatter.dateFormat = "MMMM"
         return formatter.string(from: selectedDate)
     }
     
-    /// 計算網格中索引對應的日期
+    /// 獲取日期
     private func getDate(for index: Int) -> Date? {
         let calendar = Calendar.current
-        // 獲取月份的第一天
-        let firstDayOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate))!
-        // 獲取月份第一天是星期幾
-        let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth)
-        // 計算偏移天數
-        let offsetDays = index - (firstWeekday - 1)
-        // 返回對應的日期
-        return calendar.date(byAdding: .day, value: offsetDays, to: firstDayOfMonth)
+        let date = calendar.date(byAdding: .day, value: index - 20, to: selectedDate)
+        return date
     }
     
-    /// 檢查日期是否是今天
+    /// 判斷是否為今天
     private func isToday(_ date: Date) -> Bool {
-        Calendar.current.isDate(date, inSameDayAs: Date())
-    }
-    
-    /// 獲取指定日期的任務摘要文本
-    private func tasksForDate(_ date: Date) -> String {
-        // 過濾出當天的任務
-        let tasks = todos.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
-        // 只顯示前兩個任務的標題
-        let taskTitles = tasks.prefix(2).map { $0.title }
-        // 如果有更多任務，添加省略號
-        return taskTitles.joined(separator: ", ") + (tasks.count > 2 ? "..." : "")
+        let calendar = Calendar.current
+        return calendar.isDateInToday(date)
     }
 }
 
