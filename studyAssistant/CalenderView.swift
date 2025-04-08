@@ -111,8 +111,6 @@ struct TodoItemRow: View {
 
 // MARK: - 日曆主視圖
 struct CalendarView: View {
-    @EnvironmentObject private var dataStore: AppDataStore
-    
     // MARK: 狀態變量
     @State private var selectedDate = Date()  // 當前選中的日期
     @State private var showingDetail = false  // 控制詳情視圖顯示
@@ -128,19 +126,7 @@ struct CalendarView: View {
     // MARK: 計算屬性
     /// 過濾選中日期的任務
     var filteredTodos: [TodoItem] {
-        combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
-    }
-    
-    /// 結合本地任務和全局數據存儲的任務
-    var combinedTodoItems: [TodoItem] {
-        var combined = todos
-        combined.append(contentsOf: dataStore.todoItems)
-        return combined
-    }
-    
-    /// 過濾選中日期的所有任務（包括本地和全局）
-    var todosForSelectedDate: [TodoItem] {
-        combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+        todos.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
     
     // MARK: 視圖體
@@ -198,9 +184,9 @@ struct CalendarView: View {
                                     Text("\(Calendar.current.component(.day, from: date))")
                                         .font(.system(size: 20))
 
-                                    // 顯示當天的任務列表 - 現在包含全局數據
+                                    // 顯示當天的任務列表
                                     VStack(alignment: .leading) {
-                                        ForEach(combinedTodoItems.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }) { todo in
+                                        ForEach(todos.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }) { todo in
                                             Text(todo.title)
                                                 .font(.caption2)
                                                 .foregroundColor(.gray)

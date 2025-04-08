@@ -3,7 +3,7 @@ import SwiftUI
 // TodoView 是主要的待辦事項視圖，顯示倒數計時、今日日期、一週的日曆以及待辦事項列表。
 struct TodoView: View {
     @State private var selectedDate = Date() // 儲存當前選擇的日期
-    @State private var tasks: [Task] = [] // 儲存待辦事項列表
+    @State private var tasks: [TodoTask] = [] // 儲存待辦事項列表
     @State private var showingAddTask = false // 控制是否顯示添加任務的視圖
     @State private var userGoal: String = ""  // 存儲用戶設定的目標
     @State private var targetDate: Date? = nil  // 存儲目標日期
@@ -116,7 +116,7 @@ struct TodoView: View {
 }
 
 // 任務模型，用於存儲每個任務的資料
-struct Task: Identifiable {
+struct TodoTask: Identifiable {
     let id = UUID() // 唯一的識別符
     var title: String // 任務標題
     var startDate: Date // 任務開始時間
@@ -125,8 +125,8 @@ struct Task: Identifiable {
 
 // 顯示單個任務的行視圖
 struct TaskRow: View {
-    @State var task: Task
-    var onUpdate: (Task) -> Void // 任務更新回調
+    @State var task: TodoTask
+    var onUpdate: (TodoTask) -> Void // 任務更新回調
     
     var body: some View {
         HStack {
@@ -161,7 +161,7 @@ struct TaskRow: View {
 // 新增任務的視圖
 struct AddTaskView: View {
     @Environment(\.dismiss) var dismiss // 用於關閉當前視圖
-    @Binding var tasks: [Task] // 傳入待辦事項列表的綁定
+    @Binding var tasks: [TodoTask] // 傳入待辦事項列表的綁定
     @State private var title = "" // 任務標題
     @State private var startTime = Date() // 任務開始時間
     @State private var durationHours = 1 // 任務持續時間（小時）
@@ -193,7 +193,7 @@ struct AddTaskView: View {
                 // 確認按鈕（新增任務）
                 ToolbarItem(placement: .confirmationAction) {
                     Button("新增") {
-                        let task = Task(title: title, startDate: startTime, isCompleted: false)
+                        let task = TodoTask(title: title, startDate: startTime, isCompleted: false)
                         tasks.append(task) // 將新任務添加到任務列表
                         dismiss() // 關閉視圖
                     }
