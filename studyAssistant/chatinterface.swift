@@ -49,7 +49,7 @@ class ChatViewModel: ObservableObject {
     private let apiKey = "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"
     
     func sendMessageToGPT(messages: [ChatMessage]) async -> String? {
-        // 將ChatMessage轉換為OpenAI格式 並且可以記住對話
+        // 將ChatMessage轉換為OpenAI格式 並且可以記住對話(是所有）
         let apiMessages = messages.map { message in
             OpenAIMessage(
                 role: message.isMe ? "user" : "assistant",
