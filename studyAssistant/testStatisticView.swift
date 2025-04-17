@@ -71,7 +71,7 @@ struct StatisticsTestView: View {
                     }
                 }
                 .padding()
-                .background(Color(UIColor.systemGray6))
+                .background(Color(red: 1, green: 0.93, blue: 0.85))
                 .cornerRadius(16)
                 .shadow(radius: 2)
                 
@@ -109,7 +109,7 @@ struct StatisticsTestView: View {
                     }
                 }
                 .padding()
-                .background(Color(UIColor.systemGray6))
+                .background(Color(red: 1, green: 0.93, blue: 0.85))
                 .cornerRadius(16)
                 .shadow(radius: 2)
                 
@@ -146,7 +146,7 @@ struct StatisticsTestView: View {
                     }
                 }
                 .padding()
-                .background(Color(UIColor.systemGray6))
+                .background(Color(red: 1, green: 0.93, blue: 0.85))
                 .cornerRadius(16)
                 .shadow(radius: 2)
             }
@@ -154,7 +154,7 @@ struct StatisticsTestView: View {
             .padding(.top, 20)  // 增加頂部邊距
             .frame(maxWidth: .infinity)
         }
-        .background(Color.white)
+        .background(Color(red: 0.95, green: 0.83, blue: 0.72))
         .edgesIgnoringSafeArea(.all)
     }
 }
