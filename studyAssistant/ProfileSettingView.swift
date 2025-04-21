@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftUICore
 
 struct ProfileSettingsView: View {
     @Environment(\.dismiss) var dismiss
@@ -13,77 +14,204 @@ struct ProfileSettingsView: View {
     @State private var selectedStage = "大學"
     let learningStages = ["國中", "高中", "大學", "研究所", "語言學習"]
     
+    // 計算剩餘天數
     private var remainingDays: Int {
-            let today = Calendar.current.startOfDay(for: Date())
-            let target = Calendar.current.startOfDay(for: targetDate)
-            return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
-        }
+        let today = Calendar.current.startOfDay(for: Date())
+        let target = Calendar.current.startOfDay(for: targetDate)
+        return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
+    }
+    
+    // 截图中的颜色
+    let backgroundColor = Color(hex: "F5DFC7") // 浅米色背景
+    let cardBackgroundColor = Color(hex: "FFF1E0") // 卡片背景色
+    let textColor = Color.black.opacity(0.8)
+    let placeholderColor = Color.black.opacity(0.4)
+    let dividerColor = Color.black.opacity(0.1)
     
     var body: some View {
-        NavigationStack {
-            Form {
-                // 用戶基本資料區塊
-                Section(header: Text("基本資料")) {
-                    TextField("使用者名稱", text: $username)
-                    TextField("給自己的一句話", text: $goal)
-                    DatePicker("目標日期", selection: $targetDate, displayedComponents: .date)
-                    HStack {
-                        Text("剩餘天數")
-                        Spacer()
-                        Text("\(remainingDays) 天")
-                            .foregroundColor(.gray)
-                    }
-                }
-                
-                // 學習階段區塊
-                Section(header: Text("學習階段")) {
-                    Picker("目前階段", selection: $selectedStage) {
-                        ForEach(learningStages, id: \.self) { stage in
-                            Text(stage).tag(stage)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-                
-                // 帳號操作區塊
-                Section {
+        ZStack {
+            // 背景色
+            backgroundColor.edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 0) {
+                // 顶部导航栏
+                HStack {
                     Button(action: {
-                        // 顯示確認登出的提示
-                        showingLogoutAlert = true
-                    }) {
-                        Text("登出")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-            .navigationTitle("個人檔案設定")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("關閉") {
                         dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.black)
                     }
-                }
-                
-                ToolbarItem(placement: .confirmationAction) {
+                    
+                    Spacer()
+                    
                     Button("儲存") {
                         saveProfile()
                         dismiss()
                     }
+                    .foregroundColor(.black)
+                    .font(.system(size: 17, weight: .medium))
                 }
-            }
-            .alert("確定要登出嗎？", isPresented: $showingLogoutAlert) {
-                Button("取消", role: .cancel) { }
-                Button("登出", role: .destructive) {
-                    logout()
+                .padding(.horizontal, 20)
+                .padding(.top, 15)
+                .padding(.bottom, 25)
+                
+                // 頭像
+                Circle()
+                    .fill(Color(hex: "D9D9D9")) // 灰色头像
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.black.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.bottom, 25)
+                
+                // 个人资料卡片
+                VStack(spacing: 0) {
+                    // 用户名区域
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("使用者名稱")
+                            .font(.system(size: 15))
+                            .foregroundColor(placeholderColor)
+                            .padding(.top, 20)
+                            .padding(.horizontal, 20)
+                        
+                        TextField("", text: $username)
+                            .font(.system(size: 17))
+                            .foregroundColor(textColor)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 8)
+                    }
+                    
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 20)
+                    
+                    // 鼓励语句区域
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("給自己的一句話")
+                            .font(.system(size: 15))
+                            .foregroundColor(placeholderColor)
+                            .padding(.top, 20)
+                            .padding(.horizontal, 20)
+                        
+                        TextField("", text: $goal)
+                            .font(.system(size: 17))
+                            .foregroundColor(textColor)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 8)
+                    }
+                    
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 20)
+                    
+                    // 目标日期区域
+                    HStack {
+                        Text("目標日期")
+                            .font(.system(size: 17))
+                            .foregroundColor(textColor)
+                        
+                        Spacer()
+                        
+                        // 日期选择器 - 圆角背景样式
+                        DatePicker("", selection: $targetDate, displayedComponents: .date)
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .accentColor(.black)
+                            .background(Color(hex: "E6E6E6"))
+                            .cornerRadius(8)
+                            .scaleEffect(0.9)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 20)
+                    
+                    // 剩余天数区域
+                    HStack {
+                        Text("剩餘天數")
+                            .font(.system(size: 17))
+                            .foregroundColor(textColor)
+                        
+                        Spacer()
+                        
+                        Text("\(remainingDays)天")
+                            .font(.system(size: 17))
+                            .foregroundColor(placeholderColor)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 20)
+                    
+                    // 學習階段區域
+                    HStack {
+                        Text("目前階段")
+                            .font(.system(size: 17))
+                            .foregroundColor(textColor)
+                        
+                        Spacer()
+                        
+                        Picker("", selection: $selectedStage) {
+                            ForEach(learningStages, id: \.self) { stage in
+                                Text(stage).tag(stage)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .accentColor(.black)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 20)
+                    
+                    // 登出按鈕
+                    Button(action: {
+                        showingLogoutAlert = true
+                    }) {
+                        HStack {
+                            Text("登出")
+                                .font(.system(size: 17))
+                                .foregroundColor(.red)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.red)
+                                .font(.system(size: 14))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                    }
                 }
-            } message: {
-                Text("登出後需要重新登入才能使用所有功能")
+                .background(cardBackgroundColor)
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 1)
+                .padding(.horizontal, 15)
+                
+                Spacer()
             }
-            .onAppear {
-                // 載入用戶資料
-                loadProfile()
+        }
+        .navigationBarHidden(true)
+        .alert("確定要登出嗎？", isPresented: $showingLogoutAlert) {
+            Button("取消", role: .cancel) { }
+            Button("登出", role: .destructive) {
+                logout()
             }
+        } message: {
+            Text("登出後需要重新登入才能使用所有功能")
+        }
+        .onAppear {
+            // 載入用戶資料
+            loadProfile()
         }
     }
     
@@ -93,8 +221,8 @@ struct ProfileSettingsView: View {
         username = UserDefaults.standard.string(forKey: "username") ?? ""
         goal = UserDefaults.standard.string(forKey: "userGoal") ?? ""
         if let savedDate = UserDefaults.standard.object(forKey: "targetDate") as? Date {
-                    targetDate = savedDate
-                }
+            targetDate = savedDate
+        }
         selectedStage = UserDefaults.standard.string(forKey: "learningStage") ?? "大學"
     }
     

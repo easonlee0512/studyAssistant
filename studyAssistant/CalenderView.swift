@@ -1,344 +1,235 @@
 import SwiftUI
-
-// MARK: - 任務數據模型
-/// 待辦事項數據模型，包含任務的基本信息
-struct TodoItem: Identifiable {
-    let id = UUID()                // 唯一標識符
-    var title: String              // 任務標題
-    var date: Date                 // 任務日期
-    var startTime: Date            // 開始時間
-    var durationHours: Int         // 持續時間（小時）
-    var isCompleted: Bool          // 完成狀態
-}
-
-// MARK: - 新增任務視圖
-/// 用於添加新任務的彈出視圖
-struct AddTodoView: View {
-    @Environment(\.dismiss) var dismiss       // 環境變量，用於關閉視圖
-    @Binding var todos: [TodoItem]            // 綁定的任務數組
-    @Binding var isPresented: Bool            // 控制視圖顯示狀態
-    @State private var title = ""             // 任務標題輸入
-    @State private var startTime = Date()     // 開始時間
-    @State private var durationHours = 1      // 持續時間，默認1小時
-    let selectedDate: Date                    // 選中的日期
-    
-    var body: some View {
-        VStack {
-            // 標題
-            Text("新增任務")
-                .font(.headline)
-                .padding(.top)
-            
-            // 表單輸入區域
-            VStack(spacing: 15) {
-                // 任務名稱輸入框
-                TextField("任務名稱", text: $title)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.horizontal)
-                
-                // 開始時間選擇器
-                DatePicker("開始時間", selection: $startTime, displayedComponents: .hourAndMinute)
-                    .padding(.horizontal)
-                
-                // 持續時間步進器
-                Stepper(value: $durationHours, in: 1...24) {
-                    Text("持續時間: \(durationHours) 小時")
-                }
-                .padding(.horizontal)
-            }
-            .padding(.vertical)
-            
-            // 底部按鈕區域
-            HStack(spacing: 20) {
-                // 取消按鈕
-                Button("取消") {
-                    isPresented = false  // 關閉視圖
-                }
-                .foregroundColor(.red)
-                
-                // 新增按鈕
-                Button("新增") {
-                    // 創建新任務並添加到數組
-                    let newTodo = TodoItem(
-                        title: title,
-                        date: selectedDate,
-                        startTime: startTime,
-                        durationHours: durationHours,
-                        isCompleted: false
-                    )
-                    todos.append(newTodo)
-                    isPresented = false  // 關閉視圖
-                }
-                .disabled(title.isEmpty)  // 標題為空時禁用按鈕
-            }
-            .padding(.bottom)
-        }
-        .frame(width: 280)  // 控制視圖寬度
-        .background(Color.white)
-        .cornerRadius(15)
-    }
-}
-
-// MARK: - 任務列表項視圖
-/// 顯示單個任務的行視圖
-struct TodoItemRow: View {
-    let todo: TodoItem  // 要顯示的任務
-    
-    var body: some View {
-        VStack(alignment: .leading) {
-            // 任務標題
-            Text(todo.title)
-                .font(.title3)
-                .bold()
-            
-            // 任務時間信息
-            Text("\(todo.startTime.formatted(date: .omitted, time: .shortened)) - \(durationText)")
-                .font(.caption)
-                .foregroundColor(.gray)
-        }
-        .padding(.vertical, 5)
-    }
-    
-    /// 計算結束時間文本
-    private var durationText: String {
-        let calendar = Calendar.current
-        if let endTime = calendar.date(byAdding: .hour, value: todo.durationHours, to: todo.startTime) {
-            return endTime.formatted(date: .omitted, time: .shortened)
-        }
-        return ""
-    }
-}
+import SwiftUICore
 
 // MARK: - 日曆主視圖
 struct CalendarView: View {
     // MARK: 狀態變量
     @State private var selectedDate = Date()  // 當前選中的日期
-    @State private var showingDetail = false  // 控制詳情視圖顯示
+    @State private var currentDate = Date()   // 顯示的當前月份
     @State private var showingAddTask = false // 控制添加任務視圖顯示
+    @State private var showingTodoDetail = false // 控制待辦詳情視圖顯示
     
-    // 示例任務數據
-    @State private var todos: [TodoItem] = [
-        TodoItem(title: "買牛奶", date: Date(), startTime: Date(), durationHours: 1, isCompleted: false),
-        TodoItem(title: "完成 Swift 專案", date: Date(), startTime: Date(), durationHours: 2, isCompleted: false),
-        TodoItem(title: "運動 30 分鐘", date: Date(), startTime: Date(), durationHours: 1, isCompleted: false)
-    ]
+    // 用于TodoAddView的任务列表
+    @State private var todoTasks: [TodoTask] = []
     
-    // MARK: 計算屬性
-    /// 過濾選中日期的任務
-    var filteredTodos: [TodoItem] {
-        todos.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
-    }
+    // 待辦事項列表（這裡是示例，實際應從數據源獲取）
+    @State private var todos: [String] = ["完成數學作業", "準備英文演講", "讀完物理課本第五章", "健身1小時"]
     
-    // MARK: 視圖體
+    // 背景和底部导航颜色
+    let backgroundColor = Color(red: 0.95, green: 0.83, blue: 0.72)
+    let bottomBarColor = Color(hex: "FEECD8")
+    
     var body: some View {
         ZStack {
-            // 主日曆視圖
-            NavigationStack {
-                VStack(alignment: .leading, spacing: 20) {
-                    // 頂部年份和工具按鈕
-                    HStack {
-                        Text("\(yearString)")
-                            .font(.title2)
-                            .foregroundColor(.red)
-                        Spacer()
-                        
-                        // 右上角功能按鈕
-                        HStack(spacing: 20) {
-                            Button(action: {}) {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundColor(.red)
-                            }
-                            Button(action: {}) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.red)
-                            }
-                            Button(action: {}) {
-                                Image(systemName: "plus")
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 月份顯示
-                    Text("\(monthString)")
-                        .font(.system(size: 40, weight: .bold))
-                        .padding(.horizontal)
-                    
-                    // 星期標題行
-                    HStack {
-                        ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { day in
-                            Text(day)
-                                .frame(maxWidth: .infinity)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 日期網格
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 15) {
-                        ForEach(0..<42) { index in
-                            if let date = getDate(for: index) {
-                                VStack(spacing: 5) {
-                                    // 日期數字
-                                    Text("\(Calendar.current.component(.day, from: date))")
-                                        .font(.system(size: 20))
+            backgroundColor
+                .ignoresSafeArea()
 
-                                    // 顯示當天的任務列表
-                                    VStack(alignment: .leading) {
-                                        ForEach(todos.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }) { todo in
-                                            Text(todo.title)
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                                .lineLimit(1)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                // 標題與新增任務按鈕
+                HStack {
+                    Spacer()
+
+                    Text(monthYearString)
+                        .font(.system(size: 24, weight: .medium))
+                        .kerning(0.5)
+                        .foregroundColor(.black)
+
+                    Spacer()
+
+                    Button(action: {
+                        showingAddTask = true
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(red: 0.89, green: 0.54, blue: 0.37, opacity: 0.8))
+                                .frame(width: 30, height: 30)
+
+                            Text("+")
+                                .font(.system(size: 30))
+                                .foregroundColor(Color(red: 0.97, green: 0.87, blue: 0.78))
+                                .offset(y: -2)
+                        }
+                    }
+                    .padding(.trailing, 15)
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 10)
+
+                // 星期標題
+                HStack(spacing: 0) {
+                    ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { day in
+                        Text(day)
+                            .font(.system(size: 15))
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, 5)
+                    }
+                }
+                
+                // 日期格子
+                GeometryReader { geometry in
+                    VStack(spacing: 8) {
+                        ForEach(0..<6) { row in
+                            HStack(spacing: 0) {
+                                ForEach(0..<7) { column in
+                                    let dateText = calendarData[row][column]
+                                    
+                                    // 日期格子视图改为居中对齐
+                                    Text(dateText)
+                                        .font(.system(size: 15))
+                                        .foregroundColor(isCurrentMonth(row, column) ? .black : .black.opacity(0.25))
+                                        .frame(width: geometry.size.width / 7, alignment: .center)
+                                        .frame(height: (geometry.size.height / 6) - 8)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            selectDate(row, column)
                                         }
-                                    }.frame(height: 30)
                                 }
-                                .frame(height: 60)
-                                .overlay(
-                                    // 今天的日期添加紅色圓圈標記
-                                    Circle()
-                                        .stroke(isToday(date) ? Color.red : Color.clear, lineWidth: 1)
-                                )
-                                .onTapGesture {
-                                    // 點擊日期顯示詳情
-                                    selectedDate = date
-                                    showingDetail = true
-                                }
-                            } else {
-                                // 空白單元格
-                                Text("")
-                                    .frame(height: 60)
                             }
                         }
                     }
-                    .padding(.horizontal)
-                    
-                    Spacer()
                 }
+                .padding(.horizontal)
             }
             
-            // MARK: 任務詳情彈出視圖
-            if showingDetail {
-                // 半透明背景遮罩
-                Color.black.opacity(0.4)
-                    .edgesIgnoringSafeArea(.all)
-                    .onTapGesture {
-                        showingDetail = false
-                    }
-                
-                // 任務詳情視圖
-                VStack {
-                    // 頂部標題和添加按鈕
-                    HStack {
-                        Text(dateFormatted)
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        Spacer()
-                        
-                        // 添加任務按鈕
-                        Button(action: {
-                            showingAddTask = true
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.blue)
-                                .font(.title)
-                        }
-                    }
-                    .padding()
-                    
-                    // 任務列表
-                    List {
-                        ForEach(filteredTodos) { todo in
-                            TodoItemRow(todo: todo)
-                        }
-                        .onDelete(perform: deleteTodo)  // 支持滑動刪除
-                    }
-                    .frame(maxHeight: 300)
-                    
-                    // 關閉按鈕
-                    Button("關閉") {
-                        showingDetail = false
-                    }
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .padding(.bottom)
-                }
-                .frame(width: 300)
-                .background(Color.white)
-                .cornerRadius(15)
-                .shadow(radius: 10)
-                .zIndex(1)
-            }
-            
-            // MARK: 新增任務彈出視圖
+            // 使用TodoAddView替代原有的AddTodoView
             if showingAddTask {
-                // 半透明背景遮罩
-                Color.black.opacity(0.4)
-                    .edgesIgnoringSafeArea(.all)
-                    .onTapGesture {
-                        showingAddTask = false
-                    }
-                
-                // 新增任務表單
-                AddTodoView(
-                    todos: $todos,
-                    isPresented: $showingAddTask,
-                    selectedDate: selectedDate
+                TodoAddView(tasks: $todoTasks, isPresented: $showingAddTask)
+                    .transition(.move(edge: .bottom))
+                    .zIndex(2)
+            }
+            
+            // 顯示待辦事項詳情視圖
+            if showingTodoDetail {
+                TodoDetailView(
+                    date: selectedDate,
+                    todos: todos,
+                    isPresented: $showingTodoDetail
                 )
-                .shadow(radius: 10)
+                .transition(.scale)
                 .zIndex(2)
             }
         }
     }
     
     // MARK: 輔助函數
-    /// 刪除任務
-    private func deleteTodo(at offsets: IndexSet) {
-        // 獲取要刪除的任務ID
-        let filteredIndices = offsets.map { filteredTodos[$0] }
-        // 從主數組中移除這些任務
-        todos.removeAll { todo in
-            filteredIndices.contains { $0.id == todo.id }
+    private func selectDate(_ row: Int, _ column: Int) {
+        if let date = getDateFromRowColumn(row: row, column: column) {
+            selectedDate = date
+            showingTodoDetail = true  // 顯示詳情視圖而不是添加任務視圖
         }
     }
     
-    /// 格式化完整日期
-    private var dateFormatted: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .long
-        return formatter.string(from: selectedDate)
-    }
-    
-    /// 格式化年份
-    private var yearString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy"
-        return formatter.string(from: selectedDate)
-    }
-    
-    /// 格式化月份
-    private var monthString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM"
-        return formatter.string(from: selectedDate)
-    }
-    
-    /// 獲取日期
-    private func getDate(for index: Int) -> Date? {
+    private func getDateFromRowColumn(row: Int, column: Int) -> Date? {
+        let dayValue = Int(calendarData[row][column]) ?? 1
         let calendar = Calendar.current
-        let date = calendar.date(byAdding: .day, value: index - 20, to: selectedDate)
-        return date
+        
+        // 确定该日期是哪个月
+        var dateComponents = calendar.dateComponents([.year, .month], from: currentDate)
+        
+        // 如果是上个月的日期
+        if row == 0 && column < firstWeekdayOfMonth {
+            if let prevMonth = calendar.date(byAdding: .month, value: -1, to: currentDate) {
+                dateComponents = calendar.dateComponents([.year, .month], from: prevMonth)
+            }
+        }
+        // 如果是下个月的日期
+        else if dayValue <= 14 && row >= 4 {
+            if let nextMonth = calendar.date(byAdding: .month, value: 1, to: currentDate) {
+                dateComponents = calendar.dateComponents([.year, .month], from: nextMonth)
+            }
+        }
+        
+        dateComponents.day = dayValue
+        return calendar.date(from: dateComponents)
     }
     
-    /// 判斷是否為今天
-    private func isToday(_ date: Date) -> Bool {
+    private func isCurrentMonth(_ row: Int, _ column: Int) -> Bool {
+        if row == 0 && column < firstWeekdayOfMonth {
+            return false
+        }
+        let dayNumber = Int(calendarData[row][column]) ?? 0
+        if row >= 4 && dayNumber < 15 {
+            return false
+        }
+        return true
+    }
+    
+    // MARK: 計算屬性
+    /// 取得當月的第一天是星期幾 (0-6, 0 = 星期日)
+    var firstWeekdayOfMonth: Int {
         let calendar = Calendar.current
-        return calendar.isDateInToday(date)
+        let components = calendar.dateComponents([.year, .month], from: currentDate)
+        let firstDayOfMonth = calendar.date(from: components)!
+        return calendar.component(.weekday, from: firstDayOfMonth) - 1
+    }
+    
+    /// 取得當月的天數
+    var daysInMonth: Int {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: currentDate)
+        let firstDayOfMonth = calendar.date(from: components)!
+        let range = calendar.range(of: .day, in: .month, for: firstDayOfMonth)!
+        return range.count
+    }
+    
+    /// 取得上個月的天數
+    var daysInPrevMonth: Int {
+        let calendar = Calendar.current
+        if let prevMonth = calendar.date(byAdding: .month, value: -1, to: currentDate) {
+            let range = calendar.range(of: .day, in: .month, for: prevMonth)!
+            return range.count
+        }
+        return 31
+    }
+    
+    /// 生成月曆數據
+    var calendarData: [[String]] {
+        var result: [[String]] = Array(repeating: Array(repeating: "", count: 7), count: 6)
+        
+        let firstWeekday = firstWeekdayOfMonth
+        let lastDayOfPrevMonth = daysInPrevMonth
+        
+        // 填充上個月的日期
+        for i in 0..<firstWeekday {
+            result[0][i] = "\(lastDayOfPrevMonth - firstWeekday + i + 1)"
+        }
+        
+        // 填充當月的日期
+        var day = 1
+        var row = 0
+        var col = firstWeekday
+        
+        while day <= daysInMonth {
+            result[row][col] = "\(day)"
+            day += 1
+            col += 1
+            
+            if col == 7 {
+                col = 0
+                row += 1
+            }
+        }
+        
+        // 填充下個月的日期
+        var nextMonthDay = 1
+        while row < 6 {
+            while col < 7 {
+                result[row][col] = "\(nextMonthDay)"
+                nextMonthDay += 1
+                col += 1
+            }
+            col = 0
+            row += 1
+        }
+        
+        return result
+    }
+    
+    /// 格式化年月標題
+    private var monthYearString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy MMM"
+        return formatter.string(from: currentDate)
     }
 }
 

@@ -107,10 +107,10 @@ class ChatViewModel: ObservableObject {
 struct ChatDemoDynamicView: View {
     
     // 定義常用顏色
-    private let backgroundColor = Color(red: 0.98, green: 0.77, blue: 0.56) // 近似淺橘底色
+    private let backgroundColor = Color(red: 0.95, green: 0.83, blue: 0.72) // 近似淺橘底色
     private let darkBubbleColor = Color(red: 0.85, green: 0.52, blue: 0.34) // 深橘對話框
     private let midBubbleColor  = Color(red: 0.96, green: 0.72, blue: 0.45) // 中橘對話框
-    private let lightBubbleColor = Color(red: 1.00, green: 0.90, blue: 0.80) // 淺橘對話框
+    private let lightBubbleColor = Color(red: 1, green: 0.93, blue: 0.85) // 淺橘對話框
     private let textColor = Color(red: 0.62, green: 0.36, blue: 0.22)       // 深咖啡字色
     private let sidebarColor = Color(red: 0.90, green: 0.65, blue: 0.40)    // 側邊欄顏色
     
@@ -249,7 +249,7 @@ struct ChatDemoDynamicView: View {
                     .disabled(inputText.isEmpty || isLoading)
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 20)
+                .padding(.bottom, 90)
             }
             .offset(x: showSidebar ? 250 : 0)
             

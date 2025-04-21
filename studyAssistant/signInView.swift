@@ -1,67 +1,85 @@
+//
+//  ContentView.swift
+//  test
+//
+//  Created by esley W on 2025/4/21.
+//
+
 import SwiftUI
 
 struct SignInView: View {
-    @State private var username = ""
-    @State private var password = ""
-    @State private var showAlert = false
-    
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Image(systemName: "person.circle")
-                    .resizable()
-                    .frame(width: 100, height: 100)
-                    .foregroundColor(.orange)
-                    .padding(.top, 50)
+        ZStack {
+            // Background color
+            Color(hex: "F3D4B7")
+                .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                // Add getstart text to top-left
                 
-                TextField("用戶名", text: $username)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.horizontal)
+            
                 
-                SecureField("密碼", text: $password)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.horizontal)
-                VStack(spacing : 10){
-                    Button(action: {
-                        // 這裡處理登入邏輯
-                        showAlert = true
-                    }) {
-                        Text("登入")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    Button(action: {
-                        // Create account action
-                    }) {
-                        Text("Create Account")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
+                // GET STARTED Text
+                Text("GET STARTED")
+                    .font(.custom("Roboto-Black", size: 64))
+                    .tracking(3.84) // 6% of 64px
+                    .lineSpacing(0)
+                    .foregroundColor(Color(hex: "E09772"))
                     
-                }.padding(.horizontal)
+                    .padding(.bottom, 50)
+                Spacer()
+                // Sign in with Apple button
+                Button(action: {
+                    // Handle Apple sign in
+                }) {
+                    HStack {
+                        Spacer()
+                        Text("Sign in with Apple")
+                            .font(.custom("Roboto-Medium", size: 20))
+                            .tracking(1.2) // 6% of 20px
+                            .foregroundColor(.black)
+                        Spacer()
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(hex: "FEECD8"))
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 1, y: 1)
+                    )
+                    .frame(width: 280) // Fixed width for buttons
+                }
                 
-                NavigationLink(destination: CreateAccountView()) {
-                    Text("還沒有帳號？立即註冊")
-                        .foregroundColor(.orange)
+                // Sign in with Google button
+                Button(action: {
+                    // Handle Google sign in
+                }) {
+                    HStack {
+                        Spacer()
+                        Text("Sign in with Google")
+                            .font(.custom("Roboto-Medium", size: 20))
+                            .tracking(1.2) // 6% of 20px
+                            .foregroundColor(.black)
+                        Spacer()
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(hex: "FEECD8"))
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 1, y: 1)
+                    )
+                    .frame(width: 280) // Fixed width for buttons
                 }
                 
                 Spacer()
+                
+                // Semi-transparent rectangle at bottom
+                
             }
-            .navigationTitle("登入")
-            .alert("提示", isPresented: $showAlert) {
-                Button("確定", role: .cancel) { }
-            } message: {
-                Text("登入功能待實現")
-            }
+            .padding()
         }
     }
 }
+
 
 #Preview {
     SignInView()
