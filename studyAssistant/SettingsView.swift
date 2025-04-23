@@ -59,18 +59,22 @@ struct SettingsView: View {
                             // VIP卡片主體內容
                             VStack(spacing: 2) {
                                 Text("VIP")
-                                    .font(.custom("Helvetica", size: 30))
+                                    .font(.custom("Helvetica", size: 35))
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
+                                    //.frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.top, 15)
-                                    .padding(.bottom, 4) // 縮小上下間距
+                                    //.padding(.bottom, 2) // 縮小上下間距
+                                    //.padding(.horizontal, 25)
                                 
                                 VStack(spacing: 6) { // 縮小項目間間距
-                                    VIPFeatureText(text: "解鎖 AI聊天")
+                                    VIPFeatureText(text: "解鎖 讀書助理")
                                     VIPFeatureText(text: "解鎖 進階統計")
                                     VIPFeatureText(text: "解鎖 自訂主題")
                                 }
-                                .padding(.vertical, 5) // 縮小頂部和底部間距
+                                //.frame(maxWidth: .infinity, alignment: .leading)
+                                //.padding(.horizontal, 25)
+                                .padding(.vertical, 10) // 縮小頂部和底部間距
                             }
                             .frame(maxWidth: .infinity)
                             .background(Color(hex: "3A4B5E"))

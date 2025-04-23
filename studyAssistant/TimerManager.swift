@@ -1,14 +1,6 @@
-//
-//  studyAssistantApp.swift
-//  studyAssistant
-//
-//  Created by 李翊辰 on 2025/3/5.
-//
-
 import SwiftUI
 import Combine
 
-// TimerManager 類別定義
 class TimerManager: ObservableObject {
     // 計時器基本屬性
     @Published var timeRemaining: TimeInterval = 1800 // 默認為30分鐘
@@ -116,27 +108,18 @@ class TimerManager: ObservableObject {
         if isRunning {
             stopTimer()
             
-            // 暫停時不再更新最後使用的時間，讓它保持初始設定值
-            // 若需要重置到暫停時的時間，可以取消註解以下代碼
-            // if !isCountUp {
-            //     lastUsedHours = hours
-            //     lastUsedMinutes = minutes
-            //     lastUsedSeconds = seconds
-            //     hasUsedBefore = true
-            // }
+            // 每次暫停時都更新最後使用的時間
+            if !isCountUp {
+                lastUsedHours = hours
+                lastUsedMinutes = minutes
+                lastUsedSeconds = seconds
+                hasUsedBefore = true
+            }
         } else {
             if isCountUp {
                 // 正向計時
                 startCountUpTimer()
             } else {
-                // 倒數計時 - 只在第一次開始計時時記住設定的時間
-                if !hasUsedBefore {
-                    lastUsedHours = hours
-                    lastUsedMinutes = minutes
-                    lastUsedSeconds = seconds
-                    hasUsedBefore = true
-                }
-                
                 // 倒數計時
                 startCountDownTimer()
             }
@@ -162,6 +145,12 @@ class TimerManager: ObservableObject {
     
     // 啟動倒數計時
     private func startCountDownTimer() {
+        // 如果是開始計時，記住當前設定的時間
+        lastUsedHours = hours
+        lastUsedMinutes = minutes
+        lastUsedSeconds = seconds
+        hasUsedBefore = true
+        
         // 倒數計時 - 從當前設置的進度開始倒數
         let initialProgress = progress
         let totalTime = TimeInterval(selectedTime * 60)
@@ -232,17 +221,4 @@ class TimerManager: ObservableObject {
         // 更新時分秒
         updateTimeComponents()
     }
-}
-
-@main
-struct studyAssistantApp: App {
-    // 創建 TimerManager 實例作為環境物件
-    @StateObject private var timerManager = TimerManager()
-    
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(timerManager) // 注入 TimerManager
-        }
-    }
-}
+} 

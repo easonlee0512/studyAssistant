@@ -1,34 +1,15 @@
 import SwiftUI
 
 struct TimerView: View {
-    @State private var timeRemaining: TimeInterval = 1800 // 默認為30分鐘
-    @State private var timer: Timer?
-    @State private var isRunning = false
-    @State private var subject = "線性代數"
-    @State private var selectedTab = 2 // 默認選中計時器頁簽
-    @State private var progress: Double = 0.167 // 进度值，0.0-1.0之间，默認30分鐘(30/180)
-    @State private var isCountUp = false // 控制是否為正向計時
-    @State private var elapsedTime: TimeInterval = 0 // 正向計時已經過的時間
-    @State private var isDragging = false // 是否正在拖動
-    @State private var selectedTime: Int = 30 // 默認選中30分鐘
+    // 使用環境物件而不是本地狀態
+    @EnvironmentObject var timerManager: TimerManager
     
-    // 新增用於時間滾輪選擇器的狀態
-    @State private var hours: Int = 0
-    @State private var minutes: Int = 30
-    @State private var seconds: Int = 0
+    // 僅保留視圖相關的本地狀態
+    @State private var isDragging = false // 是否正在拖動
     @State private var dragOffset: CGFloat = 0
     @State private var accumulatedOffset: CGFloat = 0
     @State private var lastDragValue: Int = 0
-    
-    // 更改為記住上一次設定時間的變數
-    @State private var lastUsedHours: Int = 0
-    @State private var lastUsedMinutes: Int = 30
-    @State private var lastUsedSeconds: Int = 0
-    @State private var hasUsedBefore: Bool = false // 標記是否已經使用過
-    
-    // 時間範圍（10分鐘到3小時）
-    let minTime: Int = 0 // 最少10分鐘
-    let maxTime: Int = 180 // 最多3小時
+    @State private var showTimeTooltip = false // 顯示時間提示
     
     var body: some View {
         ZStack {
@@ -41,26 +22,16 @@ struct TimerView: View {
                 VStack {
                     Button(action: {
                         // 切換倒數/正數計時模式
-                        if !isRunning {
-                            toggleCountMode()
+                        if !timerManager.isRunning {
+                            timerManager.toggleCountMode()
                         }
                     }) {
                         ZStack {
                             // 外層陰影
                             RoundedRectangle(cornerRadius: 20)
                                 .fill(Color(hex: "E09772"))
-//                                .shadow(color: .black, radius: 5)
                             
-//                            // 上方亮光效果增加立體感
-//                            RoundedRectangle(cornerRadius: 20)
-//                                .fill(LinearGradient(
-//                                    gradient: Gradient(colors: [Color.white.opacity(0.3), Color.clear]),
-//                                    startPoint: .top,
-//                                    endPoint: .center
-//                                ))
-//                                .padding(1)
-                            
-                            Text(isCountUp ? "COUNT" : "COUNTDOWN")
+                            Text(timerManager.isCountUp ? "COUNT" : "COUNTDOWN")
                                 .font(.custom("Inder", size: 20))
                                 .tracking(0.5)
                                 .foregroundColor(.white)
@@ -68,10 +39,8 @@ struct TimerView: View {
                         }
                         .frame(width: 180, height: 50)
                     }
-//                    // 為整個按鈕添加陰影 - 更集中
-//                    .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
                     .padding(.top, 40)
-                    .disabled(isRunning) // 計時中不可切換模式
+                    .disabled(timerManager.isRunning) // 計時中不可切換模式
                 }
                 .frame(height: 100) // 固定頂部區域高度
                 
@@ -83,13 +52,11 @@ struct TimerView: View {
                     Circle()
                         .fill(Color.clear)
                         .frame(width: 280, height: 280)
-                        /*.shadow(color: Color(hex: "D9BDA9").opacity(0.5), radius: 18, x: 0, y: 4) // 更集中的陰影*/
                     
                     // 淺色背景圓環 - 使用填充色而非描邊
                     Circle()
                         .fill(Color(hex: "F2D7CB"))
                         .frame(width: 280, height: 280)
-//                        .shadow(color: .black, radius: 5)
                     
                     // 白色內圓
                     Circle()
@@ -107,7 +74,7 @@ struct TimerView: View {
 
                     // 進度指示圓環 - 使用橙色漸變描邊 - 遵循圖片
                     Circle()
-                        .trim(from: 0, to: progress)
+                        .trim(from: 0, to: timerManager.progress)
                         .stroke(
                             LinearGradient(
                                 gradient: Gradient(colors: [
@@ -147,11 +114,11 @@ struct TimerView: View {
                                 .stroke(Color(hex: "E87D45"), lineWidth: 3)
                         )
                         .offset(
-                            x: 130 * cos(2 * .pi * progress - .pi/2),
-                            y: 130 * sin(2 * .pi * progress - .pi/2)
+                            x: 130 * cos(2 * .pi * timerManager.progress - .pi/2),
+                            y: 130 * sin(2 * .pi * timerManager.progress - .pi/2)
                         )
                         .gesture(
-                            !isCountUp && !isRunning ?
+                            !timerManager.isCountUp && !timerManager.isRunning ?
                             DragGesture()
                                 .onChanged { value in
                                     // 計算拖動後的角度
@@ -164,17 +131,10 @@ struct TimerView: View {
                                     if angle < 0 { angle += 2 * .pi }
                                     
                                     // 設置進度 (0-1)
-                                    progress = angle / (2 * .pi)
+                                    let newProgress = angle / (2 * .pi)
                                     
-                                    // 根據進度計算時間（10分鐘到3小時）
-                                    let timeRange = Double(maxTime - minTime)
-                                    selectedTime = minTime + Int(timeRange * progress)
-                                    
-                                    // 更新倒數時間
-                                    timeRemaining = TimeInterval(selectedTime * 60)
-                                    
-                                    // 更新時分秒
-                                    updateTimeComponents()
+                                    // 更新全局計時器管理器的進度和時間
+                                    timerManager.updateProgressFromDrag(progress: newProgress)
                                 }
                                 .onEnded { _ in
                                     isDragging = false
@@ -195,9 +155,9 @@ struct TimerView: View {
                             // 統一使用HStack顯示時間，確保計時前後格式一致
                             HStack(spacing: 1) {
                                 // 小時部分
-                                if isRunning || isCountUp {
+                                if timerManager.isRunning || timerManager.isCountUp {
                                     // 運行時或正計時模式顯示固定數字
-                                    Text(String(format: "%02d", isCountUp ? Int(elapsedTime) / 3600 : hours))
+                                    Text(String(format: "%02d", timerManager.isCountUp ? Int(timerManager.elapsedTime) / 3600 : timerManager.hours))
                                         .font(.custom("PingFang TC", size: 35))
                                         .fontWeight(.semibold)
                                         .foregroundColor(.black)
@@ -206,9 +166,9 @@ struct TimerView: View {
                                 } else {
                                     // 倒數計時非運行狀態 - 可滑動調整
                                     TimePickerWheel(
-                                        value: $hours,
+                                        value: $timerManager.hours,
                                         range: 0...3, // 確保小時範圍為0-3
-                                        isEnabled: !isRunning && !isCountUp,
+                                        isEnabled: !timerManager.isRunning && !timerManager.isCountUp,
                                         timeComponent: .hours
                                     )
                                     .transition(.opacity)
@@ -220,9 +180,9 @@ struct TimerView: View {
                                     .foregroundColor(.black)
                                 
                                 // 分鐘部分
-                                if isRunning || isCountUp {
+                                if timerManager.isRunning || timerManager.isCountUp {
                                     // 運行時或正計時模式顯示固定數字
-                                    Text(String(format: "%02d", isCountUp ? (Int(elapsedTime) / 60) % 60 : minutes))
+                                    Text(String(format: "%02d", timerManager.isCountUp ? (Int(timerManager.elapsedTime) / 60) % 60 : timerManager.minutes))
                                         .font(.custom("PingFang TC", size: 35))
                                         .fontWeight(.semibold)
                                         .foregroundColor(.black)
@@ -231,9 +191,9 @@ struct TimerView: View {
                                 } else {
                                     // 倒數計時非運行狀態 - 可滑動調整
                                     TimePickerWheel(
-                                        value: $minutes,
+                                        value: $timerManager.minutes,
                                         range: 0...59,
-                                        isEnabled: !isRunning && !isCountUp && hours < 3, // 當小時為3時禁用分鐘選擇
+                                        isEnabled: !timerManager.isRunning && !timerManager.isCountUp && timerManager.hours < 3, // 當小時為3時禁用分鐘選擇
                                         timeComponent: .minutes
                                     )
                                     .transition(.opacity)
@@ -245,9 +205,9 @@ struct TimerView: View {
                                     .foregroundColor(.black)
                                 
                                 // 秒數部分
-                                if isRunning || isCountUp {
+                                if timerManager.isRunning || timerManager.isCountUp {
                                     // 運行時或正計時模式顯示固定數字
-                                    Text(String(format: "%02d", isCountUp ? Int(elapsedTime) % 60 : seconds))
+                                    Text(String(format: "%02d", timerManager.isCountUp ? Int(timerManager.elapsedTime) % 60 : timerManager.seconds))
                                         .font(.custom("PingFang TC", size: 35))
                                         .fontWeight(.semibold)
                                         .foregroundColor(.black)
@@ -256,32 +216,32 @@ struct TimerView: View {
                                 } else {
                                     // 倒數計時非運行狀態 - 可滑動調整
                                     TimePickerWheel(
-                                        value: $seconds,
+                                        value: $timerManager.seconds,
                                         range: 0...59,
-                                        isEnabled: !isRunning && !isCountUp && hours < 3, // 當小時為3時禁用秒數選擇
+                                        isEnabled: !timerManager.isRunning && !timerManager.isCountUp && timerManager.hours < 3, // 當小時為3時禁用秒數選擇
                                         timeComponent: .seconds
                                     )
                                     .transition(.opacity)
                                 }
                             }
-                            .onChange(of: hours) { newValue in
+                            .onChange(of: timerManager.hours) { newValue in
                                 // 當小時數變更為3以上時，自動將分鐘和秒數歸零
                                 if newValue > 3 {
-                                    hours = 3
-                                    minutes = 0
-                                    seconds = 0
+                                    timerManager.hours = 3
+                                    timerManager.minutes = 0
+                                    timerManager.seconds = 0
                                 }
                                 // 當小時數等於3時，也需要將分鐘和秒數歸零
                                 else if newValue == 3 {
-                                    minutes = 0
-                                    seconds = 0
+                                    timerManager.minutes = 0
+                                    timerManager.seconds = 0
                                 }
-                                updateTimer()
+                                timerManager.updateTimer()
                             }
-                            .onChange(of: minutes) { _ in updateTimer() }
-                            .onChange(of: seconds) { _ in updateTimer() }
+                            .onChange(of: timerManager.minutes) { _ in timerManager.updateTimer() }
+                            .onChange(of: timerManager.seconds) { _ in timerManager.updateTimer() }
                             
-                            Text(subject)
+                            Text(timerManager.subject)
                                 .font(.custom("PingFang TC", size: 16))
                                 .fontWeight(.medium)
                                 .foregroundColor(Color(hex: "9F9A9A"))
@@ -296,12 +256,11 @@ struct TimerView: View {
                     // Control buttons
                     HStack(spacing: 20) {
                         // Reset button
-                        Button(action: resetTimer) {
+                        Button(action: { timerManager.resetTimer() }) {
                             ZStack {
                                 // 外層陰影
                                 RoundedRectangle(cornerRadius: 20)
                                     .fill(Color(hex: "E09772"))
-//                                    .shadow(color: .black, radius: 5)
         
                                 VStack{
                                     Text("重置")
@@ -312,27 +271,22 @@ struct TimerView: View {
                             }
                             .frame(width: 150, height: 60)
                         }
-//                        // 為整個按鈕添加陰影 - 更集中
-//                        .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
                         
                         // Start/Pause button
-                        Button(action: toggleTimer) {
+                        Button(action: { timerManager.toggleTimer() }) {
                             ZStack {
                                 // 外層陰影
                                 RoundedRectangle(cornerRadius: 20)
                                     .fill(Color(hex: "E09772"))
-//                                    .shadow(color: .black, radius: 5)
                                 
                                 
-                                Text(isRunning ? "暫停" : "開始")
+                                Text(timerManager.isRunning ? "暫停" : "開始")
                                     .font(.headline)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.white)
                             }
                             .frame(width: 150, height: 60)
                         }
-//                        // 為整個按鈕添加陰影 - 更集中
-//                        .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
                     }
                     .padding(.bottom, 80)
                 }
@@ -340,183 +294,8 @@ struct TimerView: View {
                 
             }
         }
-        .animation(nil, value: isCountUp) // 不使用自動動畫，而是在toggleCountMode中手動控制
-        .animation(.easeInOut(duration: 0.2), value: isRunning)
-        .onAppear {
-            // 初始化時分秒
-            updateTimeComponents()
-        }
-    }
-    
-    // 更新時間組件
-    func updateTimeComponents() {
-        hours = Int(timeRemaining) / 3600
-        minutes = (Int(timeRemaining) / 60) % 60
-        seconds = Int(timeRemaining) % 60
-    }
-    
-    // 根據時間組件更新計時器
-    func updateTimer() {
-        // 限制小時數最大為3，超過時重置分鐘和秒數為0
-        if hours > 3 {
-            hours = 3
-            minutes = 0
-            seconds = 0
-        }
-        // 當小時數為3時，分鐘和秒數也必須為0
-        else if hours == 3 {
-            minutes = 0
-            seconds = 0
-        }
-        
-        timeRemaining = TimeInterval(hours * 3600 + minutes * 60 + seconds)
-        selectedTime = Int(timeRemaining / 60)
-        
-        // 更新進度條
-        let totalSeconds = Double(maxTime - minTime) * 60
-        progress = (timeRemaining - Double(minTime * 60)) / totalSeconds
-        
-        // 進度條範圍檢查
-        if progress < 0 { progress = 0 }
-        if progress > 1 { progress = 1 }
-    }
-    
-    // 顯示時間提示
-    @State private var showTimeTooltip = false
-    
-    // 切換倒數/正數計時模式
-    func toggleCountMode() {
-        // 如果從正計時切換回倒數計時，且已經有初始設定過的時間，則使用初始設定的時間
-        let shouldUseInitialTime = isCountUp && hasUsedBefore
-        
-        // 使用淡出淡入過渡
-        withAnimation(.easeOut(duration: 0.2)) {
-            // 先使文字淡出
-            isCountUp.toggle()
-        }
-        
-        // 延遲後重置計時器並更新時間
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            resetTimer() // 切換模式時重置計時器
-            
-            // 切換到正計時模式時
-            if isCountUp {
-                // 正計時模式下進度從0開始
-                withAnimation(.easeIn(duration: 0.2)) {
-                    progress = 0.0
-                }
-            } else {
-                if shouldUseInitialTime {
-                    // 使用初始設定的時間
-                    hours = lastUsedHours
-                    minutes = lastUsedMinutes
-                    seconds = lastUsedSeconds
-                    updateTimer() // 更新timeRemaining和progress
-                } else {
-                    // 未使用過，設置為預設30分鐘
-                    selectedTime = 30
-                    withAnimation(.easeIn(duration: 0.2)) {
-                        progress = Double(selectedTime - minTime) / Double(maxTime - minTime)
-                    }
-                    timeRemaining = TimeInterval(selectedTime * 60)
-                    updateTimeComponents()
-                }
-            }
-        }
-    }
-    
-    // Format time as HH:MM:SS
-    func timeString(time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = Int(time) / 60 % 60
-        let seconds = Int(time) % 60
-        
-        // 只有在時間大於等於一小時時才顯示小時部分
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%02d:%02d", minutes, seconds)
-        }
-    }
-    
-    // Start or pause the timer
-    func toggleTimer() {
-        if isRunning {
-            timer?.invalidate()
-            timer = nil
-            
-            // 每次暫停時都更新最後使用的時間
-            if !isCountUp {
-                lastUsedHours = hours
-                lastUsedMinutes = minutes
-                lastUsedSeconds = seconds
-                hasUsedBefore = true
-            }
-        } else {
-            if isCountUp {
-                // 正向計時
-                timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                    self.elapsedTime += 1
-                    // 更新正向計時的進度 (每小時為一個週期)
-                    let hourInSeconds: TimeInterval = 3600
-                    self.progress = (self.elapsedTime.truncatingRemainder(dividingBy: hourInSeconds)) / hourInSeconds
-                }
-            } else {
-                // 如果是開始計時，記住當前設定的時間
-                lastUsedHours = hours
-                lastUsedMinutes = minutes
-                lastUsedSeconds = seconds
-                hasUsedBefore = true
-                
-                // 倒數計時 - 從當前設置的進度開始倒數
-                let initialProgress = progress
-                let totalTime = TimeInterval(selectedTime * 60)
-                
-                timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                    if self.timeRemaining > 0 {
-                        self.timeRemaining -= 1
-                        // 更新時間組件
-                        self.updateTimeComponents()
-                        // 更新倒數計時進度 - 從當前位置開始減少
-                        self.progress = self.timeRemaining / totalTime * initialProgress
-                    } else {
-                        self.timer?.invalidate()
-                        self.timer = nil
-                        self.isRunning = false
-                        self.progress = 0 // 倒數結束時進度歸零
-                        // 更新時間組件
-                        self.updateTimeComponents()
-                    }
-                }
-            }
-        }
-        
-        isRunning.toggle()
-    }
-    
-    // Reset the timer to initial value
-    func resetTimer() {
-        timer?.invalidate()
-        timer = nil
-        isRunning = false
-        
-        if isCountUp {
-            // 正向計時重置
-            elapsedTime = 0
-            progress = 0.0
-        } else {
-            // 倒數計時重置到第一次設定的時間（如果已經開始過）或當前設定的時間
-            if hasUsedBefore {
-                hours = lastUsedHours
-                minutes = lastUsedMinutes
-                seconds = lastUsedSeconds
-                updateTimer() // 更新timeRemaining和progress
-            } else {
-                // 未開始過，保持當前設定
-                timeRemaining = TimeInterval(selectedTime * 60)
-                updateTimeComponents()
-            }
-        }
+        .animation(nil, value: timerManager.isCountUp) // 不使用自動動畫
+        .animation(.easeInOut(duration: 0.2), value: timerManager.isRunning)
     }
 }
 
@@ -627,5 +406,6 @@ struct TimePickerWheel: View {
 struct ClockViewWithTabBar_Previews: PreviewProvider {
     static var previews: some View {
         TimerView()
+            .environmentObject(TimerManager()) // 為預覽提供TimerManager
     }
 }
