@@ -19,10 +19,8 @@ struct SettingsView: View {
                 
                 ScrollView {
                     VStack(spacing: 25) {
-                        // 用戶資訊區域 - 水平排列
-                        Button(action: {
-                            showingProfileSettings = true
-                        }) {
+                        // 用戶資訊區域 - 水平排列，使用NavigationLink
+                        NavigationLink(destination: ProfileSettingView()) {
                             HStack(spacing: 15) {
                                 // 用戶頭像
                                 Circle()
@@ -264,9 +262,6 @@ struct SettingsView: View {
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showingProfileSettings) {
-                ProfileSettingsView()
-            }
         }
     }
 }

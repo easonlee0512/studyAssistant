@@ -27,21 +27,20 @@ struct CalendarView: View {
             VStack(spacing: 0) {
                 // 標題與新增任務按鈕
                 HStack {
-                    Spacer()
+                    Spacer(minLength: 45)
 
                     Text(monthYearString)
                         .font(.system(size: 24, weight: .medium))
                         .kerning(0.5)
                         .foregroundColor(.black)
-
-                    Spacer()
+                        .frame(maxWidth: .infinity, alignment: .center)
 
                     Button(action: {
                         showingAddTask = true
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color(red: 0.89, green: 0.54, blue: 0.37, opacity: 0.8))
+                                .fill(Color(hex: "E28A5F"))
                                 .frame(width: 30, height: 30)
 
                             Text("+")
@@ -51,21 +50,26 @@ struct CalendarView: View {
                         }
                     }
                     .padding(.trailing, 15)
+                    .frame(width: 45)
                 }
                 .padding(.top, 20)
                 .padding(.bottom, 10)
 
-                // 星期標題
-                HStack(spacing: 0) {
-                    ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { day in
-                        Text(day)
-                            .font(.system(size: 15))
-                            .frame(maxWidth: .infinity)
-                            .padding(.bottom, 5)
+                // 星期標題 - 使用GeometryReader獲取寬度
+                GeometryReader { weekGeometry in
+                    HStack(spacing: 0) {
+                        ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { day in
+                            Text(day)
+                                .font(.system(size: 15))
+                                .frame(width: weekGeometry.size.width / 7)
+                                .padding(.bottom, 5)
+                        }
                     }
                 }
+                .frame(height: 30)
+                .padding(.horizontal)
                 
-                // 日期格子
+                // 日期格子 - 保持與星期标题一致的宽度
                 GeometryReader { geometry in
                     VStack(spacing: 8) {
                         ForEach(0..<6) { row in

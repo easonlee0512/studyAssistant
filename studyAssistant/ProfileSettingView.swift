@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftUICore
 
-struct ProfileSettingsView: View {
+struct ProfileSettingView: View {
     @Environment(\.dismiss) var dismiss
     
     // 添加狀態變量管理用戶資料
@@ -23,7 +23,7 @@ struct ProfileSettingsView: View {
     
     // 截图中的颜色
     let backgroundColor = Color(hex: "F5DFC7") // 浅米色背景
-    let cardBackgroundColor = Color(hex: "FFF1E0") // 卡片背景色
+    let cardBackgroundColor = Color(hex: "FEECD8") // 卡片背景色
     let textColor = Color.black.opacity(0.8)
     let placeholderColor = Color.black.opacity(0.4)
     let dividerColor = Color.black.opacity(0.1)
@@ -31,7 +31,8 @@ struct ProfileSettingsView: View {
     var body: some View {
         ZStack {
             // 背景色
-            backgroundColor.edgesIgnoringSafeArea(.all)
+            Color(hex: "F3D4B7")
+                .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // 顶部导航栏
@@ -43,6 +44,13 @@ struct ProfileSettingsView: View {
                             .font(.system(size: 20, weight: .medium))
                             .foregroundColor(.black)
                     }
+                    .padding(.leading, 10)
+                    
+                    Spacer()
+                    
+                    Text("個人資料")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.black)
                     
                     Spacer()
                     
@@ -52,8 +60,9 @@ struct ProfileSettingsView: View {
                     }
                     .foregroundColor(.black)
                     .font(.system(size: 17, weight: .medium))
+                    .padding(.trailing, 10)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 10)
                 .padding(.top, 15)
                 .padding(.bottom, 25)
                 
@@ -200,7 +209,6 @@ struct ProfileSettingsView: View {
                 Spacer()
             }
         }
-        .navigationBarHidden(true)
         .alert("確定要登出嗎？", isPresented: $showingLogoutAlert) {
             Button("取消", role: .cancel) { }
             Button("登出", role: .destructive) {
@@ -213,6 +221,9 @@ struct ProfileSettingsView: View {
             // 載入用戶資料
             loadProfile()
         }
+        .navigationBarBackButtonHidden(true)
+        .navigationBarHidden(true)
+        .transition(.move(edge: .trailing))
     }
     
     // 載入用戶資料的函數
@@ -245,5 +256,5 @@ struct ProfileSettingsView: View {
 }
 
 #Preview {
-    ProfileSettingsView()
+    ProfileSettingView()
 }

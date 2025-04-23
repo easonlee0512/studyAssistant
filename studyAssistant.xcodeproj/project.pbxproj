@@ -19,7 +19,7 @@
 		E82A79C82DB13265007ED175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B52DB13265007ED175 /* ContentView.swift */; };
 		E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B62DB13265007ED175 /* CreateAccountView.swift */; };
 		E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B82DB13265007ED175 /* ProfileSettingView.swift */; };
-		E82A79CB2DB13265007ED175 /* SettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B92DB13265007ED175 /* SettingView.swift */; };
+		E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B92DB13265007ED175 /* SettingsView.swift */; };
 		E82A79CC2DB13265007ED175 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BA2DB13265007ED175 /* SignInView.swift */; };
 		E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BB2DB13265007ED175 /* StatisticsView.swift */; };
 		E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */; };
@@ -64,7 +64,7 @@
 		E82A79B62DB13265007ED175 /* CreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
 		E82A79B72DB13265007ED175 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E82A79B82DB13265007ED175 /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
-		E82A79B92DB13265007ED175 /* SettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingView.swift; sourceTree = "<group>"; };
+		E82A79B92DB13265007ED175 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E82A79BA2DB13265007ED175 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		E82A79BB2DB13265007ED175 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
@@ -158,7 +158,7 @@
 				E82A79B62DB13265007ED175 /* CreateAccountView.swift */,
 				E82A79B72DB13265007ED175 /* GoogleService-Info.plist */,
 				E82A79B82DB13265007ED175 /* ProfileSettingView.swift */,
-				E82A79B92DB13265007ED175 /* SettingView.swift */,
+				E82A79B92DB13265007ED175 /* SettingsView.swift */,
 				E82A79BA2DB13265007ED175 /* SignInView.swift */,
 				E82A79BB2DB13265007ED175 /* StatisticsView.swift */,
 				E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */,
@@ -336,7 +336,7 @@
 				E82A79C82DB13265007ED175 /* ContentView.swift in Sources */,
 				E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */,
 				E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */,
-				E82A79CB2DB13265007ED175 /* SettingView.swift in Sources */,
+				E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */,
 				E82A79CC2DB13265007ED175 /* SignInView.swift in Sources */,
 				E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */,
 				E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */,

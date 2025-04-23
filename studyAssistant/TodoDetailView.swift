@@ -70,30 +70,12 @@ struct TodoDetailView: View {
                         }
                     }
                     
-                    // 添加按鈕
-                    Button(action: {
-                        // 添加新事項的操作
-                    }) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(addButtonColor)
-                                .frame(width: 36, height: 36)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.black.opacity(0.05), lineWidth: 0.5)
-                                )
-                            
-                            Text("+")
-                                .font(.system(size: 26))
-                                .foregroundColor(Color.black.opacity(0.7))
-                                .offset(y: -2)
-                        }
-                    }
+
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 15)
                 .padding(.bottom, 10)
-                
+    
                 // 分隔線
                 Divider()
                     .background(dividerColor)

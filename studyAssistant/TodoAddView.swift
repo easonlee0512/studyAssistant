@@ -22,6 +22,9 @@ struct TodoAddView: View {
     @State private var offset: CGFloat = UIScreen.main.bounds.height // 用于动画
     @State private var isDismissing = false // 标记是否正在关闭
     
+    // 重複選項
+    let repeatOptions = ["不重複", "每天", "每週", "每月"]
+    
     // 预定义的颜色选项
     let colorOptions: [Color] = [
         Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),
@@ -88,6 +91,16 @@ struct TodoAddView: View {
                         // 标题输入框
                         TextField("標題", text: $title)
                             .font(.system(size: 24, weight: .medium))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 15)
+                        
+                        Divider()
+                            .background(dividerColor)
+                            .padding(.horizontal, 20)
+                        
+                        // 內容輸入框，放在標題下方
+                        TextField("內容", text: $content)
+                            .font(.system(size: 18))
                             .padding(.horizontal, 20)
                             .padding(.vertical, 15)
                         
@@ -184,45 +197,23 @@ struct TodoAddView: View {
                             .background(dividerColor)
                             .padding(.horizontal, 20)
                         
-                        // 内容输入区域
-                        VStack(alignment: .leading) {
-                            Text("內容")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(placeholderColor)
-                                .padding(.bottom, 10)
-                            
-                            TextEditor(text: $content)
-                                .frame(minHeight: 120)
-                                .font(.system(size: 18))
-                                .background(Color.white)
-                                .cornerRadius(8)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 15)
-                        
-                        Divider()
-                            .background(dividerColor)
-                            .padding(.horizontal, 20)
-                        
-                        // 重复选项
+                        // 重复选项 - 改為下拉式選單
                         HStack {
                             Text("重複")
                                 .font(.system(size: 18, weight: .medium))
                             
                             Spacer()
                             
-                            Text(repeat_option)
-                                .font(.system(size: 18, weight: .medium))
-                            
-                            Image(systemName: "chevron.right")
-                                .foregroundColor(.black)
+                            Picker("", selection: $repeat_option) {
+                                ForEach(repeatOptions, id: \.self) { option in
+                                    Text(option).tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .accentColor(.black)
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 15)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // 打开重复选项
-                        }
                     }
                 }
                 .frame(maxHeight: UIScreen.main.bounds.height * 0.7) // 控制最大高度
