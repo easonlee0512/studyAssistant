@@ -294,6 +294,13 @@ struct TimerView: View {
                 
             }
         }
+        .onAppear {
+            // 當視圖出現時，確保 TimerManager 有最新數據
+            if timerManager.isRunning {
+                // 如果計時器正在運行，觸發一次更新
+                timerManager.appWillEnterForeground()
+            }
+        }
         .animation(nil, value: timerManager.isCountUp) // 不使用自動動畫
         .animation(.easeInOut(duration: 0.2), value: timerManager.isRunning)
     }
@@ -409,3 +416,4 @@ struct ClockViewWithTabBar_Previews: PreviewProvider {
             .environmentObject(TimerManager()) // 為預覽提供TimerManager
     }
 }
+
