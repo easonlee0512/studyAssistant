@@ -18,6 +18,7 @@ struct ContentView: View {
                 if selectedTab == 0 {
                     // 待辦事項頁面
                     TodoView()
+                    
                 }
                 else if selectedTab == 1 {
                     // 日曆頁面
@@ -38,10 +39,12 @@ struct ContentView: View {
             }
             
             // 底部导航栏
-            VStack {
+            VStack(spacing: 0) {
                 Spacer()
                 TabBarNew(selectedTab: $selectedTab)
+                    .padding(.bottom, -20)
             }
+            .ignoresSafeArea()
         }
     }
 }
@@ -51,41 +54,46 @@ struct TabBarNew: View {
     @Binding var selectedTab: Int
     
     var body: some View {
-        HStack {
-            Spacer()
-            
-            TabButtonNew(icon: "checklist", isSelected: selectedTab == 0) {
-                selectedTab = 0
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                
+                TabButtonNew(icon: "checklist", isSelected: selectedTab == 0) {
+                    selectedTab = 0
+                }
+                
+                Spacer()
+                
+                TabButtonNew(icon: "calendar", isSelected: selectedTab == 1) {
+                    selectedTab = 1
+                }
+                
+                Spacer()
+                
+                TabButtonNew(icon: "message.fill", isSelected: selectedTab == 2) {
+                    selectedTab = 2
+                }
+                
+                Spacer()
+                
+                TabButtonNew(icon: "timer", isSelected: selectedTab == 3) {
+                    selectedTab = 3
+                }
+                
+                Spacer()
+                
+                TabButtonNew(icon: "gearshape", isSelected: selectedTab == 4) {
+                    selectedTab = 4
+                }
+                
+                Spacer()
             }
+            .padding(.vertical, 15)
             
-            Spacer()
-            
-            TabButtonNew(icon: "calendar", isSelected: selectedTab == 1) {
-                selectedTab = 1
-            }
-            
-            Spacer()
-            
-            TabButtonNew(icon: "message.fill", isSelected: selectedTab == 2) {
-                selectedTab = 2
-            }
-            
-            Spacer()
-            
-            TabButtonNew(icon: "timer", isSelected: selectedTab == 3) {
-                selectedTab = 3
-            }
-            
-            Spacer()
-            
-            TabButtonNew(icon: "gearshape", isSelected: selectedTab == 4) {
-                selectedTab = 4
-            }
-            
-            Spacer()
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: 45)
         }
-        .padding(.vertical, 15)
-        .frame(maxWidth: .infinity) // 確保佔據整個寬度
         .background(Color(hex: "FEECD8"))
     }
 }
@@ -111,4 +119,6 @@ struct TabButtonNew: View {
 
 #Preview {
     ContentView()
+        .environmentObject(TimerManager())
+        .environmentObject(AllTasks())
 }

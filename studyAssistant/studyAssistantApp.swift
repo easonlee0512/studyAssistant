@@ -12,6 +12,7 @@ import Combine
 struct studyAssistantApp: App {
     // 創建 TimerManager 實例作為環境物件
     @StateObject private var timerManager = TimerManager()
+    @StateObject private var allTasks = AllTasks()
     
     // 監聽場景階段變化
     @Environment(\.scenePhase) var scenePhase
@@ -20,6 +21,7 @@ struct studyAssistantApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(timerManager) // 注入 TimerManager
+                .environmentObject(allTasks) // 注入 allTasks
         }
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {

@@ -1,10 +1,9 @@
 import SwiftUI
 import SwiftUICore
-
 // TodoView 是主要的待辦事項視圖，顯示倒數計時、今日日期、一週的日曆以及待辦事項列表。
 struct TodoView: View {
     @State private var selectedDate = Date() // 儲存當前選擇的日期
-    @State private var tasks: [TodoTask] = [] // 儲存待辦事項列表
+    @EnvironmentObject var allTasks: AllTasks // 全域任務環境物件
     @State private var showingAddTask = false // 控制是否顯示添加任務的視圖
     @State private var userGoal: String = ""  // 存儲用戶設定的目標
     @State private var targetDate: Date? = nil  // 存儲目標日期
@@ -17,16 +16,6 @@ struct TodoView: View {
         let targetDate = self.targetDate ?? Calendar.current.date(byAdding: .day, value: 50, to: Date())!
         let target = Calendar.current.startOfDay(for: targetDate)
         return Calendar.current.dateComponents([.day], from: today, to: target).day ?? 0
-    }
-    
-    // 示例任务（当没有任务时显示）
-    private var sampleTasks: [TodoTask] {
-        return [
-            TodoTask(title: "線性代數", note: "備註", startDate: Date(), color: Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4), isCompleted: false),
-            TodoTask(title: "離散數學", note: "備註", startDate: Date(), color: Color(red: 0.7, green: 0.56, blue: 0).opacity(0.4), isCompleted: false),
-            TodoTask(title: "資料結構", note: "復習第四章", startDate: Date(), color: Color(red: 0.18, green: 0.7, blue: 0.31).opacity(0.4), isCompleted: false),
-            TodoTask(title: "計算機結構", note: "準備期中考", startDate: Date(), color: Color(red: 0.29, green: 0.28, blue: 0.7).opacity(0.4), isCompleted: true)
-        ]
     }
     
     var body: some View {
@@ -78,28 +67,25 @@ struct TodoView: View {
                 // 任務列表 - 使用新的样式
                 ScrollView {
                     VStack(spacing: 15) {
-                        if tasks.isEmpty {
-                            // 如果没有任务，显示示例任务
-                            ForEach(sampleTasks) { task in
-                                TaskRowNewView(task: task, isExample: true)
-                            }
+                        if allTasks.tasks.isEmpty {
+                            // 如果没有任务，顯示空狀態
+                            Text("目前沒有任務")
+                                .foregroundColor(.gray)
+                                .padding()
                         } else {
                             // 顯示未完成的任務
-                            ForEach(tasks.filter { !$0.isCompleted }) { task in
-                                TaskRowNewView(task: task) { updatedTask in
-                                    // 更新任務狀態
-                                    if let index = tasks.firstIndex(where: { $0.id == updatedTask.id }) {
-                                        tasks[index] = updatedTask
+                            ForEach(allTasks.tasks.filter { !$0.isCompleted }) { task in
+                                TaskRowNewView(task: task, isExample: false) { updatedTask in
+                                    if let index = allTasks.tasks.firstIndex(where: { $0.id == updatedTask.id }) {
+                                        allTasks.tasks[index] = updatedTask
                                     }
                                 }
                             }
-                            
                             // 顯示已完成的任務
-                            ForEach(tasks.filter { $0.isCompleted }) { task in
-                                TaskRowNewView(task: task) { updatedTask in
-                                    // 更新任務狀態
-                                    if let index = tasks.firstIndex(where: { $0.id == updatedTask.id }) {
-                                        tasks[index] = updatedTask
+                            ForEach(allTasks.tasks.filter { $0.isCompleted }) { task in
+                                TaskRowNewView(task: task, isExample: false) { updatedTask in
+                                    if let index = allTasks.tasks.firstIndex(where: { $0.id == updatedTask.id }) {
+                                        allTasks.tasks[index] = updatedTask
                                     }
                                 }
                             }
@@ -113,7 +99,7 @@ struct TodoView: View {
             
             // 使用ZStack直接覆盖显示TodoAddView，而不是使用sheet
             if showingAddTask {
-                TodoAddView(tasks: $tasks, isPresented: $showingAddTask)
+                TodoAddView(isPresented: $showingAddTask)
                     .transition(.move(edge: .bottom))
                     .zIndex(1)
             }
@@ -143,24 +129,7 @@ struct TodoView: View {
     
     // 刪除任務
     private func deleteTasks(at offsets: IndexSet) {
-        tasks.remove(atOffsets: offsets)
-    }
-}
-
-// 擴展任務模型，添加新的字段
-struct TodoTask: Identifiable {
-    let id = UUID() // 唯一的識別符
-    var title: String // 任務標題
-    var note: String = "" // 任務備註
-    var startDate: Date // 任務開始時間
-    var color: Color = Color(red: 0.7, green: 0.56, blue: 0).opacity(0.4) // 任務顏色
-    var isCompleted: Bool // 是否完成
-    
-    // 格式化時間為字符串
-    var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: startDate)
+        allTasks.tasks.remove(atOffsets: offsets)
     }
 }
 

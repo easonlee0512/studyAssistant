@@ -410,10 +410,10 @@ struct TimePickerWheel: View {
     }
 }
 
-struct ClockViewWithTabBar_Previews: PreviewProvider {
+struct TimerView_Previews: PreviewProvider {
     static var previews: some View {
         TimerView()
-            .environmentObject(TimerManager()) // 為預覽提供TimerManager
+            .environmentObject(TimerManager())
     }
 }
 

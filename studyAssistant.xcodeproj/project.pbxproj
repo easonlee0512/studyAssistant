@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9B161E9B2DB934BE00654495 /* TimerManger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B161E9A2DB934AD00654495 /* TimerManger.swift */; };
 		9B2C03B72D8BFD4F001CF344 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03B62D8BFD4F001CF344 /* FirebaseAuth */; };
 		9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03B82D8BFD4F001CF344 /* FirebaseAuthCombine-Community */; };
 		9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BA2D8BFD4F001CF344 /* FirebaseDatabase */; };
@@ -21,7 +20,6 @@
 		E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B62DB13265007ED175 /* CreateAccountView.swift */; };
 		E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B82DB13265007ED175 /* ProfileSettingView.swift */; };
 		E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B92DB13265007ED175 /* SettingsView.swift */; };
-		E82A79CC2DB13265007ED175 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BA2DB13265007ED175 /* SignInView.swift */; };
 		E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BB2DB13265007ED175 /* StatisticsView.swift */; };
 		E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */; };
 		E82A79D32DB13265007ED175 /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79C12DB13265007ED175 /* TimerView.swift */; };
@@ -31,6 +29,10 @@
 		E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B12DB13265007ED175 /* Assets.xcassets */; };
 		E82A79D82DB13265007ED175 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B72DB13265007ED175 /* GoogleService-Info.plist */; };
 		E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E82F5CFF2D8B76C80016DF22 /* Alamofire */; };
+		E8E897422DC0980E00027E88 /* signInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897402DC0980D00027E88 /* signInView.swift */; };
+		E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897412DC0980D00027E88 /* TodoTask.swift */; };
+		E8E897452DC0A2B100027E88 /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897442DC0A2B100027E88 /* TimerManager.swift */; };
+		E8E897472DC0A59C00027E88 /* AllTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897462DC0A59C00027E88 /* AllTasks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,7 +53,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		9B161E9A2DB934AD00654495 /* TimerManger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManger.swift; sourceTree = "<group>"; };
 		9BC153402D78771600FCA465 /* studyAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = studyAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC1535A2D78771A00FCA465 /* studyAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,12 +68,15 @@
 		E82A79B72DB13265007ED175 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E82A79B82DB13265007ED175 /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
 		E82A79B92DB13265007ED175 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		E82A79BA2DB13265007ED175 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		E82A79BB2DB13265007ED175 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
 		E82A79C12DB13265007ED175 /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
 		E82A79C22DB13265007ED175 /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
 		E82A79C32DB13265007ED175 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
+		E8E897402DC0980D00027E88 /* signInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = signInView.swift; sourceTree = "<group>"; };
+		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
+		E8E897442DC0A2B100027E88 /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
+		E8E897462DC0A59C00027E88 /* AllTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllTasks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -157,17 +161,19 @@
 				E82A79B32DB13265007ED175 /* MassageView.swift */,
 				E82A79B42DB13265007ED175 /* Config.swift */,
 				E82A79B52DB13265007ED175 /* ContentView.swift */,
+				E8E897462DC0A59C00027E88 /* AllTasks.swift */,
 				E82A79B62DB13265007ED175 /* CreateAccountView.swift */,
 				E82A79B72DB13265007ED175 /* GoogleService-Info.plist */,
 				E82A79B82DB13265007ED175 /* ProfileSettingView.swift */,
 				E82A79B92DB13265007ED175 /* SettingsView.swift */,
-				E82A79BA2DB13265007ED175 /* SignInView.swift */,
 				E82A79BB2DB13265007ED175 /* StatisticsView.swift */,
 				E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */,
 				E82A79C12DB13265007ED175 /* TimerView.swift */,
-				9B161E9A2DB934AD00654495 /* TimerManger.swift */,
 				9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */,
+				E8E897442DC0A2B100027E88 /* TimerManager.swift */,
 				E82A79C22DB13265007ED175 /* TodoDetailView.swift */,
+				E8E897402DC0980D00027E88 /* signInView.swift */,
+				E8E897412DC0980D00027E88 /* TodoTask.swift */,
 				E82A79C32DB13265007ED175 /* TodoView.swift */,
 			);
 			path = studyAssistant;
@@ -340,13 +346,15 @@
 				E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */,
 				E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */,
 				E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */,
-				9B161E9B2DB934BE00654495 /* TimerManger.swift in Sources */,
-				E82A79CC2DB13265007ED175 /* SignInView.swift in Sources */,
+				E8E897422DC0980E00027E88 /* signInView.swift in Sources */,
+				E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */,
 				E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */,
 				E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */,
 				9BCA070B2DB5F8E00039EA2B /* TodoAddView.swift in Sources */,
 				9BCA07132DB61B0D0039EA2B /* PersonSetting.swift in Sources */,
 				E82A79D32DB13265007ED175 /* TimerView.swift in Sources */,
+				E8E897472DC0A59C00027E88 /* AllTasks.swift in Sources */,
+				E8E897452DC0A2B100027E88 /* TimerManager.swift in Sources */,
 				E82A79D42DB13265007ED175 /* TodoDetailView.swift in Sources */,
 				E82A79D52DB13265007ED175 /* TodoView.swift in Sources */,
 			);

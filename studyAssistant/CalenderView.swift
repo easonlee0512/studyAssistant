@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftUICore
 
+
+
 // MARK: - 日曆主視圖
 struct CalendarView: View {
     // MARK: 狀態變量
@@ -8,9 +10,9 @@ struct CalendarView: View {
     @State private var currentDate = Date()   // 顯示的當前月份
     @State private var showingAddTask = false // 控制添加任務視圖顯示
     @State private var showingTodoDetail = false // 控制待辦詳情視圖顯示
-    
-    // 用于TodoAddView的任务列表
-    @State private var todoTasks: [TodoTask] = []
+    @EnvironmentObject var allTasks: AllTasks // 全域任務環境物件
+    @GestureState private var dragOffset: CGFloat = 0 // 用於偵測滑動
+    @State private var pageOffset: CGFloat = 0 // 用於動畫偏移
     
     // 待辦事項列表（這裡是示例，實際應從數據源獲取）
     @State private var todos: [String] = ["完成數學作業", "準備英文演講", "讀完物理課本第五章", "健身1小時"]
@@ -52,52 +54,80 @@ struct CalendarView: View {
                     .padding(.trailing, 15)
                     .frame(width: 45)
                 }
-                .padding(.top, 20)
-                .padding(.bottom, 10)
+                .padding(.top, 7)
+                .padding(.bottom, 7)
 
-                // 星期標題 - 使用GeometryReader獲取寬度
-                GeometryReader { weekGeometry in
-                    HStack(spacing: 0) {
-                        ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { day in
-                            Text(day)
-                                .font(.system(size: 15))
-                                .frame(width: weekGeometry.size.width / 7)
-                                .padding(.bottom, 5)
-                        }
-                    }
-                }
-                .frame(height: 30)
-                .padding(.horizontal)
-                
-                // 日期格子 - 保持與星期标题一致的宽度
                 GeometryReader { geometry in
-                    VStack(spacing: 8) {
-                        ForEach(0..<6) { row in
-                            HStack(spacing: 0) {
-                                ForEach(0..<7) { column in
-                                    let dateText = calendarData[row][column]
-                                    
-                                    // 日期格子视图改为居中对齐
-                                    Text(dateText)
-                                        .font(.system(size: 15))
-                                        .foregroundColor(isCurrentMonth(row, column) ? .black : .black.opacity(0.25))
-                                        .frame(width: geometry.size.width / 7, alignment: .center)
-                                        .frame(height: (geometry.size.height / 6) - 8)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            selectDate(row, column)
+                    let width = geometry.size.width
+                    HStack(spacing: 0) {
+                        // 上個月
+                        CalendarMonthWithWeekdaysView(
+                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!),
+                            monthDate: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!,
+                            geometry: geometry,
+                            selectDate: selectDate
+                        )
+                        // 本月
+                        CalendarMonthWithWeekdaysView(
+                            calendarData: calendarData(for: currentDate),
+                            monthDate: currentDate,
+                            geometry: geometry,
+                            selectDate: selectDate
+                        )
+                        // 下個月
+                        CalendarMonthWithWeekdaysView(
+                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!),
+                            monthDate: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!,
+                            geometry: geometry,
+                            selectDate: selectDate
+                        )
+                    }
+                    .frame(width: width * 3, alignment: .leading)
+                    .offset(x: -width + dragOffset + pageOffset)
+                    .gesture(
+                        DragGesture()
+                            .updating($dragOffset) { value, state, _ in
+                                state = value.translation.width
+                            }
+                            .onEnded { value in
+                                let threshold: CGFloat = width / 3
+                                if value.translation.width < -threshold {
+                                    // 向左滑，下一個月
+                                    withAnimation(.spring()) {
+                                        pageOffset = -width
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        if let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentDate) {
+                                            currentDate = nextMonth
                                         }
+                                        pageOffset = 0
+                                    }
+                                } else if value.translation.width > threshold {
+                                    // 向右滑，上個月
+                                    withAnimation(.spring()) {
+                                        pageOffset = width
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        if let prevMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentDate) {
+                                            currentDate = prevMonth
+                                        }
+                                        pageOffset = 0
+                                    }
+                                } else {
+                                    // 沒有超過閾值，彈回原位
+                                    withAnimation(.spring()) {
+                                        pageOffset = 0
+                                    }
                                 }
                             }
-                        }
-                    }
+                    )
                 }
                 .padding(.horizontal)
             }
             
             // 使用TodoAddView替代原有的AddTodoView
             if showingAddTask {
-                TodoAddView(tasks: $todoTasks, isPresented: $showingAddTask)
+                TodoAddView(isPresented: $showingAddTask)
                     .transition(.move(edge: .bottom))
                     .zIndex(2)
             }
@@ -124,7 +154,7 @@ struct CalendarView: View {
     }
     
     private func getDateFromRowColumn(row: Int, column: Int) -> Date? {
-        let dayValue = Int(calendarData[row][column]) ?? 1
+        let dayValue = Int(calendarData(for: currentDate)[row][column]) ?? 1
         let calendar = Calendar.current
         
         // 确定该日期是哪个月
@@ -151,7 +181,7 @@ struct CalendarView: View {
         if row == 0 && column < firstWeekdayOfMonth {
             return false
         }
-        let dayNumber = Int(calendarData[row][column]) ?? 0
+        let dayNumber = Int(calendarData(for: currentDate)[row][column]) ?? 0
         if row >= 4 && dayNumber < 15 {
             return false
         }
@@ -186,34 +216,36 @@ struct CalendarView: View {
         return 31
     }
     
-    /// 生成月曆數據
-    var calendarData: [[String]] {
+    /// 新增一個 calendarData(for:) 產生指定月份的 calendarData
+    func calendarData(for date: Date) -> [[String]] {
         var result: [[String]] = Array(repeating: Array(repeating: "", count: 7), count: 6)
-        
-        let firstWeekday = firstWeekdayOfMonth
-        let lastDayOfPrevMonth = daysInPrevMonth
-        
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: date)
+        let firstDayOfMonth = calendar.date(from: components)!
+        let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth) - 1
+        let range = calendar.range(of: .day, in: .month, for: firstDayOfMonth)!
+        let daysInMonth = range.count
+        // 上個月天數
+        let prevMonth = calendar.date(byAdding: .month, value: -1, to: date)!
+        let prevRange = calendar.range(of: .day, in: .month, for: prevMonth)!
+        let daysInPrevMonth = prevRange.count
         // 填充上個月的日期
         for i in 0..<firstWeekday {
-            result[0][i] = "\(lastDayOfPrevMonth - firstWeekday + i + 1)"
+            result[0][i] = "\(daysInPrevMonth - firstWeekday + i + 1)"
         }
-        
         // 填充當月的日期
         var day = 1
         var row = 0
         var col = firstWeekday
-        
         while day <= daysInMonth {
             result[row][col] = "\(day)"
             day += 1
             col += 1
-            
             if col == 7 {
                 col = 0
                 row += 1
             }
         }
-        
         // 填充下個月的日期
         var nextMonthDay = 1
         while row < 6 {
@@ -225,7 +257,6 @@ struct CalendarView: View {
             col = 0
             row += 1
         }
-        
         return result
     }
     
@@ -240,4 +271,225 @@ struct CalendarView: View {
 // MARK: - 預覽
 #Preview {
     CalendarView()
+        .environmentObject(AllTasks())
+}
+
+// 新增一個 CalendarMonthWithWeekdaysView，包住星期標題和格子
+struct CalendarMonthWithWeekdaysView: View {
+    let calendarData: [[String]]
+    let monthDate: Date
+    let geometry: GeometryProxy
+    let selectDate: (Int, Int) -> Void
+    let weekDays = ["日", "一", "二", "三", "四", "五", "六"]
+    @EnvironmentObject var allTasks: AllTasks
+    var body: some View {
+        VStack(spacing: 0) {
+            // 星期標題
+            HStack(spacing: 0) {
+                ForEach(weekDays, id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 15))
+                        .frame(width: geometry.size.width / 7)
+                        .padding(.bottom, 5)
+                }
+            }
+            .frame(height: 30)
+            // 日期格子
+            CalendarMonthView(
+                calendarData: calendarData,
+                monthDate: monthDate,
+                isCurrentMonth: true,
+                geometry: geometry,
+                selectDate: selectDate
+            )
+            .environmentObject(allTasks)
+        }
+    }
+}
+
+// 修改 CalendarMonthView 支援橫跨多天的任務橫條
+struct CalendarMonthView: View {
+    let calendarData: [[String]]
+    let monthDate: Date
+    let isCurrentMonth: Bool
+    let geometry: GeometryProxy
+    let selectDate: (Int, Int) -> Void
+    @EnvironmentObject var allTasks: AllTasks
+    var body: some View {
+        let cellHeight = geometry.size.height / 7  // 改小格子高度
+        VStack(spacing: 0) {
+            ForEach(0..<6) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<7) { column in
+                        let dateText = calendarData[row][column]
+                        let cellDate = getCellDate(row: row, column: column)
+                        let tasksForThisDay = allTasks.tasks.filter { task in
+                            guard let cellDate = cellDate else { return false }
+                            if task.repeatType == .daily {
+                                return true
+                            }
+                            return cellDate >= task.startDate.startOfDay && cellDate <= task.endDate.startOfDay
+                        }
+                        let dateLabelHeight: CGFloat = 20   // 預留給日期數字的高度
+                        ZStack {
+                            // 背景
+                            Rectangle()
+                                .fill(Color.clear)
+                                .frame(width: geometry.size.width / 7, height: cellHeight)
+                            
+                            // 任務區域
+                            VStack(spacing: 0) {
+                                Spacer()
+                                    .frame(height: dateLabelHeight)
+                                
+                                // 任務橫條區域
+                                VStack(spacing: 2) {
+                                    Spacer()
+                                        .frame(height: 1)  // 加入頂部間距
+                                    
+                                    ForEach(Array(tasksForThisDay.prefix(4)), id: \ .id) { task in
+                                        let isStart = cellDate != nil && Calendar.current.isDate(cellDate!, inSameDayAs: task.startDate)
+                                        let isEnd = cellDate != nil && Calendar.current.isDate(cellDate!, inSameDayAs: task.endDate)
+                                        let isLeftEdge = column == 0
+                                        let isRightEdge = column == 6
+                                        let showLeftRadius = isLeftEdge
+                                        let showRightRadius = isRightEdge
+                                        TaskBarView(
+                                            color: task.color,
+                                            showLeftRadius: showLeftRadius,
+                                            showRightRadius: showRightRadius,
+                                            isSingle: false,
+                                            width: geometry.size.width / 7
+                                        ) {
+                                            Text(task.title)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundColor(.white)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    
+                                    if tasksForThisDay.count > 4 {
+                                        Text("+\(tasksForThisDay.count - 4)")
+                                            .font(.system(size: 8))
+                                            .foregroundColor(.gray)
+                                            .padding(.bottom, 2)
+                                    }
+                                }
+                                .frame(maxHeight: cellHeight - dateLabelHeight,
+                                               alignment: .top)//向上對其
+                                
+                                Spacer(minLength: 0)
+                            }
+                            
+                            // 日期數字（永遠在最上層）
+                            VStack {
+                                Text(dateText)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.black)
+                                    .frame(height: dateLabelHeight, alignment: .top)
+                                    .padding(.leading, 2)
+                                    .padding(.top, 2)
+                                
+                                Spacer()
+                            }
+                        }
+                        .frame(width: geometry.size.width / 7, height: cellHeight)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectDate(row, column)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: geometry.size.width)
+    }
+    // 計算這格的 Date，根據 monthDate
+    func getCellDate(row: Int, column: Int) -> Date? {
+        let dateText = calendarData[row][column]
+        guard let day = Int(dateText) else { return nil }
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month], from: monthDate)
+        dateComponents.day = day
+        // 判斷這格是本月、上月還是下月
+        if row == 0 && day > 7 {
+            // 上個月
+            if let prevMonth = calendar.date(byAdding: .month, value: -1, to: monthDate) {
+                var prevComponents = calendar.dateComponents([.year, .month], from: prevMonth)
+                prevComponents.day = day
+                return calendar.date(from: prevComponents)
+            }
+        } else if row >= 4 && day < 15 {
+            // 下個月
+            if let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthDate) {
+                var nextComponents = calendar.dateComponents([.year, .month], from: nextMonth)
+                nextComponents.day = day
+                return calendar.date(from: nextComponents)
+            }
+        }
+        // 本月
+        return calendar.date(from: dateComponents)
+    }
+}
+
+// 修改 TaskBarView，讓橫條寬度填滿格子，並支援左右圓角
+struct TaskBarView<Content: View>: View {
+    let color: Color
+    let showLeftRadius: Bool
+    let showRightRadius: Bool
+    let isSingle: Bool
+    let width: CGFloat
+    let content: () -> Content
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(color)
+                .modifier(TaskBarCornerModifier(showLeftRadius: showLeftRadius, showRightRadius: showRightRadius, isSingle: isSingle, radius: 4))
+                .frame(width: width - 4, height: 16)  // 減少寬度
+                .shadow(color: .black.opacity(0.09), radius: 3, x: 3, y: 3)
+            content()
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 2)  // 減少左邊間距（原本是 3）
+        }
+        .frame(width: width)  // 保持外部容器原始寬度
+    }
+}
+
+// 自訂 modifier 控制橫條圓角，支援左右圓角
+struct TaskBarCornerModifier: ViewModifier {
+    let showLeftRadius: Bool
+    let showRightRadius: Bool
+    let isSingle: Bool
+    let radius: CGFloat
+    func body(content: Content) -> some View {
+        if isSingle {
+            content.clipShape(RoundedRectangle(cornerRadius: radius))
+        } else if showLeftRadius && showRightRadius {
+            content.clipShape(RoundedRectangle(cornerRadius: radius))
+        } else if showLeftRadius {
+            content.clipShape(RoundedCorners(radius: radius, corners: [.topLeft, .bottomLeft]))
+        } else if showRightRadius {
+            content.clipShape(RoundedCorners(radius: radius, corners: [.topRight, .bottomRight]))
+        } else {
+            content.clipShape(Rectangle())
+        }
+    }
+}
+
+// 自訂 shape 支援部分圓角
+struct RoundedCorners: Shape {
+    var radius: CGFloat = 8.0
+    var corners: UIRectCorner = .allCorners
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+
+// Date 擴充，取得當天 00:00:00
+extension Date {
+    var startOfDay: Date {
+        Calendar.current.startOfDay(for: self)
+    }
 }
