@@ -1,60 +1,97 @@
 資料庫結構設計
 一、資料模型
-1. 使用者資料 (User)
+1. 使用者資料 (User) - 需要同步
 - id: String (主鍵)
+- email: String (使用者信箱，用於認證)
+- authProvider: String (認證提供者：Google)
 - username: String (使用者名稱)
 - motivationalQuote: String (鼓勵語句)
-- targetDate: Date (目標日期)
+- targetDate: Timestamp (目標日期)
 - userGoal: String (用戶設定的目標)
-- createdAt: Date (帳戶創建時間)
+- createdAt: Timestamp (帳戶創建時間)
+- isActive: Boolean (帳號是否啟用)
+- lastLoginAt: Timestamp (最後登入時間)
+- vip: Boolean (是否為vip)
+- isDeleted: Boolean (軟刪除標記)
 
-2. 待辦事項 (TodoTask)
+2. 待辦事項 (TodoTask) - 需要同步
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)
 - title: String (任務標題)
 - note: String (任務備註)
-- startDate: Date (開始時間)
-- endDate: Date (結束時間，若有設定)
+- notificationId: String?
+- startDate: Timestamp (開始時間)
+- endDate: Timestamp? (結束時間，若有設定)
 - isAllDay: Boolean (是否全天事項)
 - colorHex: String (顏色代碼)
 - isCompleted: Boolean (是否已完成)
 - category: String (分類)
-- repeatOption: String (重複選項: 不重複/每天/每週/每月)
-- createdAt: Date (建立時間)
+- repeatOption: String (重複選項: 不重複/每天/每週/月)
+- createdAt: Timestamp (建立時間)
+- lastModifiedAt: Timestamp (最後修改時間)
+- lastSyncedAt: Timestamp? (最後同步時間)
+- version: Int (數據版本，用於解決衝突)
+- syncStatus: String (同步狀態: 待同步/已同步/衝突)
+- isDeleted: Boolean (軟刪除標記)
 
-3. 計時記錄 (TimerRecord)
+3. 計時記錄 (TimerRecord) - 僅本地儲存 (僅同步摘要數據)
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)
 - subject: String (學習科目)
-- startTime: Date (開始時間)
-- endTime: Date (結束時間)
+- startTime: Timestamp (開始時間)
+- endTime: Timestamp (結束時間)
 - duration: Int (持續時間，以秒為單位)
 - isCompleted: Boolean (是否完成)
-- createdAt: Date (建立時間)
+- createdAt: Timestamp (建立時間)
+- lastModifiedAt: Timestamp (最後修改時間)
+- isDeleted: Boolean (軟刪除標記) // 保留但可能不使用
 
-4. 聊天記錄 (ChatMessage)
+4. 聊天記錄 (ChatMessage) - 僅本地儲存 (選擇性同步)
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)
 - roomId: String (聊天室ID)
 - text: String (訊息內容)
 - isMe: Boolean (是否為使用者發送的訊息)
-- timestamp: Date (發送時間)
+- timestamp: Timestamp (發送時間)
+- isDeleted: Boolean (軟刪除標記) // 保留但可能不使用
 
-5. 聊天室 (ChatRoom)
+5. 聊天室 (ChatRoom) - 需要同步
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)
 - name: String (聊天室名稱)
-- createdAt: Date (建立時間)
+- createdAt: Timestamp (建立時間)
+- lastModifiedAt: Timestamp (最後修改時間)
+- isDeleted: Boolean
 
-6. 學習統計 (LearningStatistic)
+6. 學習統計 (LearningStatistic) - 需要同步
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)
 - subject: String (學科名稱)
 - progress: Double (進度百分比，0-1之間)
 - totalFocusTime: Int (總專注時間，以秒為單位)
 - focusCount: Int (專注次數)
-- updatedAt: Date (更新時間)
+- updatedAt: Timestamp (更新時間)
+- lastSyncedAt: Timestamp? (最後同步時間)
+- version: Int (數據版本)
+- syncStatus: String (同步狀態)
+- isDeleted: Boolean (軟刪除標記)
 
+7. 通知/提醒 (Notification) - 需要同步
+- id: String (主鍵)
+- userId: String (外鍵，關聯使用者)
+- title: String (通知標題)
+- body: String (通知內容)
+- type: String (通知類型：任務提醒/學習提醒/系統通知)
+- relatedItemId: String? (關聯項目ID，如任務ID或計時記錄ID)
+- relatedItemType: String? (關聯項目類型：待辦事項/計時/聊天等)
+- scheduledFor: Timestamp (計劃通知時間)
+- repeatType: String? (重複類型：無/每日/每週/每月/自定義)
+- isRead: Boolean (是否已讀)
+- isDelivered: Boolean (是否已發送)
+- isActive: Boolean (是否啟用)
+- createdAt: Timestamp (建立時間)
+- lastModifiedAt: Timestamp (最後修改時間)
+- isDeleted: Boolean (軟刪除標記)
 
 二、資料庫實作建議
 根據您的需求和應用程式設計，我推薦以下方案：
@@ -70,6 +107,7 @@
 定義實體和關係
 使用 @Environment(\.managedObjectContext) 在 SwiftUI 中管理資料
 利用 FetchRequest 獲取資料
+
 方案二：使用 Firebase (雲端儲存)
 如果您希望用戶能夠在多設備間同步資料，或考慮未來擴充功能：
 優點：
@@ -81,6 +119,7 @@
 設置 Firebase 專案並添加至您的 Swift 專案
 使用 Firebase Authentication 管理使用者
 使用 Firestore 儲存結構化資料
+
 實作資料同步功能
 三、資料關係
 以下是資料實體間的關係設計：
@@ -173,4 +212,60 @@ chatgpt
 時間都用 Timestamp，方便直接在 Firestore Query 比較。
 userId全部靠父層Document Id，不用每一筆資料再存一次（省空間⚡）
 資料庫安全規則要記得設定，限制只能自己存取自己的資料。
-針對大型Collection（像messages），可以用**分頁載入(pagination)**減少一次讀取量！
+針對大型Collection（像messages），可以用**分頁載入(pagination)**
+
+常見陷阱
+不要在 View 裡直接呼叫 async 函數 —— 要包在 Task {} 裡。
+如果使用 ObservableObject + @Published 管理資料，請在 @MainActor 區更新資料以避免錯誤。
+若你要用 .addDocument()，要記得資料符合 Codable。
+
+主要資料模型
+1. 用戶與設定相關
+UserProfile: 使用者個人資料
+屬性：id, email, username, motivationalQuote, targetDate, userGoal, learningStage, isVIP, lastLoginAt, version, lastSyncedAt, isDeleted
+功能：儲存使用者個人資訊和目標
+AppSettings: 應用程式設定
+屬性：id, isDarkMode, notificationsEnabled, isShockEnabled, lastModified
+功能：儲存使用者對應用的偏好設定
+2. 任務管理相關
+TodoTask: 待辦任務
+屬性：id, title, note, color, focusTime, category, isAllDay, isCompleted, repeatType, startDate, endDate, createdAt, userId
+功能：表示一個待辦事項任務，支援重複任務
+RepeatType: 任務重複類型（枚舉）
+選項：none, daily, weekly([Int]), monthly([Int])
+功能：定義任務的重複方式，支援每日、每週和每月重複
+3. 計時器相關
+TimerRecord: 計時記錄
+屬性：id, userId, subject, startTime, endTime, duration, isCompleted, createdAt, lastModifiedAt, isDeleted
+功能：記錄使用者的學習時間和科目
+TimerStatistics: 計時統計資料
+屬性：subjectStats, dailyStats, totalDuration, totalSessions, completedSessions, incompleteSessions, totalTime, averageSessionTime
+功能：匯總計時器記錄的統計資訊
+SubjectStats: 科目統計
+屬性：totalDuration, sessionCount, completedCount
+功能：按科目統計計時資訊
+DailyStats: 日期統計
+屬性：totalDuration, sessionCount, subjects
+功能：按日期統計計時資訊
+4. 服務相關
+DataServiceError: 資料服務錯誤（枚舉）
+選項：networkError, syncError, validationError, notFound, permissionDenied, unknown
+功能：定義資料服務可能出現的錯誤類型
+SyncStatus: 同步狀態（枚舉）
+選項：notSynced, syncing, synced, error
+功能：表示資料同步狀態
+視圖模型 (ViewModels)
+TodoViewModel: 待辦任務視圖模型
+功能：管理待辦任務的 CRUD 操作和資料同步
+UserSettingsViewModel: 使用者設定視圖模型
+功能：管理使用者設定、個人資料的讀取和更新
+TimerManager: 計時器管理器
+功能：管理計時器的運行、暫停、重置和記錄
+ProfileViewModel: 個人資料視圖模型
+功能：管理使用者個人資料的讀取和更新
+服務介面
+DataServiceProtocol: 資料服務協議
+功能：定義資料操作的共用介面
+FirebaseService: Firebase 資料服務
+功能：實現資料服務協議，處理與 Firebase 的資料交互
+這些是專案中的主要資料結構，它們共同構成了應用程式的資料層和業務邏輯層。已成功移除了 TimerSettings 相關的程式碼，並保持了其他功能的完整性。

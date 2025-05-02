@@ -1,41 +1,30 @@
+//
+//  testtododetailviews.swift
+//  studyAssistant
+//
+//  Created by 李翊辰 on 2025/4/30.
+//
 import SwiftUI
 import SwiftUICore
+import FirebaseFirestore
+import FirebaseAuth
+// 添加 Date 擴展的引用
 
 // MARK: - 任務詳情視圖
 struct TodoDetailView: View {
     @Environment(\.presentationMode) var presentationMode
-    let date: Date // 當前選中的日期
-    let todos: [String] // 該日期的待辦事項列表
-    @Binding var isPresented: Bool // 控制視圖顯示與隱藏
-    
-    // 待辦事項項目模型
-    struct TodoItem: Identifiable {
-        let id = UUID()
-        let title: String
-        let color: Color
-        
-        // 隨機生成顏色
-        static func randomColor() -> Color {
-            let colors: [Color] = [
-                Color(red: 255/255, green: 59/255, blue: 48/255, opacity: 0.7),
-                Color(red: 253/255, green: 218/255, blue: 75/255, opacity: 0.7),
-                Color(red: 111/255, green: 214/255, blue: 137/255, opacity: 0.7),
-                Color(red: 137/255, green: 135/255, blue: 225/255, opacity: 0.7),
-                Color(red: 75/255, green: 160/255, blue: 253/255, opacity: 0.7)
-            ]
-            return colors[Int.random(in: 0..<colors.count)]
-        }
-    }
-    
-    // 將字符串轉換為帶有隨機顏色的TodoItem
-    private var todoItems: [TodoItem] {
-        return todos.map { TodoItem(title: $0, color: TodoItem.randomColor()) }
-    }
+    @ObservedObject var viewModel: TodoViewModel
+    let date: Date
+    @Binding var isPresented: Bool
     
     // Figma中使用的顏色
-    let backgroundColor = Color(hex: "FEECD8") // #FEECD8
+    let backgroundColor = Color.hex(hex: "FEECD8") // #FEECD8
     let dividerColor = Color.black
-    let addButtonColor = Color(hex: "E28A5F") // #E28A5F 約等於 rgb(226, 138, 95)
+    let addButtonColor = Color.hex(hex: "E28A5F") // #E28A5F 約等於 rgb(226, 138, 95)
+    
+    var filteredTasks: [TodoTask] {
+        viewModel.tasksForDate(date)
+    }
     
     var body: some View {
         ZStack {
@@ -46,7 +35,7 @@ struct TodoDetailView: View {
                 // 頭部日期和關閉按鈕
                 HStack {
                     Text(dateFormatted)
-                        .font(.custom("PingFang TC", size: 32))
+                        .font(.system(size: 32))
                         .fontWeight(.semibold)
                         .foregroundColor(.black)
                     
@@ -57,7 +46,7 @@ struct TodoDetailView: View {
                     }) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(hex: "F3D4B7")) // 淺棕色
+                                .fill(Color.hex(hex: "F3D4B7"))
                                 .frame(width: 36, height: 36)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
@@ -69,8 +58,6 @@ struct TodoDetailView: View {
                                 .foregroundColor(Color.black.opacity(0.7))
                         }
                     }
-                    
-
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 15)
@@ -82,7 +69,7 @@ struct TodoDetailView: View {
                     .padding(.horizontal, 16)
                 
                 // 沒有待辦事項時顯示的訊息
-                if todoItems.isEmpty {
+                if filteredTasks.isEmpty {
                     VStack {
                         Spacer()
                         Text("沒有待辦事項")
@@ -95,8 +82,8 @@ struct TodoDetailView: View {
                     // 滾動事項列表
                     ScrollView {
                         VStack(spacing: 10) {
-                            ForEach(todoItems) { item in
-                                todoCard(todo: item)
+                            ForEach(filteredTasks) { task in
+                                todoCard(task: task)
                                     .frame(height: 90)
                             }
                         }
@@ -106,7 +93,12 @@ struct TodoDetailView: View {
                     }
                 }
             }
-            .frame(width: 353, height: 440)
+            .frame(
+                minWidth: 0,
+                maxWidth: min(UIScreen.main.bounds.width * 0.95, 400),
+                minHeight: 0,
+                maxHeight: min(UIScreen.main.bounds.height * 0.7, 500)
+            )
             .background(backgroundColor)
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
@@ -114,34 +106,46 @@ struct TodoDetailView: View {
     }
     
     // 待辦事項卡片視圖
-    func todoCard(todo: TodoItem) -> some View {
-        ZStack(alignment: .topLeading) {
+    func todoCard(task: TodoTask) -> some View {
+        HStack(spacing: 0) {
             // 背景色塊
             RoundedRectangle(cornerRadius: 16)
-                .fill(todo.color)
-                .frame(maxWidth: .infinity, maxHeight: 90)
+                .fill(task.color)
+                .frame(maxWidth: 10, maxHeight: .infinity)
             
             // 內容
             VStack(alignment: .leading, spacing: 5) {
-                Text(todo.title)
-                    .font(.custom("PingFang TC", size: 20))
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .padding(.top, 5)
+                HStack(alignment: .center) {
+                    Text(task.title)
+                        .font(.system(size: 20))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    Spacer()
+                    
+                    Text(task.formattedTime)
+                        .font(.system(size: 15))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black.opacity(0.7))
+                }
+                .padding(.top, 5)
+                
+                if !task.note.isEmpty {
+                    Text(task.note)
+                        .font(.system(size: 15))
+                        .foregroundColor(.black.opacity(0.7))
+                }
                 
                 Spacer()
-                
-                // 日期顯示
-                Text(timeFormatted)
-                    .font(.custom("PingFang TC", size: 15))
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black.opacity(0.7))
-                    .padding(.bottom, 5)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            
+            Spacer()
         }
-        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .frame(maxWidth: .infinity, maxHeight: 90)
+        .background(Color.hex(hex: "FEECD8"))
+        .cornerRadius(16)
     }
     
     // MARK: - 格式化日期
@@ -151,31 +155,27 @@ struct TodoDetailView: View {
         formatter.locale = Locale(identifier: "en_US")
         return formatter.string(from: date)
     }
-    
-    // MARK: - 格式化時間
-    private var timeFormatted: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: Date())
-    }
 }
 
 // 預覽提供者
 #if DEBUG
 struct TodoDetailView_Previews: PreviewProvider {
     @State static var isPresented = true
+    static var viewModel = TodoViewModel()
     
     static var previews: some View {
         ZStack {
             Color(.systemGray6)
                 .edgesIgnoringSafeArea(.all)
             TodoDetailView(
+                viewModel: viewModel,
                 date: Date(),
-                todos: ["完成數學作業", "準備英文演講", "讀完物理課本第五章", "健身1小時"],
                 isPresented: $isPresented
             )
+            .environmentObject(viewModel)
         }
         .previewDevice("iPhone 13")
     }
 }
 #endif
+

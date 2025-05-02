@@ -7,6 +7,7 @@
 // TimerManager 類別定義 - 使用時間差計算法
 import SwiftUI
 import Combine
+import Firebase
 
 class TimerManager: ObservableObject {
     // 計時器基本屬性
@@ -44,12 +45,23 @@ class TimerManager: ObservableObject {
     private var totalPausedTime: TimeInterval = 0  // 累計暫停時間
     private var initialTimeRemaining: TimeInterval = 0 // 開始倒數時的初始剩餘時間
     
+    // 計時記錄相關
+    private var actualStartTime: Date? = nil  // 實際開始計時的時間（考慮暫停）
+    private let dataService: DataServiceProtocol // 資料服務
+    private var currentUserId: String = "default" // 目前用戶ID
+    
     // UI 更新計時器
     private var timerSubscription: AnyCancellable?
     
-    init() {
+    init(dataService: DataServiceProtocol = FirebaseService.shared) {
+        self.dataService = dataService
         // 初始化時分秒
         updateTimeComponents()
+    }
+    
+    // 設置當前用戶ID
+    func setCurrentUserId(_ userId: String) {
+        self.currentUserId = userId
     }
     
     // 更新時間組件
@@ -135,6 +147,8 @@ class TimerManager: ObservableObject {
     
     // 啟動計時器（正向或倒數）
     private func startTimer() {
+        let now = Date()
+        
         if startTime == nil {
             // 首次啟動計時器 - 記住當前設定的時間(用於重置)
             initialHours = hours
@@ -142,7 +156,8 @@ class TimerManager: ObservableObject {
             initialSeconds = seconds
             
             // 記錄開始時間點
-            startTime = Date()
+            startTime = now
+            actualStartTime = now // 實際開始時間
             
             // 只在第一次開始計時時記住設定的時間（倒數計時模式）- 用於切換回倒數模式
             if !isCountUp && !hasUsedBefore {
@@ -155,12 +170,10 @@ class TimerManager: ObservableObject {
             // 倒數計時模式：記錄初始剩餘時間
             if !isCountUp {
                 initialTimeRemaining = timeRemaining
-                // 直接設置進度為1.0，避免從0開始的動畫
-                //progress = 1.0
             }
         } else if pauseTime != nil {
             // 從暫停中恢復
-            totalPausedTime += Date().timeIntervalSince(pauseTime!)
+            totalPausedTime += now.timeIntervalSince(pauseTime!)
             pauseTime = nil
         }
         
@@ -185,9 +198,6 @@ class TimerManager: ObservableObject {
             guard let self = self else { return }
             self.updateTimerDisplay()
         }
-        
-        // 立即更新一次顯示，確保不用等到下一個計時器觸發
-        //updateTimerDisplay()
     }
     
     // 更新計時顯示
@@ -221,6 +231,8 @@ class TimerManager: ObservableObject {
             
             // 檢查計時器是否應該停止
             if timeRemaining <= 0 {
+                // 創建計時記錄
+                saveTimerRecord(isCompleted: true)
                 stopTimer()
                 isRunning = false
                 progress = 0 // 倒數結束時進度歸零
@@ -242,11 +254,17 @@ class TimerManager: ObservableObject {
     
     // Reset the timer to initial value
     func resetTimer() {
+        // 如果計時器正在運行，先保存一條記錄
+        if isRunning {
+            saveTimerRecord(isCompleted: false)
+        }
+        
         stopTimer()
         isRunning = false
         startTime = nil
         pauseTime = nil
         totalPausedTime = 0
+        actualStartTime = nil
         
         if isCountUp {
             // 正向計時重置
@@ -273,6 +291,28 @@ class TimerManager: ObservableObject {
             
             // 更新計時器時間和進度
             updateTimer()
+        }
+    }
+    
+    // 保存計時器記錄
+    private func saveTimerRecord(isCompleted: Bool) {
+        guard let actualStart = actualStartTime, startTime != nil else { return }
+        
+        let endTime = Date()
+        let record = TimerRecord(
+            userId: currentUserId,
+            subject: subject,
+            startTime: actualStart,
+            endTime: endTime,
+            isCompleted: isCompleted
+        )
+        
+        Task {
+            do {
+                try await dataService.saveTimerRecord(record)
+            } catch {
+                print("Error saving timer record: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -308,5 +348,20 @@ class TimerManager: ObservableObject {
         if isRunning {
             stopDisplayTimer()
         }
+    }
+    
+    // 獲取統計數據
+    func getStatistics() async throws -> TimerStatistics {
+        return try await dataService.getTimerStatistics(userId: currentUserId)
+    }
+    
+    // 獲取一段時間內的統計數據
+    func getStatistics(from startDate: Date, to endDate: Date) async throws -> TimerStatistics {
+        return try await dataService.getTimerStatistics(userId: currentUserId, from: startDate, to: endDate)
+    }
+    
+    // 獲取用戶所有計時記錄
+    func getAllTimerRecords() async throws -> [TimerRecord] {
+        return try await dataService.getTimerRecords(userId: currentUserId)
     }
 }

@@ -1,86 +1,30 @@
 //
-//  ContentView.swift
-//  test
+//  SignInView.swift
+//  studyAssistant
 //
 //  Created by esley W on 2025/4/21.
 //
 
 import SwiftUI
+import FirebaseAuth
 
+// 注意：此視圖已被 LoginView 和 AuthState 取代
+// 保留此文件是為了向後兼容性，建議在應用中使用 LoginView
 struct SignInView: View {
+    @EnvironmentObject var authState: AuthState
+
     var body: some View {
-        ZStack {
-            // Background color
-            Color(hex: "F3D4B7")
-                .ignoresSafeArea()
-            
-            VStack(spacing: 30) {
-                // Add getstart text to top-left
-                
-            
-                
-                // GET STARTED Text
-                Text("GET STARTED")
-                    .font(.custom("Roboto-Black", size: 64))
-                    .tracking(3.84) // 6% of 64px
-                    .lineSpacing(0)
-                    .foregroundColor(Color(hex: "E09772"))
-                    
-                    .padding(.bottom, 50)
-                Spacer()
-                // Sign in with Apple button
-                Button(action: {
-                    // Handle Apple sign in
-                }) {
-                    HStack {
-                        Spacer()
-                        Text("Sign in with Apple")
-                            .font(.custom("Roboto-Medium", size: 20))
-                            .tracking(1.2) // 6% of 20px
-                            .foregroundColor(.black)
-                        Spacer()
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color(hex: "FEECD8"))
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 1, y: 1)
-                    )
-                    .frame(width: 280) // Fixed width for buttons
-                }
-                
-                // Sign in with Google button
-                Button(action: {
-                    // Handle Google sign in
-                }) {
-                    HStack {
-                        Spacer()
-                        Text("Sign in with Google")
-                            .font(.custom("Roboto-Medium", size: 20))
-                            .tracking(1.2) // 6% of 20px
-                            .foregroundColor(.black)
-                        Spacer()
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color(hex: "FEECD8"))
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 1, y: 1)
-                    )
-                    .frame(width: 280) // Fixed width for buttons
-                }
-                
-                Spacer()
-                
-                // Semi-transparent rectangle at bottom
-                
+        Group {
+            if authState.isLoggedIn {
+                ContentView()
+            } else {
+                LoginView()
             }
-            .padding()
         }
     }
 }
 
-
 #Preview {
     SignInView()
+        .environmentObject(AuthState())
 }

@@ -1,0 +1,43 @@
+建立清晰的目錄結構
+studyAssistant/
+  ├── App/
+  │   └── studyAssistantApp.swift
+  ├── Models/
+  │   ├── TodoTask.swift
+  │   ├── ChatModels.swift
+  │   └── UserSettings.swift
+  ├── ViewModels/
+  │   ├── TodoViewModel.swift
+  │   ├── TimerViewModel.swift
+  │   ├── ChatViewModel.swift
+  │   └── SettingsViewModel.swift
+  ├── Views/
+  │   ├── Todo/
+  │   │   ├── TodoView.swift
+  │   │   ├── TodoAddView.swift
+  │   │   └── TodoDetailView.swift
+  │   ├── Timer/
+  │   │   └── TimerView.swift
+  │   ├── Chat/
+  │   │   └── ChatView.swift
+  │   └── Settings/
+  │       ├── SettingsView.swift
+  │       └── ProfileSettingView.swift
+  └── Utils/
+      └── Extensions.swift
+
+先建立模型層：
+將所有資料模型抽出到獨立文件
+確保模型支援 Codable 協議以便序列化
+實現資料服務層：
+創建統一的資料存取接口
+將所有 UserDefaults 操作移到服務層
+逐個模組實現 ViewModel：
+從功能較簡單的模組開始（如 TodoViewModel）
+確保 ViewModel 包含所有業務邏輯
+重構視圖層：
+視圖只負責 UI 顯示和用戶交互
+利用 @StateObject 或 @EnvironmentObject 管理 ViewModel
+建議先完整重構一個功能模組：
+例如先完成 TodoView 的完整 MVVM 重構
+這將建立可複製的模式，便於其他模組重構

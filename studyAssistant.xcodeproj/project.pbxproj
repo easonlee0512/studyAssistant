@@ -11,28 +11,44 @@
 		9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03B82D8BFD4F001CF344 /* FirebaseAuthCombine-Community */; };
 		9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BA2D8BFD4F001CF344 /* FirebaseDatabase */; };
 		9B2C03BD2D8C05CE001CF344 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BC2D8C05CE001CF344 /* FirebaseFirestore */; };
+		9B499B792DC25F7700DD115C /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B782DC25F7700DD115C /* TimerView.swift */; };
+		9B499B7B2DC25F8400DD115C /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B7A2DC25F8400DD115C /* TimerManager.swift */; };
+		9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B52DC2162F007E5758 /* UserSettingsViewModel.swift */; };
+		9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B02DC2162F007E5758 /* UserProfile.swift */; };
+		9B5A80BD2DC2162F007E5758 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B72DC2162F007E5758 /* ProfileSettingView.swift */; };
+		9B5A80BE2DC2162F007E5758 /* DataServiceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B22DC2162F007E5758 /* DataServiceProtocol.swift */; };
+		9B5A80C12DC2162F007E5758 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B82DC2162F007E5758 /* SettingsView.swift */; };
+		9B5A80C32DC2162F007E5758 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80AE2DC2162F007E5758 /* AppSettings.swift */; };
+		9B5A80C52DC21905007E5758 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80C42DC218FE007E5758 /* SettingsComponents.swift */; };
+		9B5A80C82DC21A75007E5758 /* Color+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80C62DC21A75007E5758 /* Color+Extension.swift */; };
+		9B5A80CA2DC24B32007E5758 /* TimerRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80C92DC24B32007E5758 /* TimerRecord.swift */; };
+		9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */; };
+		9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80CF2DC24F6A007E5758 /* View+Extension.swift */; };
+		9B6D68F92DC3758800D0A3A8 /* TodoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */; };
+		9B6D68FB2DC3CC9B00D0A3A8 /* FirebaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */; };
+		9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */; };
+		9B6D68FF2DC3D06900D0A3A8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */; };
+		9B6D69012DC3D06900D0A3A8 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69002DC3D06900D0A3A8 /* FirebaseDatabase */; };
+		9B6D69032DC3D06900D0A3A8 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69022DC3D06900D0A3A8 /* FirebaseFirestore */; };
 		9BCA070B2DB5F8E00039EA2B /* TodoAddView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */; };
-		9BCA07132DB61B0D0039EA2B /* PersonSetting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCA07112DB61ADC0039EA2B /* PersonSetting.swift */; };
+		9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9832DC499DC00B3FF29 /* Date+Extension.swift */; };
+		9BD7A9892DC4F79D00B3FF29 /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */; };
+		9BD7A98B2DC4F79D00B3FF29 /* Login.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9872DC4F79D00B3FF29 /* Login.swift */; };
+		9BD7A98C2DC4F79D00B3FF29 /* signInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9882DC4F79D00B3FF29 /* signInView.swift */; };
+		9BD7A98E2DC4F7F200B3FF29 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */; };
+		9BD7A9922DC5037400B3FF29 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 9BD7A9912DC5037400B3FF29 /* GoogleSignIn */; };
+		9BD7A9942DC5037400B3FF29 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 9BD7A9932DC5037400B3FF29 /* GoogleSignInSwift */; };
 		E82A79C52DB13265007ED175 /* CalenderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B22DB13265007ED175 /* CalenderView.swift */; };
-		E82A79C62DB13265007ED175 /* MassageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B32DB13265007ED175 /* MassageView.swift */; };
+		E82A79C62DB13265007ED175 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B32DB13265007ED175 /* MessageView.swift */; };
 		E82A79C72DB13265007ED175 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B42DB13265007ED175 /* Config.swift */; };
 		E82A79C82DB13265007ED175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B52DB13265007ED175 /* ContentView.swift */; };
-		E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B62DB13265007ED175 /* CreateAccountView.swift */; };
-		E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B82DB13265007ED175 /* ProfileSettingView.swift */; };
-		E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B92DB13265007ED175 /* SettingsView.swift */; };
-		E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BB2DB13265007ED175 /* StatisticsView.swift */; };
 		E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */; };
-		E82A79D32DB13265007ED175 /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79C12DB13265007ED175 /* TimerView.swift */; };
 		E82A79D42DB13265007ED175 /* TodoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79C22DB13265007ED175 /* TodoDetailView.swift */; };
 		E82A79D52DB13265007ED175 /* TodoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79C32DB13265007ED175 /* TodoView.swift */; };
 		E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */; };
 		E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B12DB13265007ED175 /* Assets.xcassets */; };
-		E82A79D82DB13265007ED175 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B72DB13265007ED175 /* GoogleService-Info.plist */; };
 		E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E82F5CFF2D8B76C80016DF22 /* Alamofire */; };
-		E8E897422DC0980E00027E88 /* signInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897402DC0980D00027E88 /* signInView.swift */; };
 		E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897412DC0980D00027E88 /* TodoTask.swift */; };
-		E8E897452DC0A2B100027E88 /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897442DC0A2B100027E88 /* TimerManager.swift */; };
-		E8E897472DC0A59C00027E88 /* AllTasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897462DC0A59C00027E88 /* AllTasks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,30 +69,42 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		9B499B782DC25F7700DD115C /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
+		9B499B7A2DC25F8400DD115C /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
+		9B5A80AE2DC2162F007E5758 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		9B5A80B02DC2162F007E5758 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
+		9B5A80B22DC2162F007E5758 /* DataServiceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataServiceProtocol.swift; sourceTree = "<group>"; };
+		9B5A80B52DC2162F007E5758 /* UserSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSettingsViewModel.swift; sourceTree = "<group>"; };
+		9B5A80B72DC2162F007E5758 /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
+		9B5A80B82DC2162F007E5758 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		9B5A80C42DC218FE007E5758 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		9B5A80C62DC21A75007E5758 /* Color+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Extension.swift"; sourceTree = "<group>"; };
+		9B5A80C92DC24B32007E5758 /* TimerRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerRecord.swift; sourceTree = "<group>"; };
+		9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		9B5A80CF2DC24F6A007E5758 /* View+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Extension.swift"; sourceTree = "<group>"; };
+		9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoViewModel.swift; sourceTree = "<group>"; };
+		9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
+		9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		9BC153402D78771600FCA465 /* studyAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = studyAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC1535A2D78771A00FCA465 /* studyAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoAddView.swift; sourceTree = "<group>"; };
-		9BCA07112DB61ADC0039EA2B /* PersonSetting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonSetting.swift; sourceTree = "<group>"; };
+		9BD7A9832DC499DC00B3FF29 /* Date+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+Extension.swift"; sourceTree = "<group>"; };
+		9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication.swift; sourceTree = "<group>"; };
+		9BD7A9872DC4F79D00B3FF29 /* Login.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Login.swift; sourceTree = "<group>"; };
+		9BD7A9882DC4F79D00B3FF29 /* signInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = signInView.swift; sourceTree = "<group>"; };
+		9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		9BD7A98F2DC4F98600B3FF29 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		E82A79B12DB13265007ED175 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E82A79B22DB13265007ED175 /* CalenderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalenderView.swift; sourceTree = "<group>"; };
-		E82A79B32DB13265007ED175 /* MassageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MassageView.swift; sourceTree = "<group>"; };
+		E82A79B32DB13265007ED175 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
 		E82A79B42DB13265007ED175 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		E82A79B52DB13265007ED175 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		E82A79B62DB13265007ED175 /* CreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
-		E82A79B72DB13265007ED175 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		E82A79B82DB13265007ED175 /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
-		E82A79B92DB13265007ED175 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		E82A79BB2DB13265007ED175 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
-		E82A79C12DB13265007ED175 /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
 		E82A79C22DB13265007ED175 /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
 		E82A79C32DB13265007ED175 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
-		E8E897402DC0980D00027E88 /* signInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = signInView.swift; sourceTree = "<group>"; };
 		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
-		E8E897442DC0A2B100027E88 /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
-		E8E897462DC0A59C00027E88 /* AllTasks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllTasks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -99,9 +127,11 @@
 			files = (
 				E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */,
 				9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */,
+				9BD7A9942DC5037400B3FF29 /* GoogleSignInSwift in Frameworks */,
 				9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */,
 				9B2C03BD2D8C05CE001CF344 /* FirebaseFirestore in Frameworks */,
 				9B2C03B72D8BFD4F001CF344 /* FirebaseAuth in Frameworks */,
+				9BD7A9922DC5037400B3FF29 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +139,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B6D69012DC3D06900D0A3A8 /* FirebaseDatabase in Frameworks */,
+				9B6D68FF2DC3D06900D0A3A8 /* FirebaseAuth in Frameworks */,
+				9B6D69032DC3D06900D0A3A8 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -122,6 +155,65 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9B5A80B12DC2162F007E5758 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				9B5A80C92DC24B32007E5758 /* TimerRecord.swift */,
+				9B5A80AE2DC2162F007E5758 /* AppSettings.swift */,
+				9B5A80B02DC2162F007E5758 /* UserProfile.swift */,
+				E8E897412DC0980D00027E88 /* TodoTask.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9B5A80B42DC2162F007E5758 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */,
+				9B5A80B22DC2162F007E5758 /* DataServiceProtocol.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		9B5A80B62DC2162F007E5758 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */,
+				9B499B7A2DC25F8400DD115C /* TimerManager.swift */,
+				9B5A80B52DC2162F007E5758 /* UserSettingsViewModel.swift */,
+				9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		9B5A80BA2DC2162F007E5758 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				9B499B782DC25F7700DD115C /* TimerView.swift */,
+				9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */,
+				9B5A80C42DC218FE007E5758 /* SettingsComponents.swift */,
+				9B5A80B72DC2162F007E5758 /* ProfileSettingView.swift */,
+				9B5A80B82DC2162F007E5758 /* SettingsView.swift */,
+				E82A79C32DB13265007ED175 /* TodoView.swift */,
+				9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */,
+				E82A79C22DB13265007ED175 /* TodoDetailView.swift */,
+				E82A79B22DB13265007ED175 /* CalenderView.swift */,
+				E82A79B32DB13265007ED175 /* MessageView.swift */,
+				E82A79B52DB13265007ED175 /* ContentView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		9B5A80C72DC21A75007E5758 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				9BD7A9832DC499DC00B3FF29 /* Date+Extension.swift */,
+				9B5A80CF2DC24F6A007E5758 /* View+Extension.swift */,
+				9B5A80C62DC21A75007E5758 /* Color+Extension.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
 		9BC153372D78771600FCA465 = {
 			isa = PBXGroup;
 			children = (
@@ -154,27 +246,20 @@
 		E82A79C42DB13265007ED175 /* studyAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				9BD7A98F2DC4F98600B3FF29 /* Info.plist */,
+				9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */,
+				9BD7A9872DC4F79D00B3FF29 /* Login.swift */,
+				9BD7A9882DC4F79D00B3FF29 /* signInView.swift */,
+				9B5A80C72DC21A75007E5758 /* Extensions */,
+				9B5A80B12DC2162F007E5758 /* Models */,
+				9B5A80B42DC2162F007E5758 /* Services */,
+				9B5A80B62DC2162F007E5758 /* ViewModels */,
+				9B5A80BA2DC2162F007E5758 /* Views */,
 				E82A79B02DB13265007ED175 /* Preview Content */,
 				E82A79B12DB13265007ED175 /* Assets.xcassets */,
-				9BCA07112DB61ADC0039EA2B /* PersonSetting.swift */,
-				E82A79B22DB13265007ED175 /* CalenderView.swift */,
-				E82A79B32DB13265007ED175 /* MassageView.swift */,
 				E82A79B42DB13265007ED175 /* Config.swift */,
-				E82A79B52DB13265007ED175 /* ContentView.swift */,
-				E8E897462DC0A59C00027E88 /* AllTasks.swift */,
-				E82A79B62DB13265007ED175 /* CreateAccountView.swift */,
-				E82A79B72DB13265007ED175 /* GoogleService-Info.plist */,
-				E82A79B82DB13265007ED175 /* ProfileSettingView.swift */,
-				E82A79B92DB13265007ED175 /* SettingsView.swift */,
-				E82A79BB2DB13265007ED175 /* StatisticsView.swift */,
+				9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */,
 				E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */,
-				E82A79C12DB13265007ED175 /* TimerView.swift */,
-				9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */,
-				E8E897442DC0A2B100027E88 /* TimerManager.swift */,
-				E82A79C22DB13265007ED175 /* TodoDetailView.swift */,
-				E8E897402DC0980D00027E88 /* signInView.swift */,
-				E8E897412DC0980D00027E88 /* TodoTask.swift */,
-				E82A79C32DB13265007ED175 /* TodoView.swift */,
 			);
 			path = studyAssistant;
 			sourceTree = "<group>";
@@ -208,6 +293,8 @@
 				9B2C03B82D8BFD4F001CF344 /* FirebaseAuthCombine-Community */,
 				9B2C03BA2D8BFD4F001CF344 /* FirebaseDatabase */,
 				9B2C03BC2D8C05CE001CF344 /* FirebaseFirestore */,
+				9BD7A9912DC5037400B3FF29 /* GoogleSignIn */,
+				9BD7A9932DC5037400B3FF29 /* GoogleSignInSwift */,
 			);
 			productName = studyAssistant;
 			productReference = 9BC153402D78771600FCA465 /* studyAssistant.app */;
@@ -231,6 +318,9 @@
 			);
 			name = studyAssistantTests;
 			packageProductDependencies = (
+				9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */,
+				9B6D69002DC3D06900D0A3A8 /* FirebaseDatabase */,
+				9B6D69022DC3D06900D0A3A8 /* FirebaseFirestore */,
 			);
 			productName = studyAssistantTests;
 			productReference = 9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */;
@@ -267,7 +357,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					9BC1533F2D78771600FCA465 = {
 						CreatedOnToolsVersion = 16.2;
@@ -294,6 +384,7 @@
 			packageReferences = (
 				E82F5CFD2D8B76BB0016DF22 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				9BD7A9902DC5037400B3FF29 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9BC153412D78771600FCA465 /* Products */;
@@ -314,7 +405,7 @@
 			files = (
 				E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */,
 				E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */,
-				E82A79D82DB13265007ED175 /* GoogleService-Info.plist in Resources */,
+				9BD7A98E2DC4F7F200B3FF29 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,21 +431,32 @@
 			buildActionMask = 2147483647;
 			files = (
 				E82A79C52DB13265007ED175 /* CalenderView.swift in Sources */,
-				E82A79C62DB13265007ED175 /* MassageView.swift in Sources */,
+				E82A79C62DB13265007ED175 /* MessageView.swift in Sources */,
+				9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */,
+				9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */,
+				9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */,
+				9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */,
+				9B5A80BD2DC2162F007E5758 /* ProfileSettingView.swift in Sources */,
+				9B5A80BE2DC2162F007E5758 /* DataServiceProtocol.swift in Sources */,
+				9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */,
+				9B5A80C12DC2162F007E5758 /* SettingsView.swift in Sources */,
+				9B5A80C52DC21905007E5758 /* SettingsComponents.swift in Sources */,
+				9B499B7B2DC25F8400DD115C /* TimerManager.swift in Sources */,
+				9B5A80C32DC2162F007E5758 /* AppSettings.swift in Sources */,
+				9BD7A9892DC4F79D00B3FF29 /* Authentication.swift in Sources */,
+				9BD7A98B2DC4F79D00B3FF29 /* Login.swift in Sources */,
+				9BD7A98C2DC4F79D00B3FF29 /* signInView.swift in Sources */,
+				9B499B792DC25F7700DD115C /* TimerView.swift in Sources */,
+				9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */,
 				E82A79C72DB13265007ED175 /* Config.swift in Sources */,
+				9B6D68F92DC3758800D0A3A8 /* TodoViewModel.swift in Sources */,
 				E82A79C82DB13265007ED175 /* ContentView.swift in Sources */,
-				E82A79C92DB13265007ED175 /* CreateAccountView.swift in Sources */,
-				E82A79CA2DB13265007ED175 /* ProfileSettingView.swift in Sources */,
-				E82A79CB2DB13265007ED175 /* SettingsView.swift in Sources */,
-				E8E897422DC0980E00027E88 /* signInView.swift in Sources */,
 				E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */,
-				E82A79CD2DB13265007ED175 /* StatisticsView.swift in Sources */,
+				9B5A80CA2DC24B32007E5758 /* TimerRecord.swift in Sources */,
 				E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */,
+				9B5A80C82DC21A75007E5758 /* Color+Extension.swift in Sources */,
+				9B6D68FB2DC3CC9B00D0A3A8 /* FirebaseService.swift in Sources */,
 				9BCA070B2DB5F8E00039EA2B /* TodoAddView.swift in Sources */,
-				9BCA07132DB61B0D0039EA2B /* PersonSetting.swift in Sources */,
-				E82A79D32DB13265007ED175 /* TimerView.swift in Sources */,
-				E8E897472DC0A59C00027E88 /* AllTasks.swift in Sources */,
-				E8E897452DC0A2B100027E88 /* TimerManager.swift in Sources */,
 				E82A79D42DB13265007ED175 /* TodoDetailView.swift in Sources */,
 				E82A79D52DB13265007ED175 /* TodoView.swift in Sources */,
 			);
@@ -425,6 +527,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = BG572Z68DC;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -488,6 +591,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = BG572Z68DC;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -518,22 +622,23 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = BG572Z68DC;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = studyAssistant/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistant;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.googleusercontent.apps.93874741830-1j830s2jvrtt4et4qmih2vl8er5nbn07";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -551,22 +656,23 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = BG572Z68DC;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = studyAssistant/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistant;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.googleusercontent.apps.93874741830-1j830s2jvrtt4et4qmih2vl8er5nbn07";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -581,7 +687,6 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = BG572Z68DC;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				MARKETING_VERSION = 1.0;
@@ -600,7 +705,6 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = BG572Z68DC;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				MARKETING_VERSION = 1.0;
@@ -618,7 +722,6 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = BG572Z68DC;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistantUITests;
@@ -635,7 +738,6 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = BG572Z68DC;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistantUITests;
@@ -697,6 +799,14 @@
 				minimumVersion = 11.10.0;
 			};
 		};
+		9BD7A9902DC5037400B3FF29 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 		E82F5CFD2D8B76BB0016DF22 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
@@ -727,6 +837,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		9B6D69002DC3D06900D0A3A8 /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		9B6D69022DC3D06900D0A3A8 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		9BD7A9912DC5037400B3FF29 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BD7A9902DC5037400B3FF29 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		9BD7A9932DC5037400B3FF29 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BD7A9902DC5037400B3FF29 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 		E82F5CFF2D8B76C80016DF22 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;

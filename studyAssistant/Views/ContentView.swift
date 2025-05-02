@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftUICore
 
 struct ContentView: View {
+    @StateObject private var viewModel = TodoViewModel()
     @State private var selectedTab = 0
     // 假設有一個共享的待辦事項數據
     @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]
@@ -9,7 +10,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             // 背景色 - 与其他页面保持一致
-            Color(hex: "F3D4B7")
+            Color.hex(hex: "F3D4B7")
                 .ignoresSafeArea()
             
             // 内容视图
@@ -18,11 +19,12 @@ struct ContentView: View {
                 if selectedTab == 0 {
                     // 待辦事項頁面
                     TodoView()
-                    
+                        .environmentObject(viewModel)
                 }
                 else if selectedTab == 1 {
                     // 日曆頁面
                     CalendarView()
+                        .environmentObject(viewModel)
                 }
                 else if selectedTab == 2 {
                     // AI助手頁面
@@ -94,7 +96,7 @@ struct TabBarNew: View {
                 .fill(Color.clear)
                 .frame(height: 45)
         }
-        .background(Color(hex: "FEECD8"))
+        .background(Color.hex(hex: "FEECD8"))
     }
 }
 
@@ -120,5 +122,4 @@ struct TabButtonNew: View {
 #Preview {
     ContentView()
         .environmentObject(TimerManager())
-        .environmentObject(AllTasks())
 }

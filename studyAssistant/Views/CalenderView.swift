@@ -1,25 +1,25 @@
 import SwiftUI
 import SwiftUICore
+import FirebaseFirestore
+import FirebaseAuth
+// 添加 Date 擴展的引用
 
 
 
 // MARK: - 日曆主視圖
 struct CalendarView: View {
     // MARK: 狀態變量
+    @EnvironmentObject var viewModel: TodoViewModel
     @State private var selectedDate = Date()  // 當前選中的日期
     @State private var currentDate = Date()   // 顯示的當前月份
     @State private var showingAddTask = false // 控制添加任務視圖顯示
     @State private var showingTodoDetail = false // 控制待辦詳情視圖顯示
-    @EnvironmentObject var allTasks: AllTasks // 全域任務環境物件
     @GestureState private var dragOffset: CGFloat = 0 // 用於偵測滑動
     @State private var pageOffset: CGFloat = 0 // 用於動畫偏移
     
-    // 待辦事項列表（這裡是示例，實際應從數據源獲取）
-    @State private var todos: [String] = ["完成數學作業", "準備英文演講", "讀完物理課本第五章", "健身1小時"]
-    
     // 背景和底部导航颜色
-    let backgroundColor = Color(red: 0.95, green: 0.83, blue: 0.72)
-    let bottomBarColor = Color(hex: "FEECD8")
+    let backgroundColor = Color.hex(hex: "F3D4B7")
+    let bottomBarColor = Color.hex(hex: "FEECD8")
     
     var body: some View {
         ZStack {
@@ -42,12 +42,12 @@ struct CalendarView: View {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color(hex: "E28A5F"))
+                                .fill(Color.hex(hex: "E28A5F"))
                                 .frame(width: 30, height: 30)
 
                             Text("+")
                                 .font(.system(size: 30))
-                                .foregroundColor(Color(red: 0.97, green: 0.87, blue: 0.78))
+                                .foregroundColor(Color.hex(hex: "F7DEC6"))
                                 .offset(y: -2)
                         }
                     }
@@ -65,21 +65,24 @@ struct CalendarView: View {
                             calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!),
                             monthDate: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!,
                             geometry: geometry,
-                            selectDate: selectDate
+                            selectDate: selectDate,
+                            viewModel: viewModel
                         )
                         // 本月
                         CalendarMonthWithWeekdaysView(
                             calendarData: calendarData(for: currentDate),
                             monthDate: currentDate,
                             geometry: geometry,
-                            selectDate: selectDate
+                            selectDate: selectDate,
+                            viewModel: viewModel
                         )
                         // 下個月
                         CalendarMonthWithWeekdaysView(
                             calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!),
                             monthDate: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!,
                             geometry: geometry,
-                            selectDate: selectDate
+                            selectDate: selectDate,
+                            viewModel: viewModel
                         )
                     }
                     .frame(width: width * 3, alignment: .leading)
@@ -125,23 +128,59 @@ struct CalendarView: View {
                 .padding(.horizontal)
             }
             
-            // 使用TodoAddView替代原有的AddTodoView
-            if showingAddTask {
-                TodoAddView(isPresented: $showingAddTask)
+            // 使用懶加載避免在條件判斷中創建視圖
+            Group {
+                if showingAddTask {
+                    TodoAddView(
+                        viewModel: viewModel,
+                        isPresented: $showingAddTask,
+                        selectedDate: selectedDate
+                    )
                     .transition(.move(edge: .bottom))
                     .zIndex(2)
+                }
             }
             
-            // 顯示待辦事項詳情視圖
-            if showingTodoDetail {
-                TodoDetailView(
-                    date: selectedDate,
-                    todos: todos,
-                    isPresented: $showingTodoDetail
-                )
-                .transition(.scale)
-                .zIndex(2)
+            // 使用懶加載避免在條件判斷中創建視圖
+            Group {
+                if showingTodoDetail {
+                    TodoDetailView(
+                        viewModel: viewModel,
+                        date: selectedDate,
+                        isPresented: $showingTodoDetail
+                    )
+                    .transition(.scale)
+                    .zIndex(2)
+                }
             }
+        }
+        .task {
+            // 首次加載資料
+            await loadTasks()
+            
+            // 添加通知觀察者，當資料變更時重新載入
+            NotificationCenter.default.addObserver(
+                forName: .todoDataDidChange,
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task {
+                    await loadTasks()
+                }
+            }
+        }
+        .onDisappear {
+            // 移除通知觀察者
+            NotificationCenter.default.removeObserver(self, name: .todoDataDidChange, object: nil)
+        }
+    }
+    
+    // 載入任務
+    private func loadTasks() async {
+        do {
+            try await viewModel.loadTasks()
+        } catch {
+            print("Error loading tasks in CalendarView: \(error)")
         }
     }
     
@@ -271,7 +310,7 @@ struct CalendarView: View {
 // MARK: - 預覽
 #Preview {
     CalendarView()
-        .environmentObject(AllTasks())
+        .environmentObject(TodoViewModel())
 }
 
 // 新增一個 CalendarMonthWithWeekdaysView，包住星期標題和格子
@@ -280,8 +319,9 @@ struct CalendarMonthWithWeekdaysView: View {
     let monthDate: Date
     let geometry: GeometryProxy
     let selectDate: (Int, Int) -> Void
+    let viewModel: TodoViewModel
     let weekDays = ["日", "一", "二", "三", "四", "五", "六"]
-    @EnvironmentObject var allTasks: AllTasks
+    
     var body: some View {
         VStack(spacing: 0) {
             // 星期標題
@@ -294,15 +334,16 @@ struct CalendarMonthWithWeekdaysView: View {
                 }
             }
             .frame(height: 30)
+            
             // 日期格子
             CalendarMonthView(
                 calendarData: calendarData,
                 monthDate: monthDate,
                 isCurrentMonth: true,
                 geometry: geometry,
-                selectDate: selectDate
+                selectDate: selectDate,
+                viewModel: viewModel
             )
-            .environmentObject(allTasks)
         }
     }
 }
@@ -314,7 +355,8 @@ struct CalendarMonthView: View {
     let isCurrentMonth: Bool
     let geometry: GeometryProxy
     let selectDate: (Int, Int) -> Void
-    @EnvironmentObject var allTasks: AllTasks
+    let viewModel: TodoViewModel
+    
     var body: some View {
         let cellHeight = geometry.size.height / 7  // 改小格子高度
         VStack(spacing: 0) {
@@ -323,13 +365,9 @@ struct CalendarMonthView: View {
                     ForEach(0..<7) { column in
                         let dateText = calendarData[row][column]
                         let cellDate = getCellDate(row: row, column: column)
-                        let tasksForThisDay = allTasks.tasks.filter { task in
-                            guard let cellDate = cellDate else { return false }
-                            if task.repeatType == .daily {
-                                return true
-                            }
-                            return cellDate >= task.startDate.startOfDay && cellDate <= task.endDate.startOfDay
-                        }
+                        let tasksForThisDay = cellDate.map { date in
+                            viewModel.tasksForDate(date)
+                        } ?? []
                         let dateLabelHeight: CGFloat = 20   // 預留給日期數字的高度
                         ZStack {
                             // 背景
@@ -487,9 +525,9 @@ struct RoundedCorners: Shape {
     }
 }
 
-// Date 擴充，取得當天 00:00:00
-extension Date {
-    var startOfDay: Date {
-        Calendar.current.startOfDay(for: self)
-    }
-}
+// 已將 Date 擴充移至 Extensions/Date+Extension.swift
+// extension Date {
+//     var startOfDay: Date {
+//         Calendar.current.startOfDay(for: self)
+//     }
+// }
