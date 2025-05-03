@@ -38,6 +38,7 @@
 		9BD7A98E2DC4F7F200B3FF29 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */; };
 		9BD7A9922DC5037400B3FF29 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 9BD7A9912DC5037400B3FF29 /* GoogleSignIn */; };
 		9BD7A9942DC5037400B3FF29 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 9BD7A9932DC5037400B3FF29 /* GoogleSignInSwift */; };
+		9BF0B3942DC5CD30006131DD /* NotificationConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF0B3922DC5CD30006131DD /* NotificationConstants.swift */; };
 		E82A79C52DB13265007ED175 /* CalenderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B22DB13265007ED175 /* CalenderView.swift */; };
 		E82A79C62DB13265007ED175 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B32DB13265007ED175 /* MessageView.swift */; };
 		E82A79C72DB13265007ED175 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B42DB13265007ED175 /* Config.swift */; };
@@ -95,6 +96,7 @@
 		9BD7A9882DC4F79D00B3FF29 /* signInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = signInView.swift; sourceTree = "<group>"; };
 		9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		9BD7A98F2DC4F98600B3FF29 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9BF0B3922DC5CD30006131DD /* NotificationConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationConstants.swift; sourceTree = "<group>"; };
 		E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		E82A79B12DB13265007ED175 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E82A79B22DB13265007ED175 /* CalenderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalenderView.swift; sourceTree = "<group>"; };
@@ -235,6 +237,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		9BF0B3932DC5CD30006131DD /* Constants */ = {
+			isa = PBXGroup;
+			children = (
+				9BF0B3922DC5CD30006131DD /* NotificationConstants.swift */,
+			);
+			path = Constants;
+			sourceTree = "<group>";
+		};
 		E82A79B02DB13265007ED175 /* Preview Content */ = {
 			isa = PBXGroup;
 			children = (
@@ -246,6 +256,7 @@
 		E82A79C42DB13265007ED175 /* studyAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				9BF0B3932DC5CD30006131DD /* Constants */,
 				9BD7A98F2DC4F98600B3FF29 /* Info.plist */,
 				9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */,
 				9BD7A9872DC4F79D00B3FF29 /* Login.swift */,
@@ -448,6 +459,7 @@
 				9BD7A98C2DC4F79D00B3FF29 /* signInView.swift in Sources */,
 				9B499B792DC25F7700DD115C /* TimerView.swift in Sources */,
 				9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */,
+				9BF0B3942DC5CD30006131DD /* NotificationConstants.swift in Sources */,
 				E82A79C72DB13265007ED175 /* Config.swift in Sources */,
 				9B6D68F92DC3758800D0A3A8 /* TodoViewModel.swift in Sources */,
 				E82A79C82DB13265007ED175 /* ContentView.swift in Sources */,

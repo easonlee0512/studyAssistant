@@ -106,7 +106,7 @@
 5/3 日誌
 - [x] 修復重開專案時無法重資料庫更新資料的問題
 - [x] 修復個人資料設定中無法顯示當前設定的問題
-- [ ] 修復更新鼓勵語句後首頁無法同步更新的問題
+- [x] 修復更新鼓勵語句後首頁無法同步更新的問題
 - [ ] 更改timerecord的存放邏輯
 - [ ] 更改統計樣式以及資料結構
 - [ ] 新增登出功能退回登入畫面的部分
@@ -119,6 +119,24 @@
    - 將 UserSettingsViewModel 中的 loadData 方法設為公開，允許外部調用
    - 增強錯誤處理和用戶反饋
    - 添加資料載入調試日誌以便追踪問題
+
+2. **修復通知名稱重複宣告問題**
+   - 創建專門的 NotificationConstants.swift 檔案統一管理所有通知名稱
+   - 移除 TodoViewModel 和 ProfileSettingView 中重複定義的通知名稱
+   - 確保所有需要使用通知的檔案都正確引入相關模組
+   - 優化代碼結構，提高可維護性
+
+3. **修復 ProfileSettingView 中的 FirebaseAuth 和通知機制問題**
+   - 顯式導入 FirebaseAuth 模組，解決 "Cannot find 'Auth' in scope" 錯誤
+   - 使用 Combine 框架處理通知，替代 @objc 方法和選擇器
+   - 實現基於 ObservableObject 的通知觀察器類
+   - 使用 onChange 監聽狀態變化，提高代碼質量和可維護性
+
+4. **實現首頁鼓勵語句與設定頁面同步功能**
+   - 添加 userProfileDidChange 通知常數
+   - 在 UserSettingsViewModel 中發送通知
+   - 使 TodoView 訂閱通知更新鼓勵語句
+   - 確保首頁顯示用戶設定的鼓勵語句，無設定時顯示默認倒數信息
 
 ## 改進
 - 添加個人資料設定頁面的重新整理功能

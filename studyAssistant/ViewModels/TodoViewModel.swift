@@ -8,12 +8,13 @@ import SwiftUI
 import Firebase
 import FirebaseAuth
 import FirebaseFirestore
+import Foundation // 確保可以訪問 NotificationConstants
 
-// 定義通知名稱常數
-extension Notification.Name {
-    static let todoDataDidChange = Notification.Name("todoDataDidChange")
-    static let userAuthDidChange = Notification.Name("userAuthDidChange")
-}
+// 通知名稱常數已移至 NotificationConstants.swift
+// extension Notification.Name {
+//     static let todoDataDidChange = Notification.Name("todoDataDidChange")
+//     static let userAuthDidChange = Notification.Name("userAuthDidChange")
+// }
 
 @MainActor
 class TodoViewModel: ObservableObject {

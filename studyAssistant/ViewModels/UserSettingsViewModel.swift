@@ -61,6 +61,10 @@ class UserSettingsViewModel: ObservableObject {
             try await dataService.updateUserProfile(updatedProfile)
             userProfile = updatedProfile
             syncStatus = .synced
+            errorMessage = nil
+            
+            // 發送使用者個人資料已更新通知
+            NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
         } catch {
             syncStatus = .error(.syncError)
             errorMessage = "無法儲存使用者資料：\(error.localizedDescription)"

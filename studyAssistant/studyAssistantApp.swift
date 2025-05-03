@@ -10,6 +10,7 @@ import Combine
 import Firebase
 import FirebaseAuth
 import GoogleSignIn
+import Foundation // 確保可以訪問 NotificationConstants
 
 /// 身份驗證狀態管理類別
 class AuthState: ObservableObject {
@@ -79,6 +80,7 @@ class AuthState: ObservableObject {
 extension Notification.Name {
     static let userDidLogin = Notification.Name("userDidLogin")
     static let userDidLogout = Notification.Name("userDidLogout")
+    // userProfileDidChange 已在 NotificationConstants.swift 中定義，透過 Foundation 導入
 }
 
 @main
@@ -92,6 +94,7 @@ struct studyAssistantApp: App {
     @StateObject private var timerManager = TimerManager()
     @StateObject private var todoViewModel = TodoViewModel()
     @StateObject private var authState = AuthState()
+    @StateObject private var settingsViewModel = UserSettingsViewModel()
     
     // 監聽場景階段變化
     @Environment(\.scenePhase) var scenePhase
@@ -103,6 +106,7 @@ struct studyAssistantApp: App {
                     .environmentObject(timerManager)
                     .environmentObject(todoViewModel)
                     .environmentObject(authState)
+                    .environmentObject(settingsViewModel)
                     .task {
                         // 首先嘗試遷移舊數據
                         do {
@@ -126,6 +130,10 @@ struct studyAssistantApp: App {
                                 let firebaseService = FirebaseService.shared
                                 try await firebaseService.migrateTasksToUserCollection()
                                 try await todoViewModel.loadTasks()
+                                // 同時也重新載入使用者設定
+                                await settingsViewModel.loadData()
+                                // 發送通知以更新所有依賴使用者設定的視圖
+                                NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
                             } catch {
                                 print("Error loading tasks after login: \(error)")
                             }
@@ -143,6 +151,10 @@ struct studyAssistantApp: App {
                 Task {
                     do {
                         try await todoViewModel.loadTasks()
+                        // 同時也重新載入使用者設定
+                        await settingsViewModel.loadData()
+                        // 發送通知以更新所有依賴使用者設定的視圖
+                        NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
                     } catch {
                         print("Error reloading tasks: \(error)")
                     }

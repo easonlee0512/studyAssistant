@@ -1,14 +1,29 @@
 import SwiftUI
 import Firebase
+import FirebaseAuth // 顯式導入 FirebaseAuth
+import Foundation // 確保可以訪問 NotificationConstants
+import Combine // 導入 Combine 框架
 
-// 定義通知名稱常數（如果已在其他檔案定義則可移除此處的重複定義）
-extension Notification.Name {
-    static let userAuthDidChange = Notification.Name("userAuthDidChange")
+// 創建一個觀察器類來處理通知
+class AuthChangeObserver: ObservableObject {
+    @Published var shouldReloadProfile = false
+    private var cancellables = Set<AnyCancellable>()
+    
+    init() {
+        // 使用 NotificationCenter.Publisher 替代 addObserver
+        NotificationCenter.default.publisher(for: .userAuthDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.shouldReloadProfile = true
+            }
+            .store(in: &cancellables)
+    }
 }
 
 struct ProfileSettingView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var viewModel = UserSettingsViewModel()
+    @StateObject private var authObserver = AuthChangeObserver()
     @State private var username: String = ""
     @State private var motivationalQuote: String = ""
     @State private var targetDate = Date()
@@ -75,7 +90,7 @@ struct ProfileSettingView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         // 使用者信息顯示
-                        if let email = Auth.auth().currentUser?.email {
+                        if let email = FirebaseAuth.Auth.auth().currentUser?.email {
                             HStack {
                                 Text("目前登入：\(email)")
                                     .font(.footnote)
@@ -187,13 +202,17 @@ struct ProfileSettingView: View {
                 isLoading = true
                 await loadProfile()
             }
-            
-            // 添加通知監聽
-            setupNotificationObserver()
+        }
+        .onChange(of: authObserver.shouldReloadProfile) { newValue in
+            if newValue {
+                Task {
+                    await loadProfile()
+                    authObserver.shouldReloadProfile = false
+                }
+            }
         }
         .onDisappear {
-            // 移除通知監聽
-            NotificationCenter.default.removeObserver(self)
+            // 不再需要移除通知觀察者，Combine 會自動處理
         }
         .alert("錯誤", isPresented: $showError) {
             Button("確定", role: .cancel) { }
@@ -325,6 +344,9 @@ struct ProfileSettingView: View {
         } else {
             DispatchQueue.main.async {
                 self.showingSuccessMessage = true
+                // 確保無論如何都發送一次通知
+                NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
+                print("ProfileSettingView: 已發送設定更新通知")
             }
         }
         
@@ -336,7 +358,7 @@ struct ProfileSettingView: View {
     // 登出
     private func logout() {
         do {
-            try Auth.auth().signOut()
+            try FirebaseAuth.Auth.auth().signOut()
             viewModel.clearAllData()
             
             // 發送通知通知其他視圖使用者已登出
@@ -346,23 +368,6 @@ struct ProfileSettingView: View {
         } catch {
             showError = true
             errorMessage = "登出失敗：\(error.localizedDescription)"
-        }
-    }
-    
-    // 設置通知監聽
-    private func setupNotificationObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleUserAuthChange),
-            name: .userAuthDidChange,
-            object: nil
-        )
-    }
-    
-    // 處理使用者驗證狀態變更通知
-    @objc private func handleUserAuthChange() {
-        Task {
-            await loadProfile()
         }
     }
 }
