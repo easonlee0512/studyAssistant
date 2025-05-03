@@ -66,6 +66,8 @@ struct TodoAddView: View {
             // 在視圖出現時初始化表單
             viewModel.initNewTaskForm(selectedDate: selectedDate)
             repeatOption = viewModel.newTaskRepeatType
+            viewModel.errorMessage = nil
+            viewModel.isLoading = false
             
             // 動畫展示
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -97,6 +99,15 @@ struct TodoAddView: View {
             // 頭部標題區域
             headerView
             
+            // 錯誤訊息 (如果有的話)
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .font(.system(size: 14))
+                    .padding(.horizontal)
+                    .padding(.bottom, 5)
+            }
+            
             // 滾動內容區域
             ScrollView {
                 VStack(spacing: 15) {
@@ -122,6 +133,16 @@ struct TodoAddView: View {
                 .padding(.bottom, 20)
             }
             .frame(maxHeight: UIScreen.main.bounds.height * 0.7)
+            
+            // 正在保存的指示器
+            if viewModel.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .padding()
+                    Spacer()
+                }
+            }
         }
         .background(backgroundColor)
         .cornerRadius(25, corners: [.topLeft, .topRight])
@@ -165,8 +186,9 @@ struct TodoAddView: View {
                 saveTask()
             }
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.blue.opacity(viewModel.newTaskTitle.isEmpty ? 0.5 : 1))
-            .disabled(viewModel.newTaskTitle.isEmpty)
+            .foregroundColor(viewModel.isLoading ? Color.gray : 
+                             (viewModel.newTaskTitle.isEmpty ? Color.blue.opacity(0.5) : Color.blue))
+            .disabled(viewModel.isLoading || viewModel.newTaskTitle.isEmpty)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 15)
@@ -389,10 +411,41 @@ struct TodoAddView: View {
         }
     }
     
+    // 驗證表單
+    private func validateForm() -> Bool {
+        // 重置錯誤訊息
+        viewModel.errorMessage = nil
+        
+        // 標題不能為空
+        if viewModel.newTaskTitle.isEmpty {
+            viewModel.errorMessage = "請輸入任務標題"
+            return false
+        }
+        
+        // 確保結束時間晚於開始時間
+        if viewModel.newTaskEndDate < viewModel.newTaskStartDate && repeatOption == .none {
+            viewModel.errorMessage = "結束時間必須晚於開始時間"
+            return false
+        }
+        
+        // 確保已經登入
+        if Auth.auth().currentUser == nil {
+            viewModel.errorMessage = "請先登入再新增任務"
+            return false
+        }
+        
+        return true
+    }
+    
     // 儲存任務
     private func saveTask() {
         // 已經在保存中，避免重複觸發
         if viewModel.isLoading {
+            return
+        }
+        
+        // 驗證表單
+        if !validateForm() {
             return
         }
         
@@ -403,7 +456,27 @@ struct TodoAddView: View {
             do {
                 // 將重複選項資料傳遞給 viewModel
                 viewModel.newTaskRepeatType = repeatOption
-                try await viewModel.saveNewTask()
+                
+                // 獲取當前使用者 ID
+                let userId = Auth.auth().currentUser?.uid ?? "default"
+                
+                // 創建任務，確保包含用戶 ID
+                let task = TodoTask(
+                    title: viewModel.newTaskTitle,
+                    note: viewModel.newTaskNote,
+                    color: viewModel.newTaskColor,
+                    focusTime: viewModel.newTaskFocusTime,
+                    category: viewModel.newTaskCategory,
+                    isAllDay: viewModel.newTaskIsAllDay,
+                    isCompleted: false,
+                    repeatType: viewModel.newTaskRepeatType,
+                    startDate: viewModel.newTaskStartDate,
+                    endDate: viewModel.newTaskEndDate,
+                    userId: userId
+                )
+                
+                // 使用 addTask 而非 saveNewTask 以確保處理好 userId
+                await viewModel.addTask(task)
                 
                 // 任務保存成功後關閉視圖
                 dismissWithAnimation()

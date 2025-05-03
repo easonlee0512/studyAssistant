@@ -244,9 +244,13 @@ class TodoViewModel: ObservableObject {
     }
     
     func addTask(_ task: TodoTask) async {
+        isLoading = true
+        errorMessage = nil
+        
         // 確保已經登入
         guard let currentUserId = Auth.auth().currentUser?.uid else {
-            print("Error: User not logged in")
+            errorMessage = "請先登入再新增任務"
+            isLoading = false
             return
         }
         
@@ -256,17 +260,22 @@ class TodoViewModel: ObservableObject {
             updatedTask.userId = currentUserId
             
             try await firebaseService.saveTodoTask(updatedTask)
-            do {
-                try await loadTasks()
-                
-                // 發送資料變更通知
-                postDataChangeNotification()
-            } catch {
-                print("Error loading tasks: \(error)")
-            }
+            
+            // 重新加載任務列表以獲取最新數據
+            try await loadTasks()
+            
+            // 發送資料變更通知
+            postDataChangeNotification()
+            
+            // 清空錯誤訊息
+            errorMessage = nil
         } catch {
+            // 設置錯誤訊息
+            errorMessage = "儲存任務失敗: \(error.localizedDescription)"
             print("Error adding task: \(error)")
         }
+        
+        isLoading = false
     }
     
     func updateTask(_ task: TodoTask) async {
