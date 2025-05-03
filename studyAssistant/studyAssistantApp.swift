@@ -104,6 +104,14 @@ struct studyAssistantApp: App {
                     .environmentObject(todoViewModel)
                     .environmentObject(authState)
                     .task {
+                        // 首先嘗試遷移舊數據
+                        do {
+                            let firebaseService = FirebaseService.shared
+                            try await firebaseService.migrateTasksToUserCollection()
+                        } catch {
+                            print("任務遷移錯誤: \(error)")
+                        }
+                        
                         // 載入初始資料
                         do {
                             try await todoViewModel.loadTasks()
@@ -112,9 +120,11 @@ struct studyAssistantApp: App {
                         }
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .userDidLogin)) { _ in
-                        // 當使用者登入時重新載入資料
+                        // 當使用者登入時遷移舊數據並重新載入資料
                         Task {
                             do {
+                                let firebaseService = FirebaseService.shared
+                                try await firebaseService.migrateTasksToUserCollection()
                                 try await todoViewModel.loadTasks()
                             } catch {
                                 print("Error loading tasks after login: \(error)")

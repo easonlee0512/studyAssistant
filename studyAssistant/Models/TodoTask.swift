@@ -75,7 +75,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         self.startDate = startDate
         self.endDate = endDate
         self.createdAt = Date()
-        self.userId = userId
+        self.userId = userId.isEmpty ? (Auth.auth().currentUser?.uid ?? "default") : userId
     }
     
     // 從 Firestore 資料建立任務

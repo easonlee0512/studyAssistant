@@ -12,12 +12,14 @@ import FirebaseFirestore
 // 定義通知名稱常數
 extension Notification.Name {
     static let todoDataDidChange = Notification.Name("todoDataDidChange")
+    static let userAuthDidChange = Notification.Name("userAuthDidChange")
 }
 
 @MainActor
 class TodoViewModel: ObservableObject {
     @Published private(set) var tasks: [TodoTask] = []
     private let firebaseService = FirebaseService.shared
+    private var authStateListener: AuthStateDidChangeListenerHandle?
     
     // 新增任務相關狀態
     @Published var newTaskTitle = ""
@@ -56,11 +58,19 @@ class TodoViewModel: ObservableObject {
         
         // 設置通知監聽
         setupNotificationObserver()
+        
+        // 監聽 Auth 狀態
+        setupAuthListener()
     }
     
     deinit {
         // 移除通知監聽
         NotificationCenter.default.removeObserver(self)
+        
+        // 移除 Auth 監聽
+        if let authStateListener = authStateListener {
+            Auth.auth().removeStateDidChangeListener(authStateListener)
+        }
     }
     
     // 設置通知監聽
@@ -71,6 +81,31 @@ class TodoViewModel: ObservableObject {
             name: .todoDataDidChange,
             object: nil
         )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUserAuthChange),
+            name: .userAuthDidChange,
+            object: nil
+        )
+    }
+    
+    // 設置驗證狀態監聽
+    private func setupAuthListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] (auth, user) in
+            Task { @MainActor in
+                if user != nil {
+                    // 使用者登入，重新載入資料
+                    try? await self?.loadTasks()
+                } else {
+                    // 使用者登出，清空資料
+                    self?.tasks = []
+                }
+                
+                // 發送使用者驗證狀態改變通知
+                NotificationCenter.default.post(name: .userAuthDidChange, object: nil)
+            }
+        }
     }
     
     // 處理資料變更通知
@@ -80,6 +115,17 @@ class TodoViewModel: ObservableObject {
                 try await loadTasks()
             } catch {
                 print("Error reloading tasks from notification: \(error)")
+            }
+        }
+    }
+    
+    // 處理使用者驗證狀態變更通知
+    @objc private func handleUserAuthChange() {
+        Task {
+            do {
+                try await loadTasks()
+            } catch {
+                print("Error reloading tasks after auth change: \(error)")
             }
         }
     }
@@ -137,6 +183,11 @@ class TodoViewModel: ObservableObject {
             throw ValidationError.emptyTitle
         }
         
+        // 確保已經登入
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw ValidationError.notLoggedIn
+        }
+        
         isLoading = true
         defer { isLoading = false }
         
@@ -150,7 +201,8 @@ class TodoViewModel: ObservableObject {
             isCompleted: false,
             repeatType: newTaskRepeatType,
             startDate: newTaskStartDate,
-            endDate: newTaskEndDate
+            endDate: newTaskEndDate,
+            userId: currentUserId
         )
         
         try await firebaseService.saveTodoTask(task)
@@ -162,9 +214,23 @@ class TodoViewModel: ObservableObject {
     
     // 載入所有任務
     func loadTasks() async throws {
+        // 確保已經登入
+        guard Auth.auth().currentUser != nil else {
+            tasks = []
+            return
+        }
+        
         isLoading = true
         defer { isLoading = false }
         
+        // 首先嘗試進行數據遷移
+        do {
+            try await firebaseService.migrateTasksToUserCollection()
+        } catch {
+            print("任務遷移錯誤（可能已經遷移完成）: \(error.localizedDescription)")
+        }
+        
+        // 載入任務
         tasks = try await firebaseService.fetchTodoTasks()
     }
     
@@ -178,8 +244,18 @@ class TodoViewModel: ObservableObject {
     }
     
     func addTask(_ task: TodoTask) async {
+        // 確保已經登入
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("Error: User not logged in")
+            return
+        }
+        
         do {
-            try await firebaseService.saveTodoTask(task)
+            // 確保任務有使用者 ID
+            var updatedTask = task
+            updatedTask.userId = currentUserId
+            
+            try await firebaseService.saveTodoTask(updatedTask)
             do {
                 try await loadTasks()
                 
@@ -194,8 +270,20 @@ class TodoViewModel: ObservableObject {
     }
     
     func updateTask(_ task: TodoTask) async {
+        // 確保已經登入
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("Error: User not logged in")
+            return
+        }
+        
         do {
-            try await firebaseService.saveTodoTask(task)
+            // 確保任務有使用者 ID
+            var updatedTask = task
+            if updatedTask.userId.isEmpty {
+                updatedTask.userId = currentUserId
+            }
+            
+            try await firebaseService.saveTodoTask(updatedTask)
             do {
                 try await loadTasks()
                 
@@ -241,11 +329,14 @@ class TodoViewModel: ObservableObject {
 // 驗證錯誤
 enum ValidationError: LocalizedError {
     case emptyTitle
+    case notLoggedIn
     
     var errorDescription: String? {
         switch self {
         case .emptyTitle:
             return "任務標題不能為空"
+        case .notLoggedIn:
+            return "請先登入再新增任務"
         }
     }
 }

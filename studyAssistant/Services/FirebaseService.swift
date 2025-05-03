@@ -87,12 +87,17 @@ class FirebaseService: DataServiceProtocol {
         return try await withTimeout(seconds: 10) {
             do {
                 let batch = self.db.batch()
+                let userId = self.getCurrentUserId()
                 
                 // 創建一個包含當前使用者ID的任務副本
                 var updatedTask = task
-                updatedTask.userId = self.getCurrentUserId()
+                updatedTask.userId = userId
                 
-                let taskRef = self.db.collection(Collection.tasks.rawValue).document(task.id)
+                // 將任務存儲在使用者ID下
+                let taskRef = self.db.collection(Collection.tasks.rawValue)
+                                   .document(userId)
+                                   .collection("userTasks")
+                                   .document(task.id)
                 
                 // 儲存任務資料
                 batch.setData(updatedTask.toFirestore, forDocument: taskRef)
@@ -100,7 +105,7 @@ class FirebaseService: DataServiceProtocol {
                 // 如果是重複性任務，建立子任務 (限制子任務數量以避免過長處理時間)
                 if task.repeatType != .none {
                     let subTasksRef = taskRef.collection("instances")
-                    let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5) // 從10減少到5
+                    let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5)
                     
                     for date in nextOccurrences {
                         let instanceRef = subTasksRef.document()
@@ -126,10 +131,12 @@ class FirebaseService: DataServiceProtocol {
     func fetchTodoTasks() async throws -> [TodoTask] {
         currentSyncStatus = .syncing
         do {
+            let userId = getCurrentUserId()
             let snapshot = try await db.collection(Collection.tasks.rawValue)
-                .whereField("userId", isEqualTo: getCurrentUserId())
-                .order(by: "createdAt", descending: true)
-                .getDocuments()
+                                      .document(userId)
+                                      .collection("userTasks")
+                                      .order(by: "createdAt", descending: true)
+                                      .getDocuments()
             
             lastSync = Date()
             currentSyncStatus = .synced
@@ -147,9 +154,14 @@ class FirebaseService: DataServiceProtocol {
         currentSyncStatus = .syncing
         do {
             let batch = db.batch()
+            let userId = getCurrentUserId()
             
             // 刪除主任務
-            let taskRef = db.collection(Collection.tasks.rawValue).document(taskId)
+            let taskRef = db.collection(Collection.tasks.rawValue)
+                           .document(userId)
+                           .collection("userTasks")
+                           .document(taskId)
+            
             batch.deleteDocument(taskRef)
             
             // 刪除所有子任務
@@ -345,6 +357,67 @@ class FirebaseService: DataServiceProtocol {
             group.cancelAll() // 取消所有剩餘任務
             return result
         }
+    }
+    
+    // MARK: - 數據遷移
+    func migrateTasksToUserCollection() async throws {
+        let userId = getCurrentUserId()
+        print("開始遷移任務數據到用戶集合，用戶ID：\(userId)")
+        
+        // 獲取所有屬於當前用戶ID的舊任務
+        let oldTasksSnapshot = try await db.collection(Collection.tasks.rawValue)
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments()
+        
+        if oldTasksSnapshot.documents.isEmpty {
+            print("沒有找到需要遷移的任務")
+            return
+        }
+        
+        print("找到 \(oldTasksSnapshot.documents.count) 個需要遷移的任務")
+        
+        // 創建批量操作
+        let batch = db.batch()
+        
+        // 遷移每個任務
+        for document in oldTasksSnapshot.documents {
+            let taskId = document.documentID
+            let taskData = document.data()
+            
+            // 新的任務引用
+            let newTaskRef = db.collection(Collection.tasks.rawValue)
+                               .document(userId)
+                               .collection("userTasks")
+                               .document(taskId)
+            
+            // 寫入新位置
+            batch.setData(taskData, forDocument: newTaskRef)
+            
+            // 刪除舊任務
+            let oldTaskRef = db.collection(Collection.tasks.rawValue).document(taskId)
+            batch.deleteDocument(oldTaskRef)
+            
+            // 檢查是否有子任務需要遷移
+            let instancesSnapshot = try await oldTaskRef.collection("instances").getDocuments()
+            
+            for instanceDoc in instancesSnapshot.documents {
+                let instanceId = instanceDoc.documentID
+                let instanceData = instanceDoc.data()
+                
+                // 新的子任務引用
+                let newInstanceRef = newTaskRef.collection("instances").document(instanceId)
+                
+                // 寫入新位置
+                batch.setData(instanceData, forDocument: newInstanceRef)
+                
+                // 刪除舊子任務
+                batch.deleteDocument(oldTaskRef.collection("instances").document(instanceId))
+            }
+        }
+        
+        // 提交批量操作
+        try await batch.commit()
+        print("任務遷移完成")
     }
 }
  
