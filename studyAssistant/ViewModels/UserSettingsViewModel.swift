@@ -30,7 +30,7 @@ class UserSettingsViewModel: ObservableObject {
     
     // MARK: - Data Loading
     
-    private func loadData() async {
+    func loadData() async {
         do {
             async let profile = dataService.fetchUserProfile()
             async let settings = dataService.fetchAppSettings()
