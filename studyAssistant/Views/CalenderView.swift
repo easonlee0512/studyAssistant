@@ -23,11 +23,8 @@ struct CalendarView: View {
     
     var body: some View {
         ZStack {
-            backgroundColor
-                .ignoresSafeArea()
-
             VStack(spacing: 0) {
-                // 標題與新增任務按鈕
+                // 標題列
                 HStack {
                     Spacer(minLength: 45)
 
@@ -57,18 +54,17 @@ struct CalendarView: View {
                 .padding(.top, 7)
                 .padding(.bottom, 7)
 
+                // 只顯示當前月份的日曆，但支持左右滑動
                 GeometryReader { geometry in
                     let width = geometry.size.width
+                    
+                    // 水平滑動容器
                     HStack(spacing: 0) {
-                        // 上個月
-                        CalendarMonthWithWeekdaysView(
-                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!),
-                            monthDate: Calendar.current.date(byAdding: .month, value: -1, to: currentDate)!,
-                            geometry: geometry,
-                            selectDate: selectDate,
-                            viewModel: viewModel
-                        )
-                        // 本月
+                        // 左邊的月份（用於滑動但不顯示）
+                        Color.clear
+                            .frame(width: width)
+                        
+                        // 當前月份
                         CalendarMonthWithWeekdaysView(
                             calendarData: calendarData(for: currentDate),
                             monthDate: currentDate,
@@ -76,16 +72,13 @@ struct CalendarView: View {
                             selectDate: selectDate,
                             viewModel: viewModel
                         )
-                        // 下個月
-                        CalendarMonthWithWeekdaysView(
-                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!),
-                            monthDate: Calendar.current.date(byAdding: .month, value: 1, to: currentDate)!,
-                            geometry: geometry,
-                            selectDate: selectDate,
-                            viewModel: viewModel
-                        )
+                        .frame(width: width)
+                        
+                        // 右邊的月份（用於滑動但不顯示）
+                        Color.clear
+                            .frame(width: width)
                     }
-                    .frame(width: width * 3, alignment: .leading)
+                    .frame(width: width * 3, alignment: .center)
                     .offset(x: -width + dragOffset + pageOffset)
                     .gesture(
                         DragGesture()
@@ -103,7 +96,9 @@ struct CalendarView: View {
                                         if let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentDate) {
                                             currentDate = nextMonth
                                         }
-                                        pageOffset = 0
+                                        withAnimation(.spring(response: 0.001)) {
+                                            pageOffset = 0
+                                        }
                                     }
                                 } else if value.translation.width > threshold {
                                     // 向右滑，上個月
@@ -114,7 +109,9 @@ struct CalendarView: View {
                                         if let prevMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentDate) {
                                             currentDate = prevMonth
                                         }
-                                        pageOffset = 0
+                                        withAnimation(.spring(response: 0.001)) {
+                                            pageOffset = 0
+                                        }
                                     }
                                 } else {
                                     // 沒有超過閾值，彈回原位
@@ -127,33 +124,27 @@ struct CalendarView: View {
                 }
                 .padding(.horizontal)
             }
+            .background(backgroundColor.ignoresSafeArea())
             
-            // 使用懶加載避免在條件判斷中創建視圖
-            Group {
-                if showingAddTask {
-                    TodoAddView(
-                        viewModel: viewModel,
-                        isPresented: $showingAddTask,
-                        selectedDate: selectedDate
-                    )
-                    .transition(.move(edge: .bottom))
-                    .zIndex(2)
-                }
+            // 使用 ZStack 覆蓋方式顯示新增任務視圖
+            if showingAddTask {
+                TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             
-            // 使用懶加載避免在條件判斷中創建視圖
-            Group {
-                if showingTodoDetail {
-                    TodoDetailView(
-                        viewModel: viewModel,
-                        date: selectedDate,
-                        isPresented: $showingTodoDetail
-                    )
-                    .transition(.scale)
-                    .zIndex(2)
-                }
+            // 使用ZStack覆蓋方式顯示詳情視圖
+            if showingTodoDetail {
+                TodoDetailView(
+                    viewModel: viewModel,
+                    date: selectedDate,
+                    isPresented: $showingTodoDetail
+                )
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.3), value: showingTodoDetail)
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: showingAddTask)
+        .animation(.easeInOut(duration: 0.3), value: showingTodoDetail)
         .task {
             // 首次加載資料
             await loadTasks()

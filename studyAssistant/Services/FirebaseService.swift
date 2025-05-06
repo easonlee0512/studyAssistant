@@ -102,21 +102,6 @@ class FirebaseService: DataServiceProtocol {
                 // 儲存任務資料
                 batch.setData(updatedTask.toFirestore, forDocument: taskRef)
                 
-                // 如果是重複性任務，建立子任務 (限制子任務數量以避免過長處理時間)
-                if task.repeatType != .none {
-                    let subTasksRef = taskRef.collection("instances")
-                    let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5)
-                    
-                    for date in nextOccurrences {
-                        let instanceRef = subTasksRef.document()
-                        batch.setData([
-                            "date": Timestamp(date: date),
-                            "isCompleted": false,
-                            "parentTaskId": task.id
-                        ], forDocument: instanceRef)
-                    }
-                }
-                
                 try await batch.commit()
                 self.lastSync = Date()
                 self.currentSyncStatus = .synced

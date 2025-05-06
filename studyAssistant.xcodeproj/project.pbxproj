@@ -49,6 +49,7 @@
 		E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */; };
 		E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B12DB13265007ED175 /* Assets.xcassets */; };
 		E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E82F5CFF2D8B76C80016DF22 /* Alamofire */; };
+		E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */; };
 		E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897412DC0980D00027E88 /* TodoTask.swift */; };
 /* End PBXBuildFile section */
 
@@ -106,6 +107,7 @@
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
 		E82A79C22DB13265007ED175 /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
 		E82A79C32DB13265007ED175 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
+		E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -180,6 +182,7 @@
 		9B5A80B62DC2162F007E5758 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */,
 				9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */,
 				9B499B7A2DC25F8400DD115C /* TimerManager.swift */,
 				9B5A80B52DC2162F007E5758 /* UserSettingsViewModel.swift */,
@@ -447,6 +450,7 @@
 				9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */,
 				9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */,
 				9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */,
+				E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */,
 				9B5A80BD2DC2162F007E5758 /* ProfileSettingView.swift in Sources */,
 				9B5A80BE2DC2162F007E5758 /* DataServiceProtocol.swift in Sources */,
 				9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */,
@@ -634,7 +638,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = BJ8PR743YR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
@@ -668,7 +672,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = BJ8PR743YR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;

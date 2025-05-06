@@ -57,7 +57,12 @@ struct TodoAddView: View {
     var body: some View {
         ZStack {
             // 半透明背景
-            backgroundLayer
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismissWithAnimation()
+                }
+                .opacity(isDismissing ? 0 : 1)
             
             // 主要表單容器
             mainContentView
@@ -74,16 +79,6 @@ struct TodoAddView: View {
                 offset = 0
             }
         }
-    }
-    
-    // 背景層
-    private var backgroundLayer: some View {
-        Color.black.opacity(0.3)
-            .ignoresSafeArea()
-            .onTapGesture {
-                dismissWithAnimation()
-            }
-            .opacity(isDismissing ? 0 : 1)
     }
     
     // 表單容器
@@ -119,6 +114,9 @@ struct TodoAddView: View {
                     
                     // 時間設定
                     dateSelectionView
+                    Divider()
+                        .background(dividerColor)
+                        .padding(.horizontal, 5)
                     
                     // 顏色選擇
                     colorPickerView
@@ -164,6 +162,7 @@ struct TodoAddView: View {
                     }
                 }
         )
+        .transition(.move(edge: .bottom))
     }
     
     // 標題區域
@@ -186,7 +185,7 @@ struct TodoAddView: View {
                 saveTask()
             }
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(viewModel.isLoading ? Color.gray : 
+            .foregroundColor(viewModel.isLoading ? Color.gray :
                              (viewModel.newTaskTitle.isEmpty ? Color.blue.opacity(0.5) : Color.blue))
             .disabled(viewModel.isLoading || viewModel.newTaskTitle.isEmpty)
         }
@@ -215,9 +214,8 @@ struct TodoAddView: View {
                 .background(dividerColor)
                 .padding(.horizontal, 5)
         }
-        .background(Color.white)
+        .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     // 全天開關
@@ -239,9 +237,8 @@ struct TodoAddView: View {
                 .background(dividerColor)
                 .padding(.horizontal, 15)
         }
-        .background(Color.white)
+        .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     // 日期選擇視圖
@@ -291,39 +288,13 @@ struct TodoAddView: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
         }
-        .background(Color.white)
+        .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     // 顏色選擇器
     private var colorPickerView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("顏色")
-                .font(.system(size: 18, weight: .medium))
-                .padding(.horizontal, 15)
-                .padding(.top, 12)
-            
-            HStack(spacing: 15) {
-                ForEach(viewModel.colorOptions, id: \.self) { color in
-                    Circle()
-                        .fill(color)
-                        .frame(width: 30, height: 30)
-                        .overlay(
-                            Circle()
-                                .stroke(viewModel.newTaskColor == color ? Color.black : Color.clear, lineWidth: 2)
-                        )
-                        .onTapGesture {
-                            viewModel.newTaskColor = color
-                        }
-                }
-            }
-            .padding(.horizontal, 15)
-            .padding(.bottom, 12)
-        }
-        .background(Color.white)
-        .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+        ColorPickerView(selectedColor: $viewModel.newTaskColor, backgroundColor: backgroundColor)
     }
     
     // 類別選擇器
@@ -342,9 +313,8 @@ struct TodoAddView: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
         }
-        .background(Color.white)
+        .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     // 重複選項視圖
@@ -372,9 +342,8 @@ struct TodoAddView: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
         }
-        .background(Color.white)
+        .background(backgroundColor)
         .cornerRadius(10)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     // 格式化日期
@@ -407,7 +376,9 @@ struct TodoAddView: View {
         
         // 延遲關閉以等待動畫完成
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            isPresented = false
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isPresented = false
+            }
         }
     }
     
@@ -542,6 +513,50 @@ struct RoundedCorner: Shape {
     func path(in rect: CGRect) -> Path {
         let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
         return Path(path.cgPath)
+    }
+}
+
+// 顏色選擇器視圖
+private struct ColorPickerView: View {
+    @Binding var selectedColor: Color
+    let backgroundColor: Color
+    let dividerColor = Color(red: 188/255, green: 175/255, blue: 160/255)
+    let colorOptions: [Color] = [
+        Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),
+        Color(red: 0.7, green: 0.56, blue: 0).opacity(0.4),
+        Color(red: 0.18, green: 0.7, blue: 0.31).opacity(0.4),
+        Color(red: 0.29, green: 0.28, blue: 0.7).opacity(0.4)
+    ]
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 20) {
+                Text("顏色")
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 48, alignment: .leading)
+                Spacer()
+                HStack(spacing: 20) {
+                    ForEach(colorOptions, id: \.self) { color in
+                        Circle()
+                            .fill(color)
+                            .frame(width: 30, height: 30)
+                            .overlay(
+                                Circle()
+                                    .stroke(selectedColor == color ? Color.black : Color.clear, lineWidth: 2)
+                            )
+                            .onTapGesture {
+                                selectedColor = color
+                            }
+                    }
+                }
+            }
+            .padding(.horizontal, 15)
+            .padding(.vertical, 15)
+            Divider()
+                .background(dividerColor)
+                .padding(.horizontal, 15)
+        }
+        .background(backgroundColor)
+        .cornerRadius(10)
     }
 }
 

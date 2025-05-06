@@ -37,6 +37,9 @@ class TodoViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
+    // 添加選中的日期
+    @Published var selectedDate: Date = Date()
+    
     // 預定義的顏色選項
     let colorOptions: [Color] = [
         Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),

@@ -38,10 +38,10 @@ struct ProfileSettingView: View {
     // 學習階段選項
     let learningStages = ["國中", "高中", "大學", "研究所", "語言學習"]
     
-    // Figma 設計中的顏色
-    let backgroundColor = Color(red: 243/255, green: 212/255, blue: 183/255) // #F3D4B7
-    let cardColor = Color(red: 254/255, green: 236/255, blue: 216/255) // #FEECD8
-    let accentColor = Color(red: 226/255, green: 138/255, blue: 95/255) // #E28A5F
+    // 統一應用的顏色
+    let backgroundColor = Color.hex(hex: "F3D4B7") // 背景色
+    let cardColor = Color.hex(hex: "FEECD8") // 卡片顏色
+    let accentColor = Color.hex(hex: "E28A5F") // 按鈕強調色
     
     init() {
         // 使用 _viewModel 初始化 StateObject
@@ -158,14 +158,17 @@ struct ProfileSettingView: View {
                                 await saveProfile()
                             }
                         }) {
-                            Text("儲存變更")
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(accentColor)
-                                .cornerRadius(10)
-                                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(accentColor)
+                                    .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                                
+                                Text("儲存變更")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding()
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 50)
                         }
                         .padding(.horizontal)
                         .disabled(isLoading)
@@ -177,18 +180,17 @@ struct ProfileSettingView: View {
                         Button(action: {
                             showingLogoutAlert = true
                         }) {
-                            Text("登出")
-                                .fontWeight(.bold)
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.red, lineWidth: 1)
-                                )
-                                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color(red: 0.8, green: 0.2, blue: 0.2))
+                                    .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                                
+                                Text("登出")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding()
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 50)
                         }
                         .padding(.horizontal)
                     }
