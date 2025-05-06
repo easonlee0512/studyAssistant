@@ -1,0 +1,8 @@
+解決 Google 登入網路問題
+方法一：更新 Info.plist 網路設置
+方法二：重置模擬器
+完全關閉 Xcode 和模擬器
+打開終端並執行:
+   xcrun simctl shutdown all
+   xcrun simctl erase all
+   

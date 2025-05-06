@@ -28,14 +28,7 @@ struct TodoDetailView: View {
     
     var body: some View {
         ZStack {
-            // 半透明背景
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isPresented = false
-                    }
-                }
+            Color.clear
             
             // 卡片式容器
             VStack(spacing: 0) {
@@ -49,9 +42,7 @@ struct TodoDetailView: View {
                     Spacer()
                     
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isPresented = false
-                        }
+                        isPresented = false
                     }) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
@@ -80,16 +71,13 @@ struct TodoDetailView: View {
                 // 沒有待辦事項時顯示的訊息
                 if filteredTasks.isEmpty {
                     VStack {
+                        Spacer()
                         Text("沒有待辦事項")
                             .font(.system(size: 18))
                             .foregroundColor(.gray)
-                            .padding(.vertical, 40)
                         Spacer()
                     }
-                    .frame(maxWidth: .infinity,
-                           maxHeight: .infinity,
-                           alignment: .top)
-                    .background(backgroundColor)
+                    .frame(height: 300)
                 } else {
                     // 滾動事項列表
                     ScrollView {
@@ -103,8 +91,6 @@ struct TodoDetailView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 10)
                     }
-                    .background(backgroundColor)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .frame(
@@ -117,7 +103,6 @@ struct TodoDetailView: View {
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
         }
-        .transition(.opacity)
     }
     
     // 待辦事項卡片視圖

@@ -52,7 +52,7 @@ struct CalendarView: View {
                     .frame(width: 45)
                 }
                 .padding(.top, 7)
-                .padding(.bottom, 7)
+                .padding(.bottom,0)
 
                 // 只顯示當前月份的日曆，但支持左右滑動
                 GeometryReader { geometry in
@@ -122,7 +122,7 @@ struct CalendarView: View {
                             }
                     )
                 }
-                .padding(.horizontal)
+                .padding(.horizontal,1)
             }
             .background(backgroundColor.ignoresSafeArea())
             
@@ -321,7 +321,7 @@ struct CalendarMonthWithWeekdaysView: View {
                     Text(day)
                         .font(.system(size: 15))
                         .frame(width: geometry.size.width / 7)
-                        .padding(.bottom, 5)
+                        .padding(.bottom, 10)
                 }
             }
             .frame(height: 30)

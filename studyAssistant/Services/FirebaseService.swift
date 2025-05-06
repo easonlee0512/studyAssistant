@@ -18,7 +18,6 @@ class FirebaseService: DataServiceProtocol {
     // MARK: - Collection Names
     private enum Collection: String {
         case tasks = "tasks"
-        case timerRecords = "timerRecords"
         case profiles = "profiles"
         case settings = "settings"
     }
@@ -102,6 +101,21 @@ class FirebaseService: DataServiceProtocol {
                 // 儲存任務資料
                 batch.setData(updatedTask.toFirestore, forDocument: taskRef)
                 
+                // 如果是重複性任務，建立子任務 (限制子任務數量以避免過長處理時間)
+                if task.repeatType != .none {
+                    let subTasksRef = taskRef.collection("instances")
+                    let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5)
+                    
+                    for date in nextOccurrences {
+                        let instanceRef = subTasksRef.document()
+                        batch.setData([
+                            "date": Timestamp(date: date),
+                            "isCompleted": false,
+                            "parentTaskId": task.id
+                        ], forDocument: instanceRef)
+                    }
+                }
+                
                 try await batch.commit()
                 self.lastSync = Date()
                 self.currentSyncStatus = .synced
@@ -162,91 +176,6 @@ class FirebaseService: DataServiceProtocol {
             currentSyncStatus = .error(.networkError)
             throw error
         }
-    }
-    
-    // MARK: - Timer Records
-    func saveTimerRecord(_ record: TimerRecord) async throws {
-        var updatedRecord = record
-        updatedRecord.userId = getCurrentUserId()
-        
-        let recordRef = db.collection(Collection.timerRecords.rawValue).document(record.id)
-        try await recordRef.setData(updatedRecord.toFirestore, merge: true)
-    }
-    
-    func getTimerRecords(userId: String) async throws -> [TimerRecord] {
-        let snapshot = try await db.collection(Collection.timerRecords.rawValue)
-            .whereField("userId", isEqualTo: userId)
-            .whereField("isDeleted", isEqualTo: false)
-            .order(by: "startTime", descending: true)
-            .getDocuments()
-            
-        return snapshot.documents.compactMap { document in
-            TimerRecord(documentId: document.documentID, data: document.data())
-        }
-    }
-    
-    func getTimerStatistics(userId: String) async throws -> TimerStatistics {
-        let records = try await getTimerRecords(userId: userId)
-        return TimerStatistics.calculate(from: records)
-    }
-    
-    func getTimerStatistics(userId: String, from: Date, to: Date) async throws -> TimerStatistics {
-        let snapshot = try await db.collection(Collection.timerRecords.rawValue)
-            .whereField("userId", isEqualTo: userId)
-            .whereField("isDeleted", isEqualTo: false)
-            .whereField("startTime", isGreaterThanOrEqualTo: Timestamp(date: from))
-            .whereField("startTime", isLessThanOrEqualTo: Timestamp(date: to))
-            .order(by: "startTime", descending: true)
-            .getDocuments()
-            
-        let records = snapshot.documents.compactMap { document in
-            TimerRecord(documentId: document.documentID, data: document.data())
-        }
-        
-        return TimerStatistics.calculate(from: records)
-    }
-    
-    // MARK: - Private Timer Helpers
-    private func calculateTimerStatistics(userId: String? = nil, from: Date? = nil, to: Date? = nil) async throws -> TimerStatistics {
-        let currentUserId = userId ?? getCurrentUserId()
-        
-        var query = db.collection(Collection.timerRecords.rawValue)
-            .whereField("userId", isEqualTo: currentUserId)
-        
-        if let fromDate = from {
-            query = query.whereField("startTime", isGreaterThanOrEqualTo: Timestamp(date: fromDate))
-        }
-        if let toDate = to {
-            query = query.whereField("startTime", isLessThanOrEqualTo: Timestamp(date: toDate))
-        }
-        
-        let snapshot = try await query.getDocuments()
-        var statistics = TimerStatistics()
-        
-        for document in snapshot.documents {
-            let data = document.data()
-            guard let startTime = (data["startTime"] as? Timestamp)?.dateValue(),
-                  let endTime = (data["endTime"] as? Timestamp)?.dateValue(),
-                  let isCompleted = data["isCompleted"] as? Bool else {
-                continue
-            }
-            
-            let duration = endTime.timeIntervalSince(startTime)
-            statistics.totalTime += duration
-            
-            if isCompleted {
-                statistics.completedSessions += 1
-            } else {
-                statistics.incompleteSessions += 1
-            }
-        }
-        
-        let totalSessions = statistics.completedSessions + statistics.incompleteSessions
-        if totalSessions > 0 {
-            statistics.averageSessionTime = statistics.totalTime / Double(totalSessions)
-        }
-        
-        return statistics
     }
     
     // MARK: - Private Helpers

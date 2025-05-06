@@ -7,7 +7,8 @@
 // TimerManager 類別定義 - 使用時間差計算法
 import SwiftUI
 import Combine
-import Firebase
+// 移除 Firebase 依賴
+// import Firebase
 
 class TimerManager: ObservableObject {
     // 計時器基本屬性
@@ -47,16 +48,94 @@ class TimerManager: ObservableObject {
     
     // 計時記錄相關
     private var actualStartTime: Date? = nil  // 實際開始計時的時間（考慮暫停）
-    private let dataService: DataServiceProtocol // 資料服務
+    // 使用本地存儲管理器取代資料服務
+    private let recordManager = TimerRecordManager.shared
     private var currentUserId: String = "default" // 目前用戶ID
     
     // UI 更新計時器
     private var timerSubscription: AnyCancellable?
     
-    init(dataService: DataServiceProtocol = FirebaseService.shared) {
-        self.dataService = dataService
+    // 新增 TodoViewModel 關聯
+    private var todoViewModel: TodoViewModel?
+    // 新增當前任務ID
+    private var currentTaskId: String?
+    
+    init() {
         // 初始化時分秒
         updateTimeComponents()
+        
+        // 添加通知觀察者，監聽用戶登出事件
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUserLogout),
+            name: .userDidLogout,
+            object: nil
+        )
+    }
+    
+    deinit {
+        // 移除通知觀察者
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    // 處理用戶登出事件
+    @objc private func handleUserLogout() {
+        print("收到用戶登出通知，清理計時器狀態")
+        clearTimerState()
+    }
+    
+    // 清理計時器狀態
+    func clearTimerState() {
+        // 停止當前計時
+        if isRunning {
+            // 如果計時器正在運行，先保存一條記錄
+            saveTimerRecord(isCompleted: false)
+            stopTimer()
+            isRunning = false
+        }
+        
+        // 重置所有狀態
+        timeRemaining = 1800 // 重置為30分鐘
+        elapsedTime = 0
+        progress = 0.167
+        subject = "線性代數"
+        
+        // 重置時間組件
+        hours = 0
+        minutes = 30
+        seconds = 0
+        
+        // 重置記憶變數
+        lastUsedHours = 0
+        lastUsedMinutes = 30
+        lastUsedSeconds = 0
+        hasUsedBefore = false
+        
+        // 重置初始時間設定
+        initialHours = 0
+        initialMinutes = 30
+        initialSeconds = 0
+        
+        // 重置其他狀態
+        selectedTime = 30
+        startTime = nil
+        pauseTime = nil
+        totalPausedTime = 0
+        initialTimeRemaining = 0
+        actualStartTime = nil
+        currentTaskId = nil
+        
+        // 清除計時器訂閱
+        timerSubscription?.cancel()
+        timerSubscription = nil
+        
+        // 重置為默認用戶ID
+        currentUserId = "default"
+        
+        // 清除 TodoViewModel 參考
+        todoViewModel = nil
+        
+        print("計時器狀態已完全清理")
     }
     
     // 設置當前用戶ID
@@ -294,7 +373,7 @@ class TimerManager: ObservableObject {
         }
     }
     
-    // 保存計時器記錄
+    // 保存計時器記錄並更新任務 focusTime
     private func saveTimerRecord(isCompleted: Bool) {
         guard let actualStart = actualStartTime, startTime != nil else { return }
         
@@ -307,11 +386,35 @@ class TimerManager: ObservableObject {
             isCompleted: isCompleted
         )
         
-        Task {
-            do {
-                try await dataService.saveTimerRecord(record)
-            } catch {
-                print("Error saving timer record: \(error.localizedDescription)")
+        // 計算本次專注時間（秒）
+        let focusTimeInSeconds = Int(endTime.timeIntervalSince(actualStart))
+        
+        // 使用本地存儲管理器保存記錄
+        recordManager.addRecord(record)
+        
+        // 只有當使用者暫停計時器並且專注時間超過1分鐘才更新 focusTime
+        if !isCompleted && focusTimeInSeconds >= 60 {
+            // 將秒數轉換為分鐘數（向下取整）
+            let focusTimeInMinutes = focusTimeInSeconds / 60
+            
+            // 更新對應任務的 focusTime（以分鐘為單位）
+            if let taskId = currentTaskId, let todoViewModel = todoViewModel {
+                Task {
+                    do {
+                        // 獲取任務
+                        if let task = await todoViewModel.getTaskById(taskId) {
+                            // 更新 focusTime（分鐘）
+                            var updatedTask = task
+                            updatedTask.focusTime += focusTimeInMinutes
+                            
+                            // 保存更新後的任務
+                            await todoViewModel.updateTask(updatedTask)
+                            print("更新任務專注時間：\(focusTimeInMinutes) 分鐘")
+                        }
+                    } catch {
+                        print("更新任務 focusTime 失敗: \(error)")
+                    }
+                }
             }
         }
     }
@@ -351,17 +454,50 @@ class TimerManager: ObservableObject {
     }
     
     // 獲取統計數據
-    func getStatistics() async throws -> TimerStatistics {
-        return try await dataService.getTimerStatistics(userId: currentUserId)
+    func getStatistics() -> TimerStatistics {
+        return recordManager.getStatistics(userId: currentUserId)
     }
     
     // 獲取一段時間內的統計數據
-    func getStatistics(from startDate: Date, to endDate: Date) async throws -> TimerStatistics {
-        return try await dataService.getTimerStatistics(userId: currentUserId, from: startDate, to: endDate)
+    func getStatistics(from startDate: Date, to endDate: Date) -> TimerStatistics {
+        return recordManager.getStatistics(userId: currentUserId, from: startDate, to: endDate)
     }
     
     // 獲取用戶所有計時記錄
-    func getAllTimerRecords() async throws -> [TimerRecord] {
-        return try await dataService.getTimerRecords(userId: currentUserId)
+    func getAllTimerRecords() -> [TimerRecord] {
+        return recordManager.getRecords(userId: currentUserId)
+    }
+    
+    // 設置 TodoViewModel
+    @MainActor func setTodoViewModel(_ viewModel: TodoViewModel) {
+        self.todoViewModel = viewModel
+        updateCurrentTask()
+    }
+    
+    // 更新當前任務
+    @MainActor func updateCurrentTask() {
+        guard let todoViewModel = todoViewModel else { return }
+        
+        // 獲取當前日期的所有任務
+        let today = Date()
+        let todayTasks = todoViewModel.tasksForDate(today)
+        
+        // 篩選出當前時間範圍內的任務（未完成的）
+        let currentTasks = todayTasks.filter { task in
+            let isInTimeRange = today >= task.startDate && today <= task.endDate
+            return isInTimeRange && !task.isCompleted
+        }
+        
+        if !currentTasks.isEmpty {
+            // 如果有多個任務，選擇最早創建的
+            if let earliestTask = currentTasks.sorted(by: { $0.createdAt < $1.createdAt }).first {
+                self.subject = earliestTask.title
+                self.currentTaskId = earliestTask.id
+            }
+        } else {
+            // 如果沒有當前任務，使用默認主題
+            self.subject = "學習"
+            self.currentTaskId = nil
+        }
     }
 }

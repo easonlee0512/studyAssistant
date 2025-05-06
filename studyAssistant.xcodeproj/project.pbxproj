@@ -11,6 +11,7 @@
 		9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03B82D8BFD4F001CF344 /* FirebaseAuthCombine-Community */; };
 		9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BA2D8BFD4F001CF344 /* FirebaseDatabase */; };
 		9B2C03BD2D8C05CE001CF344 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BC2D8C05CE001CF344 /* FirebaseFirestore */; };
+		9B366A2E2DCA2CCA00CCA59B /* TodoEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */; };
 		9B499B792DC25F7700DD115C /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B782DC25F7700DD115C /* TimerView.swift */; };
 		9B499B7B2DC25F8400DD115C /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B7A2DC25F8400DD115C /* TimerManager.swift */; };
 		9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80B52DC2162F007E5758 /* UserSettingsViewModel.swift */; };
@@ -71,6 +72,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoEditView.swift; sourceTree = "<group>"; };
 		9B499B782DC25F7700DD115C /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
 		9B499B7A2DC25F8400DD115C /* TimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerManager.swift; sourceTree = "<group>"; };
 		9B5A80AE2DC2162F007E5758 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 		9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoViewModel.swift; sourceTree = "<group>"; };
 		9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
 		9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		9B70AE8C2DCA27B4002AEF32 /* studyAssistant.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = studyAssistant.entitlements; sourceTree = "<group>"; };
 		9BC153402D78771600FCA465 /* studyAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = studyAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC1535A2D78771A00FCA465 /* studyAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -194,6 +197,7 @@
 		9B5A80BA2DC2162F007E5758 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */,
 				9B499B782DC25F7700DD115C /* TimerView.swift */,
 				9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */,
 				9B5A80C42DC218FE007E5758 /* SettingsComponents.swift */,
@@ -259,6 +263,7 @@
 		E82A79C42DB13265007ED175 /* studyAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				9B70AE8C2DCA27B4002AEF32 /* studyAssistant.entitlements */,
 				9BF0B3932DC5CD30006131DD /* Constants */,
 				9BD7A98F2DC4F98600B3FF29 /* Info.plist */,
 				9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */,
@@ -448,6 +453,7 @@
 				E82A79C62DB13265007ED175 /* MessageView.swift in Sources */,
 				9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */,
 				9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */,
+				9B366A2E2DCA2CCA00CCA59B /* TodoEditView.swift in Sources */,
 				9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */,
 				9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */,
 				E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */,
@@ -634,6 +640,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = studyAssistant/studyAssistant.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -654,7 +661,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.googleusercontent.apps.93874741830-1j830s2jvrtt4et4qmih2vl8er5nbn07";
+				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistant;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -668,6 +675,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = studyAssistant/studyAssistant.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -688,7 +696,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.googleusercontent.apps.93874741830-1j830s2jvrtt4et4qmih2vl8er5nbn07";
+				PRODUCT_BUNDLE_IDENTIFIER = eason.studyAssistant;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;

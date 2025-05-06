@@ -93,8 +93,18 @@ class UserSettingsViewModel: ObservableObject {
     // MARK: - Helper Methods
     
     func clearAllData() {
+        // 重置用戶個人檔案和應用設定
         userProfile = UserProfile.defaultProfile()
         appSettings = AppSettings.defaultSettings()
         syncStatus = .notSynced
+        errorMessage = nil
+        
+        // 清理本地計時記錄
+        TimerRecordManager.shared.clearRecords()
+        
+        // 發送通知，告知系統用戶已登出，其他視圖模型需要清理資源
+        NotificationCenter.default.post(name: .userDidLogout, object: nil)
+        
+        print("用戶設定資料已完全清理")
     }
 } 

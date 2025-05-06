@@ -83,11 +83,43 @@ extension Notification.Name {
     // userProfileDidChange 已在 NotificationConstants.swift 中定義，透過 Foundation 導入
 }
 
+/// 處理 URL 回調的類別
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ app: UIApplication,
+                     open url: URL,
+                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        print("收到 URL 回調: \(url)")
+        
+        // 檢查是否是 Google Sign In 的回調
+        if GIDSignIn.sharedInstance.handle(url) {
+            print("已處理 Google Sign In 回調")
+            return true
+        }
+        
+        print("無法處理 URL 回調")
+        return false
+    }
+}
+
 @main
 struct studyAssistantApp: App {
+    // 註冊 AppDelegate 以處理 URL 回調
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     // 初始化 Firebase
     init() {
         FirebaseApp.configure()
+        
+        // 嘗試恢復先前的 Google 登入會話
+        GIDSignIn.sharedInstance.restorePreviousSignIn { user, error in
+            if let error = error {
+                print("恢復先前的 Google 登入會話時出錯: \(error.localizedDescription)")
+            } else if let user = user {
+                print("成功恢復 Google 使用者: \(user.profile?.email ?? "unknown")")
+            } else {
+                print("無先前的 Google 登入會話")
+            }
+        }
     }
     
     // 創建 ViewModel 實例作為環境物件
@@ -139,9 +171,21 @@ struct studyAssistantApp: App {
                             }
                         }
                     }
+                    // 處理從 URL 打開應用的事件
+                    .onOpenURL { url in
+                        print("應用通過 URL 打開: \(url)")
+                        // 讓 Google Sign In 處理 URL
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
             } else {
                 LoginView()
                     .environmentObject(authState)
+                    // 處理從 URL 打開應用的事件
+                    .onOpenURL { url in
+                        print("登入視圖通過 URL 打開: \(url)")
+                        // 讓 Google Sign In 處理 URL
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
             }
         }
         .onChange(of: scenePhase) { newPhase in

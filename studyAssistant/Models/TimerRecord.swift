@@ -1,5 +1,6 @@
 import Foundation
-import FirebaseFirestore
+// 移除 Firebase 依賴
+// import FirebaseFirestore
 
 struct TimerRecord: Identifiable, Codable {
     var id: String
@@ -30,44 +31,104 @@ struct TimerRecord: Identifiable, Codable {
         self.createdAt = Date()
         self.lastModifiedAt = Date()
     }
+}
+
+// 本地存儲管理器
+class TimerRecordManager {
+    static let shared = TimerRecordManager()
+    private let userDefaults = UserDefaults.standard
+    private let recordsKey = "timerRecords"
+    private var records: [TimerRecord] = []
     
-    // Firestore 初始化方法
-    init?(documentId: String, data: [String: Any]) {
-        guard let userId = data["userId"] as? String,
-              let subject = data["subject"] as? String,
-              let startTime = (data["startTime"] as? Timestamp)?.dateValue(),
-              let endTime = (data["endTime"] as? Timestamp)?.dateValue(),
-              let isCompleted = data["isCompleted"] as? Bool,
-              let createdAt = (data["createdAt"] as? Timestamp)?.dateValue(),
-              let lastModifiedAt = (data["lastModifiedAt"] as? Timestamp)?.dateValue() else {
-            return nil
-        }
-        
-        self.id = documentId
-        self.userId = userId
-        self.subject = subject
-        self.startTime = startTime
-        self.endTime = endTime
-        self.duration = Int(endTime.timeIntervalSince(startTime))
-        self.isCompleted = isCompleted
-        self.createdAt = createdAt
-        self.lastModifiedAt = lastModifiedAt
-        self.isDeleted = data["isDeleted"] as? Bool ?? false
+    private init() {
+        loadRecords()
     }
     
-    // Firestore 資料轉換
-    var toFirestore: [String: Any] {
-        return [
-            "userId": userId,
-            "subject": subject,
-            "startTime": Timestamp(date: startTime),
-            "endTime": Timestamp(date: endTime),
-            "duration": duration,
-            "isCompleted": isCompleted,
-            "createdAt": Timestamp(date: createdAt),
-            "lastModifiedAt": Timestamp(date: lastModifiedAt),
-            "isDeleted": isDeleted
-        ]
+    // 從本地存儲加載記錄
+    private func loadRecords() {
+        if let data = userDefaults.data(forKey: recordsKey) {
+            let decoder = JSONDecoder()
+            do {
+                records = try decoder.decode([TimerRecord].self, from: data)
+            } catch {
+                print("讀取計時記錄失敗: \(error.localizedDescription)")
+                records = []
+            }
+        }
+    }
+    
+    // 保存記錄到本地存儲
+    private func saveRecords() {
+        let encoder = JSONEncoder()
+        do {
+            let data = try encoder.encode(records)
+            userDefaults.set(data, forKey: recordsKey)
+        } catch {
+            print("保存計時記錄失敗: \(error.localizedDescription)")
+        }
+    }
+    
+    // 添加新記錄
+    func addRecord(_ record: TimerRecord) {
+        records.append(record)
+        saveRecords()
+    }
+    
+    // 獲取所有記錄
+    func getAllRecords() -> [TimerRecord] {
+        return records.filter { !$0.isDeleted }
+    }
+    
+    // 獲取指定用戶的記錄
+    func getRecords(userId: String) -> [TimerRecord] {
+        return records.filter { !$0.isDeleted && $0.userId == userId }
+    }
+    
+    // 獲取指定時間範圍的記錄
+    func getRecords(userId: String, from: Date, to: Date) -> [TimerRecord] {
+        return records.filter { 
+            !$0.isDeleted && 
+            $0.userId == userId && 
+            $0.startTime >= from && 
+            $0.startTime <= to 
+        }
+    }
+    
+    // 更新記錄
+    func updateRecord(_ record: TimerRecord) {
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+            saveRecords()
+        }
+    }
+    
+    // 刪除記錄（標記為已刪除）
+    func deleteRecord(id: String) {
+        if let index = records.firstIndex(where: { $0.id == id }) {
+            var record = records[index]
+            record.isDeleted = true
+            record.lastModifiedAt = Date()
+            records[index] = record
+            saveRecords()
+        }
+    }
+    
+    // 完全清除記錄
+    func clearRecords() {
+        records.removeAll()
+        saveRecords()
+    }
+    
+    // 獲取統計數據
+    func getStatistics(userId: String) -> TimerStatistics {
+        let userRecords = getRecords(userId: userId)
+        return TimerStatistics.calculate(from: userRecords)
+    }
+    
+    // 獲取指定時間範圍的統計數據
+    func getStatistics(userId: String, from: Date, to: Date) -> TimerStatistics {
+        let userRecords = getRecords(userId: userId, from: from, to: to)
+        return TimerStatistics.calculate(from: userRecords)
     }
 }
 

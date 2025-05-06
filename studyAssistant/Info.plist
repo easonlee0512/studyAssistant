@@ -14,6 +14,32 @@
 				<string>com.googleusercontent.apps.93874741830-1j830s2jvrtt4et4qmih2vl8er5nbn07</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>bundle-id</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>eason.studyAssistant</string>
+			</array>
+		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechrome</string>
+		<string>googlechromes</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>CFBundleIdentifier</key>
+	<string>eason.studyAssistant</string>
 </dict>
 </plist>

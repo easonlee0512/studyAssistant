@@ -25,11 +25,11 @@ protocol DataServiceProtocol {
     func fetchAppSettings() async throws -> AppSettings
     func updateAppSettings(_ settings: AppSettings) async throws
     
-    // 計時器記錄操作
-    func saveTimerRecord(_ record: TimerRecord) async throws
-    func getTimerRecords(userId: String) async throws -> [TimerRecord]
-    func getTimerStatistics(userId: String) async throws -> TimerStatistics
-    func getTimerStatistics(userId: String, from: Date, to: Date) async throws -> TimerStatistics
+    // 移除計時器記錄操作，因為現在使用本地存儲
+    // func saveTimerRecord(_ record: TimerRecord) async throws
+    // func getTimerRecords(userId: String) async throws -> [TimerRecord]
+    // func getTimerStatistics(userId: String) async throws -> TimerStatistics
+    // func getTimerStatistics(userId: String, from: Date, to: Date) async throws -> TimerStatistics
     
     // 同步狀態
     func syncStatus() -> SyncStatus

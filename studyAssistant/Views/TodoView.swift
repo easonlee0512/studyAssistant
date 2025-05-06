@@ -22,6 +22,10 @@ struct TodoView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     
+    // 新增編輯相關狀態變量
+    @State private var showingEditTask = false
+    @State private var taskToEdit: TodoTask? = nil
+    
     // 用於倒數計時顯示
     @State private var userGoal: String = ""
     
@@ -81,7 +85,7 @@ struct TodoView: View {
                                 .padding(.top, 12)
                                 
                                 // 週曆視圖
-                                SwipeWeekView(selectedDate: $selectedDate)
+                                WeekViewNew(selectedDate: $selectedDate)
                                     .padding(.horizontal)
                                 
                                 // 待辦事項標題
@@ -109,6 +113,12 @@ struct TodoView: View {
                                         TaskRowNewView(task: task) { updatedTask in
                                             Task {
                                                 await viewModel.updateTask(updatedTask)
+                                            }
+                                        } onTaskSelected: { selectedTask in
+                                            // 當任務被點擊時，設置要編輯的任務並顯示編輯視圖
+                                            taskToEdit = selectedTask
+                                            withAnimation {
+                                                showingEditTask = true
                                             }
                                         }
                                     }
@@ -147,12 +157,24 @@ struct TodoView: View {
                                 .zIndex(1)
                             }
                         }
+                        
+                        // 新增編輯任務視圖
+                        Group {
+                            if showingEditTask && taskToEdit != nil {
+                                TodoEditView(
+                                    viewModel: viewModel,
+                                    isPresented: $showingEditTask,
+                                    task: taskToEdit!
+                                )
+                                .transition(.move(edge: .bottom))
+                                .zIndex(1)
+                            }
+                        }
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline) // 將標題設為inline，不顯示大標題
         }
-        .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
             // 當視圖出現時立即載入用戶設定
             loadUserProfile()
@@ -259,6 +281,7 @@ struct TaskRowNewView: View {
     @State var task: TodoTask
     var isExample: Bool = false
     var onUpdate: ((TodoTask) -> Void)? = nil
+    var onTaskSelected: ((TodoTask) -> Void)? = nil
     
     var body: some View {
         HStack {
@@ -280,6 +303,11 @@ struct TaskRowNewView: View {
                     .font(.system(size: 15))
             }
             .padding(.leading, 10)
+            .onTapGesture {
+                if !isExample && onTaskSelected != nil {
+                    onTaskSelected?(task)
+                }
+            }
             
             Spacer()
             
@@ -304,6 +332,7 @@ struct TaskRowNewView: View {
         .background(task.color)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.09), radius: 10, x: 3, y: 3)
+        .contentShape(Rectangle()) // 確保整個區域可點擊
     }
 }
 
@@ -322,21 +351,21 @@ struct WeekViewNew: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            let itemWidth = geometry.size.width / 7
-            HStack(alignment: .center, spacing: 0) {
-                ForEach(0..<7) { index in
-                    dayView(for: index, width: itemWidth)
-                }
+        HStack(alignment: .center, spacing: 4) {
+            ForEach(0..<7) { index in
+                dayView(for: index)
             }
-            .background(Color.hex(hex: "FEECD8"))
-            .cornerRadius(20)
-            .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
         }
-        .frame(height: 78)
+        .padding(.leading, 0)
+        .padding(.trailing, 1)
+        .padding(.vertical, 0.84615)
+        .frame(width: 373, alignment: .center)
+        .background(Color.hex(hex: "FEECD8"))
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
     }
     
-    private func dayView(for index: Int, width: CGFloat) -> some View {
+    private func dayView(for index: Int) -> some View {
         let date = weekDates[index]
         let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
         
@@ -348,7 +377,7 @@ struct WeekViewNew: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.black)
         }
-        .frame(width: width, height: 78)
+        .frame(width: (373 - 24) / 7, height: 78)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(isSelected ? Color(red: 0.86, green: 0.55, blue: 0.38, opacity: 0.9) : Color.hex(hex: "FEECD8"))
@@ -363,82 +392,6 @@ struct WeekViewNew: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter
-    }
-}
-
-/// 單張 7 天卡片
-struct SingleWeekView: View {
-    @Binding var selectedDate: Date     // 與外層同步
-    let baseSunday: Date                // 這張卡片的「週日」日期
-    
-    private let days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    
-    /// 回傳 baseSunday 往後 0…6 天的陣列
-    private var weekDates: [Date] {
-        (0..<7).map { Calendar.current.date(byAdding: .day, value: $0, to: baseSunday)! }
-    }
-    
-    var body: some View {
-        GeometryReader { geo in
-            let itemW = geo.size.width / 7
-            HStack(spacing: 0) {
-                ForEach(0..<7) { i in
-                    dayCell(index: i, date: weekDates[i], width: itemW)
-                }
-            }
-            .background(Color.hex(hex: "FEECD8"))
-            .cornerRadius(20)
-            .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
-        }
-        .frame(height: 78)
-    }
-    
-    /// 單日 cell
-    @ViewBuilder
-    private func dayCell(index: Int, date: Date, width: CGFloat) -> some View {
-        let isSel = Calendar.current.isDate(date, inSameDayAs: selectedDate)
-        VStack(spacing: 5) {
-            Text(days[index]).font(.system(size: 14, weight: .medium))
-            Text("\(Calendar.current.component(.day, from: date))")
-                .font(.system(size: 16, weight: .medium))
-        }
-        .frame(width: width, height: 78)
-        .foregroundColor(isSel ? .black : Color.hex(hex: "222222"))
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(isSel ? Color.hex(hex: "E09772") : Color.hex(hex: "FEECD8"))
-        )
-        .onTapGesture { selectedDate = date }
-    }
-}
-
-/// 可以左右滑動的週曆
-struct SwipeWeekView: View {
-    @Binding var selectedDate: Date
-    @State private var weekOffset = 0    // 0 = 本週；±1 = 前/後週
-    
-    private var startOfCurrentWeek: Date {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let weekday = cal.component(.weekday, from: today) // 1…7
-        return cal.date(byAdding: .day, value: -(weekday-1), to: today)! // 回到週日
-    }
-    
-    var body: some View {
-        TabView(selection: $weekOffset) {
-            // 這裡示範可滑 ±52 週（1 年）；可依需求加大
-            ForEach(-52...52, id: \.self) { offset in
-                let sunday = Calendar.current.date(byAdding: .day,
-                                                   value: offset*7,
-                                                   to: startOfCurrentWeek)!
-                SingleWeekView(selectedDate: $selectedDate,
-                               baseSunday: sunday)
-                .padding(.horizontal)                 // 與舊版一樣留左右空白
-                .tag(offset)                          // tag 決定目前頁
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))      // 重要：橫向滑頁風格
-        .frame(height: 78)
     }
 }
 

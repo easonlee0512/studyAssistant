@@ -3,6 +3,7 @@ import SwiftUICore
 
 struct ContentView: View {
     @StateObject private var viewModel = TodoViewModel()
+    @EnvironmentObject var authState: AuthState
     @State private var selectedTab = 0
     // 假設有一個共享的待辦事項數據
     @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]
@@ -37,6 +38,7 @@ struct ContentView: View {
                 else if selectedTab == 4 {
                     // 設定頁面
                     SettingsView(todos: todos)
+                        .environmentObject(authState)
                 }
             }
             
@@ -122,4 +124,5 @@ struct TabButtonNew: View {
 #Preview {
     ContentView()
         .environmentObject(TimerManager())
+        .environmentObject(AuthState())
 }

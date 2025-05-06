@@ -273,6 +273,8 @@ struct TimerControls: View {
 struct TimerView: View {
     // 使用環境物件而不是本地狀態
     @EnvironmentObject var timerManager: TimerManager
+    // 添加TodoViewModel環境物件
+    @EnvironmentObject var todoViewModel: TodoViewModel
     
     // 僅保留視圖相關的本地狀態
     @State private var isDragging = false // 是否正在拖動
@@ -331,11 +333,17 @@ struct TimerView: View {
             }
         }
         .onAppear {
-            // 當視圖出現時，確保 TimerManager 有最新數據
+            // 當視圖出現時，設置TodoViewModel並更新當前任務
+            timerManager.setTodoViewModel(todoViewModel)
+            
+            // 如果計時器正在運行，觸發一次更新
             if timerManager.isRunning {
-                // 如果計時器正在運行，觸發一次更新
                 timerManager.appWillEnterForeground()
             }
+        }
+        // 每當視圖重新顯示時更新當前任務
+        .onReceive(NotificationCenter.default.publisher(for: .todoDataDidChange)) { _ in
+            timerManager.updateCurrentTask()
         }
         .animation(nil, value: timerManager.isCountUp) // 不使用自動動畫
         .animation(.easeInOut(duration: 0.2), value: timerManager.isRunning)
@@ -450,6 +458,7 @@ struct TimerView_Previews: PreviewProvider {
     static var previews: some View {
         TimerView()
             .environmentObject(TimerManager())
+            .environmentObject(TodoViewModel())
     }
 }
 
@@ -457,5 +466,6 @@ struct TimerView_Previews: PreviewProvider {
 #Preview {
     TimerView()
         .environmentObject(TimerManager())
+        .environmentObject(TodoViewModel())
 }
 

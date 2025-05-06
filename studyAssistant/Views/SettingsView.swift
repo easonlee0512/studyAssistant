@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel = UserSettingsViewModel()
     var todos: [Date: [(task: String, isCompleted: Bool)]]
+    @EnvironmentObject private var authState: AuthState
     
     var body: some View {
         NavigationStack {
@@ -14,7 +15,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 25) {
                         // 用戶資訊區域
-                        NavigationLink(destination: ProfileSettingView()) {
+                        NavigationLink(destination: ProfileSettingView().environmentObject(authState)) {
                             HStack(spacing: 15) {
                                 // 用戶頭像
 //                                Circle()

@@ -10,11 +10,6 @@ import FirebaseAuth
 import FirebaseFirestore
 import Foundation // 確保可以訪問 NotificationConstants
 
-// 通知名稱常數已移至 NotificationConstants.swift
-// extension Notification.Name {
-//     static let todoDataDidChange = Notification.Name("todoDataDidChange")
-//     static let userAuthDidChange = Notification.Name("userAuthDidChange")
-// }
 
 @MainActor
 class TodoViewModel: ObservableObject {
@@ -26,7 +21,7 @@ class TodoViewModel: ObservableObject {
     @Published var newTaskTitle = ""
     @Published var newTaskNote = ""
     @Published var newTaskColor = Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4)
-    @Published var newTaskFocusTime = 30
+    @Published var newTaskFocusTime = 0
     @Published var newTaskCategory = "學習"
     @Published var newTaskIsAllDay = false
     @Published var newTaskStartDate = Date()
@@ -36,9 +31,6 @@ class TodoViewModel: ObservableObject {
     @Published var newTaskSelectedMonthDays: Set<Int> = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    
-    // 添加選中的日期
-    @Published var selectedDate: Date = Date()
     
     // 預定義的顏色選項
     let colorOptions: [Color] = [
@@ -126,10 +118,20 @@ class TodoViewModel: ObservableObject {
     // 處理使用者驗證狀態變更通知
     @objc private func handleUserAuthChange() {
         Task {
-            do {
-                try await loadTasks()
-            } catch {
-                print("Error reloading tasks after auth change: \(error)")
+            // 檢查用戶是否已登入
+            if Auth.auth().currentUser != nil {
+                // 用戶已登入，重新載入任務
+                do {
+                    try await loadTasks()
+                } catch {
+                    print("Error reloading tasks after auth change: \(error)")
+                }
+            } else {
+                // 用戶已登出，清空任務列表
+                await MainActor.run {
+                    self.tasks = []
+                    print("用戶已登出，任務列表已清空")
+                }
             }
         }
     }
@@ -336,6 +338,11 @@ class TodoViewModel: ObservableObject {
             }
             return !task1.isCompleted && task2.isCompleted
         }
+    }
+    
+    // 根據ID獲取任務
+    func getTaskById(_ id: String) -> TodoTask? {
+        return tasks.first { $0.id == id }
     }
 }
 
