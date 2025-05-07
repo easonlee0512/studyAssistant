@@ -14,7 +14,8 @@ struct ChatDemoDynamicView: View {
     @StateObject private var viewModel = ChatViewModel()
     @State private var inputText = ""
     @State private var showSidebar = false
-    @State private var currentTask: Task<Void, Never>?
+    @State private var latestMessageId: UUID? // 追蹤最新訊息的 ID
+    @State private var expandedTaskMessages: Set<UUID> = [] // 追蹤哪些訊息的任務列表被展開
 
     var body: some View {
         ZStack {
@@ -59,14 +60,27 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Message List
     private var messageList: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(viewModel.chatRooms[viewModel.selectedRoomIndex].messages) { msg in
-                    if msg.isMe { userBubble(msg.text) } else { aiBubble(msg.text) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(viewModel.chatRooms[viewModel.selectedRoomIndex].messages) { msg in
+                        if msg.isMe { userBubble(msg.text) } else { aiBubble(msg.text) }
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.bottom, 20)
+                .id("messageBottom") // 添加一個 ID 用於滾動
+            }
+            .onChange(of: viewModel.chatRooms[viewModel.selectedRoomIndex].messages.count) { _ in
+                withAnimation {
+                    proxy.scrollTo("messageBottom", anchor: .bottom)
                 }
             }
-            .padding(.top, 10)
-            .padding(.bottom, 20)
+            .onChange(of: latestMessageId) { _ in
+                withAnimation {
+                    proxy.scrollTo("messageBottom", anchor: .bottom)
+                }
+            }
         }
     }
     private func userBubble(_ text: String) -> some View {
@@ -84,18 +98,140 @@ struct ChatDemoDynamicView: View {
         .padding(.horizontal)
     }
     private func aiBubble(_ text: String) -> some View {
-        HStack {
-            CustomMarkdownText(text, textColor: textColor)
-                .padding(16)
-                .background(lightBubbleColor)
-                .foregroundColor(textColor)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if text.isEmpty && viewModel.isLoading {
+                    // 載入動畫和函數名稱
+                    HStack(spacing: 12) {
+                        // 三個點的載入動畫
+                        HStack(spacing: 4) {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .fill(textColor)
+                                    .frame(width: 6, height: 6)
+                                    .opacity(0.5)
+                                    .animation(Animation.easeInOut(duration: 0.5).repeatForever().delay(0.2 * Double(index)), value: viewModel.isLoading)
+                            }
+                        }
+                        
+                        // 顯示當前使用的函數名稱
+                        if let functionName = viewModel.currentFunction {
+                            Text("正在使用：\(functionName)")
+                                .foregroundColor(textColor)
+                                .font(.system(size: 16))
+                        }
+                    }
+                    .padding(16)
+                    .background(lightBubbleColor)
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
+                } else {
+                    CustomMarkdownText(text, textColor: textColor)
+                        .padding(16)
+                        .background(lightBubbleColor)
+                        .foregroundColor(textColor)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+                }
+                Spacer()
+            }
+            
+            // 顯示任務預覽（如果有待確認或已確認的任務）
+            if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex].messages.firstIndex(where: { $0.text == text }),
+               let tasks = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[messageIndex].pendingTasks {
+                
+                let message = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[messageIndex]
+                let messageId = message.id
+                let isExpanded = expandedTaskMessages.contains(messageId)
+                let displayTasks = isExpanded ? tasks : Array(tasks.prefix(1))
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(message.isTaskConfirmed ? "已確認的任務：" : "待確認的任務：")
+                        .font(.headline)
+                    
+                    ForEach(displayTasks) { task in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("標題：\(task.title)")
+                            Text("備註：\(task.note)")
+                            Text("類別：\(task.category)")
+                            Text("開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))")
+                            Text("結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))")
+                            Text("全天：\(task.isAllDay ? "是" : "否")")
+                            Text("已完成：\(task.isCompleted ? "是" : "否")")
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    
+                    if tasks.count > 1 {
+                        Button(action: {
+                            withAnimation {
+                                if isExpanded {
+                                    expandedTaskMessages.remove(messageId)
+                                } else {
+                                    expandedTaskMessages.insert(messageId)
+                                }
+                            }
+                        }) {
+                            HStack {
+                                Text(isExpanded ? "收起" : "展開全部 (\(tasks.count) 個任務)")
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            }
+                            .foregroundColor(.blue)
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    
+                    // 只在任務未確認時顯示確認和取消按鈕
+                    if !message.isTaskConfirmed {
+                        HStack {
+                            Button(action: {
+                                Task {
+                                    await viewModel.confirmAndSaveTask(for: messageId)
+                                }
+                            }) {
+                                Text("確認新增")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color.blue)
+                                    .cornerRadius(8)
+                            }
+                            
+                            Button(action: {
+                                viewModel.rejectTask(for: messageId)
+                            }) {
+                                Text("取消")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color.red)
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.gray.opacity(0.05))
                 .cornerRadius(12)
-                .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
-                .textSelection(.enabled)
-                .frame(maxWidth: UIScreen.main.bounds.width , alignment: .leading)
-            Spacer()
+            }
         }
         .padding(.horizontal)
+    }
+
+    // 格式化日期時間的輔助函數
+    private func formatDate(_ date: Date?, isAllDay: Bool) -> String {
+        guard let date = date else { return "未設定" }
+        let formatter = DateFormatter()
+        if isAllDay {
+            formatter.dateFormat = "yyyy/MM/dd"
+        } else {
+            formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        }
+        return formatter.string(from: date)
     }
 
     // 自定義 Markdown 文字視圖
@@ -211,7 +347,6 @@ struct ChatDemoDynamicView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             ForEach(Array(viewModel.chatRooms.enumerated()), id: \.element.id) { idx, room in
                                 Button {
-                                    currentTask?.cancel()
                                     viewModel.selectedRoomIndex = idx
                                     withAnimation { showSidebar = false }
                                 } label: {
@@ -267,17 +402,13 @@ struct ChatDemoDynamicView: View {
             }
         }
 
-        // 取消舊的任務並創建新的
-        currentTask?.cancel()
-        currentTask = Task {
+        Task {
             _ = await viewModel.sendMessageToGPT(
                 messages: viewModel.chatRooms[viewModel.selectedRoomIndex].messages
             ) { token in
-                if !Task.isCancelled {
-                    viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].text += token
-                }
+                viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].text += token
+                latestMessageId = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].id
             }
-            currentTask = nil
         }
     }
 }
