@@ -146,7 +146,7 @@ class TodoViewModel: ObservableObject {
         newTaskTitle = ""
         newTaskNote = ""
         newTaskColor = colorOptions[0]
-        newTaskFocusTime = 30
+        newTaskFocusTime = 0
         newTaskCategory = "學習"
         newTaskIsAllDay = false
         newTaskStartDate = selectedDate

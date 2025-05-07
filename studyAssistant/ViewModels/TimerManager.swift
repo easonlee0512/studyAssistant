@@ -389,16 +389,24 @@ class TimerManager: ObservableObject {
         // 計算本次專注時間（秒）
         let focusTimeInSeconds = Int(endTime.timeIntervalSince(actualStart))
         
+        // 輸出偵錯訊息
+        print("保存計時記錄: \(subject) - \(focusTimeInSeconds)秒, 完成狀態: \(isCompleted)")
+        print("當前任務ID: \(currentTaskId ?? "無"), TodoViewModel可用: \(todoViewModel != nil)")
+        
         // 使用本地存儲管理器保存記錄
         recordManager.addRecord(record)
         
-        // 只有當使用者暫停計時器並且專注時間超過1分鐘才更新 focusTime
-        if !isCompleted && focusTimeInSeconds >= 60 {
+        // 同步專注時間到統計數據
+        syncFocusTimeToStatistics(subject: subject, focusTimeInSeconds: focusTimeInSeconds)
+        
+        // 只有當專注時間超過1分鐘才更新 focusTime（不管是完成還是暫停）
+        if focusTimeInSeconds >= 60 {
             // 將秒數轉換為分鐘數（向下取整）
             let focusTimeInMinutes = focusTimeInSeconds / 60
             
             // 更新對應任務的 focusTime（以分鐘為單位）
             if let taskId = currentTaskId, let todoViewModel = todoViewModel {
+                print("開始更新任務專注時間: \(taskId) - \(focusTimeInMinutes)分鐘")
                 Task {
                     do {
                         // 獲取任務
@@ -409,14 +417,119 @@ class TimerManager: ObservableObject {
                             
                             // 保存更新後的任務
                             await todoViewModel.updateTask(updatedTask)
-                            print("更新任務專注時間：\(focusTimeInMinutes) 分鐘")
+                            print("成功更新任務專注時間：\(focusTimeInMinutes) 分鐘")
+                        } else {
+                            print("無法找到 ID 為 \(taskId) 的任務")
                         }
                     } catch {
                         print("更新任務 focusTime 失敗: \(error)")
                     }
                 }
+            } else {
+                print("無法更新任務專注時間: taskId或todoViewModel為空")
+            }
+        } else {
+            print("專注時間不足1分鐘，不更新任務的專注時間")
+        }
+    }
+    
+    // 同步專注時間到統計數據
+    private func syncFocusTimeToStatistics(subject: String, focusTimeInSeconds: Int) {
+        // 只有當專注時間超過30秒才同步到統計資料
+        guard focusTimeInSeconds >= 30 else { return }
+        
+        // 取得靜態數據的ViewModel
+        guard let staticViewModel = getStaticViewModel() else {
+            print("無法獲取 StaticViewModel")
+            return
+        }
+        
+        // 計算分鐘數（向下取整）
+        let focusTimeInMinutes = focusTimeInSeconds / 60
+        
+        // 如果專注時間少於1分鐘，直接返回
+        if focusTimeInMinutes < 1 {
+            return
+        }
+        
+        // 獲取當前主題的類別（如果沒有就用「學習」）
+        let category = getCurrentSubjectCategory() ?? "學習"
+        
+        // 異步更新統計數據
+        Task {
+            await staticViewModel.updateCategoryFocusTime(
+                category: category,
+                additionalTime: focusTimeInMinutes
+            )
+            print("已同步專注時間到統計數據：\(subject) - \(focusTimeInMinutes)分鐘")
+        }
+    }
+    
+    // 獲取當前主題所屬的類別
+    private func getCurrentSubjectCategory() -> String? {
+        guard let taskId = currentTaskId, let todoViewModel = todoViewModel else {
+            return nil
+        }
+        
+        // 異步獲取任務數據但用同步方式返回
+        let semaphore = DispatchSemaphore(value: 0)
+        var category: String?
+        
+        Task {
+            if let task = await todoViewModel.getTaskById(taskId) {
+                category = task.category
+                semaphore.signal()
+            } else {
+                semaphore.signal()
             }
         }
+        
+        // 等待最多1秒鐘，超過則返回nil
+        let _ = semaphore.wait(timeout: .now() + 1.0)
+        return category
+    }
+    
+    // 獲取StaticViewModel實例
+    private func getStaticViewModel() -> StaticViewModel? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                if let rootVC = window.rootViewController {
+                    // 檢查EnvironmentObjects
+                    return checkViewControllerForStaticViewModel(rootVC)
+                }
+            }
+        }
+        return nil
+    }
+    
+    // 遞歸檢查ViewController以找到StaticViewModel
+    private func checkViewControllerForStaticViewModel(_ viewController: UIViewController) -> StaticViewModel? {
+        // 檢查當前ViewController的環境
+        if let hostingController = viewController as? UIHostingController<AnyView>,
+           let mirror = Mirror(reflecting: hostingController).children.first(where: { $0.label == "rootView" })?.value,
+           let innerMirror = Mirror(reflecting: mirror).children.first(where: { $0.label == "content" })?.value {
+            
+            for child in Mirror(reflecting: innerMirror).children {
+                if let vm = child.value as? StaticViewModel {
+                    return vm
+                }
+            }
+        }
+        
+        // 檢查子ViewController
+        for child in viewController.children {
+            if let vm = checkViewControllerForStaticViewModel(child) {
+                return vm
+            }
+        }
+        
+        // 如果是被呈現的ViewController，檢查呈現它的ViewController
+        if let parent = viewController.presentingViewController {
+            return checkViewControllerForStaticViewModel(parent)
+        }
+        
+        return nil
     }
     
     // 更新拖動進度

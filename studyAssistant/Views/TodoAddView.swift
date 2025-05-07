@@ -19,6 +19,7 @@ import FirebaseAuth
 struct TodoAddView: View {
     @Environment(\.presentationMode) var presentationMode
     @ObservedObject var viewModel: TodoViewModel
+    @EnvironmentObject var staticViewModel: StaticViewModel
     @Binding var isPresented: Bool
     
     // 額外的資料欄位
@@ -449,6 +450,9 @@ struct TodoAddView: View {
                 // 使用 addTask 而非 saveNewTask 以確保處理好 userId
                 await viewModel.addTask(task)
                 
+                // 檢查並為新類別創建統計記錄
+                await checkAndCreateStatisticsForCategory(viewModel.newTaskCategory)
+                
                 // 任務保存成功後關閉視圖
                 dismissWithAnimation()
             } catch {
@@ -456,6 +460,41 @@ struct TodoAddView: View {
                 viewModel.errorMessage = error.localizedDescription
                 viewModel.isLoading = false
                 print("Error saving task: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // 檢查並創建類別統計記錄
+    private func checkAndCreateStatisticsForCategory(_ category: String) async {
+        // 如果類別為空或為「未分類」，則不創建統計
+        guard !category.isEmpty && category != "未分類" else {
+            return
+        }
+        
+        // 檢查此類別是否已存在於統計中
+        let existingCategories = staticViewModel.statistics.map { $0.category }
+        
+        // 如果此類別不存在，建立新的統計記錄
+        if !existingCategories.contains(category) {
+            print("正在為新類別 \(category) 創建統計記錄")
+            
+            let newStatistic = LearningStatistic(
+                userId: Auth.auth().currentUser?.uid ?? "default",
+                category: category,
+                progress: 0.0,
+                taskcount: 1,
+                taskcompletecount: 0,
+                totalFocusTime: 0,
+                date: Date(),
+                updatedAt: Date(),
+                version: 1
+            )
+            
+            let result = await staticViewModel.saveStatistic(newStatistic)
+            if result {
+                print("已成功為新類別 \(category) 創建統計記錄")
+            } else {
+                print("創建統計記錄失敗：\(staticViewModel.errorMessage ?? "未知錯誤")")
             }
         }
     }

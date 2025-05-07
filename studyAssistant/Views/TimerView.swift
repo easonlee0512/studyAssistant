@@ -336,6 +336,9 @@ struct TimerView: View {
             // 當視圖出現時，設置TodoViewModel並更新當前任務
             timerManager.setTodoViewModel(todoViewModel)
             
+            // 輸出偵錯信息
+            print("TimerView appeared - todoViewModel available: \(todoViewModel != nil)")
+            
             // 如果計時器正在運行，觸發一次更新
             if timerManager.isRunning {
                 timerManager.appWillEnterForeground()
