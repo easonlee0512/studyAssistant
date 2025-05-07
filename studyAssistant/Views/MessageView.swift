@@ -8,7 +8,8 @@ struct ChatDemoDynamicView: View {
     private let midBubbleColor   = Color.hex(hex: "FEECD8") // 淺橙底色（輸入框）
     private let lightBubbleColor = Color.hex(hex: "FEECD8") // 淺橙底色（對話框）
     private let textColor        = Color.black.opacity(0.8)   // 深色文字
-    private let sidebarColor     = Color.hex(hex: "F3D4B7")  // 側邊欄顏色，與"開始"按鈕相似
+    private let sidebarColor     = Color.hex(hex: "F3D4B7").opacity(0.7)  // 側邊欄顏色，與"開始"按鈕相似
+    private let titleColor       = Color.hex(hex: "E27945") // 聊天室名稱顏色
 
     @StateObject private var viewModel = ChatViewModel()
     @State private var inputText = ""
@@ -34,19 +35,19 @@ struct ChatDemoDynamicView: View {
             Button { withAnimation { showSidebar.toggle() } } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(textColor)
+                    .foregroundColor(Color.hex(hex: "E27844"))
             }
             Spacer()
             Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name)
                 .font(.system(size: 28, weight: .bold))
-                .foregroundColor(textColor)
+                .foregroundColor(titleColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer()
             Button(action: viewModel.createNewChatRoom) {
                 Image(systemName: "plus")
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(textColor)
+                    .foregroundColor(Color.hex(hex: "E27844"))
             }
             .disabled(!viewModel.canCreateNewChatRoom)
             .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
