@@ -15,6 +15,7 @@ import Foundation // 確保可以訪問 NotificationConstants
 struct TodoView: View {
     @EnvironmentObject var viewModel: TodoViewModel
     @EnvironmentObject var settingsViewModel: UserSettingsViewModel // 添加 UserSettingsViewModel
+    @EnvironmentObject var staticViewModel: StaticViewModel // 添加 StaticViewModel
     @State private var selectedDate = Date()
     @State private var showingAddTask = false
     @State private var showingTodoDetail = false
@@ -141,6 +142,7 @@ struct TodoView: View {
                         Group {
                             if showingAddTask {
                                 TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
+                                    .environmentObject(staticViewModel)
                                     .transition(.move(edge: .bottom))
                                     .zIndex(1)
                             }

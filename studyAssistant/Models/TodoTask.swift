@@ -60,7 +60,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     var userId: String                 // 使用者 ID
     
     // 建立新任務的初始化方法
-    init(title: String, note: String, color: Color, focusTime: Int, category: String,
+    init(title: String, note: String, color: Color, focusTime: Int = 0, category: String,
          isAllDay: Bool, isCompleted: Bool, repeatType: RepeatType,
          startDate: Date, endDate: Date, userId: String = Auth.auth().currentUser?.uid ?? "") {
         self.id = UUID().uuidString

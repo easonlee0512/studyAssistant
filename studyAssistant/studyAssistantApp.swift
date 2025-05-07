@@ -127,6 +127,7 @@ struct studyAssistantApp: App {
     @StateObject private var todoViewModel = TodoViewModel()
     @StateObject private var authState = AuthState()
     @StateObject private var settingsViewModel = UserSettingsViewModel()
+    @StateObject private var staticViewModel = StaticViewModel()
     
     // 監聽場景階段變化
     @Environment(\.scenePhase) var scenePhase
@@ -139,6 +140,7 @@ struct studyAssistantApp: App {
                     .environmentObject(todoViewModel)
                     .environmentObject(authState)
                     .environmentObject(settingsViewModel)
+                    .environmentObject(staticViewModel)
                     .task {
                         // 首先嘗試遷移舊數據
                         do {
@@ -151,6 +153,7 @@ struct studyAssistantApp: App {
                         // 載入初始資料
                         do {
                             try await todoViewModel.loadTasks()
+                            await staticViewModel.fetchStatistics()
                         } catch {
                             print("Error loading tasks: \(error)")
                         }
@@ -164,6 +167,8 @@ struct studyAssistantApp: App {
                                 try await todoViewModel.loadTasks()
                                 // 同時也重新載入使用者設定
                                 await settingsViewModel.loadData()
+                                // 載入統計數據
+                                await staticViewModel.fetchStatistics()
                                 // 發送通知以更新所有依賴使用者設定的視圖
                                 NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
                             } catch {
@@ -197,6 +202,8 @@ struct studyAssistantApp: App {
                         try await todoViewModel.loadTasks()
                         // 同時也重新載入使用者設定
                         await settingsViewModel.loadData()
+                        // 載入統計數據
+                        await staticViewModel.fetchStatistics()
                         // 發送通知以更新所有依賴使用者設定的視圖
                         NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
                     } catch {

@@ -4,6 +4,7 @@ import SwiftUICore
 struct ContentView: View {
     @StateObject private var viewModel = TodoViewModel()
     @EnvironmentObject var authState: AuthState
+    @EnvironmentObject var timerManager: TimerManager
     @State private var selectedTab = 0
     // 假設有一個共享的待辦事項數據
     @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]
@@ -34,6 +35,7 @@ struct ContentView: View {
                 else if selectedTab == 3 {
                     // 計時頁面
                     TimerView()
+                        .environmentObject(viewModel)
                 }
                 else if selectedTab == 4 {
                     // 設定頁面
@@ -49,6 +51,10 @@ struct ContentView: View {
                     .padding(.bottom, -20)
             }
             .ignoresSafeArea()
+        }
+        .onAppear {
+            // 確保 TimerManager 可以訪問 TodoViewModel
+            timerManager.setTodoViewModel(viewModel)
         }
     }
 }
