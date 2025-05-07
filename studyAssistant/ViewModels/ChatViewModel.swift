@@ -243,201 +243,110 @@ final class ChatViewModel: ObservableObject {
             content: "你現在是安排計畫的大師，問使用者最少的問題去安排計畫，並且要有具體的計畫安排時間。當需要任務資訊時，請使用 getTask 函數來獲取資訊。當需要任務資訊時，請使用 getTime 函數來獲取當前時間。並且語氣為：\(tone)"
         )
         var allMessages = [systemMsg] + apiMsgs
-        
-        let reqBody = OpenAIRequest(
-            model: "gpt-4.1",
-            messages: allMessages,
-            temperature: 0.7,
-            stream: true,
-            functions: [getTaskFunction, getTimeFunction],
-            function_call: nil
-        )
+        var full = ""
+        var hasFunctionCall = false
+        var shouldContinue = true
 
-        print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
+        while shouldContinue {
+            shouldContinue = false  // 預設不繼續，除非遇到 function call
+            
+            let reqBody = OpenAIRequest(
+                model: "gpt-4.1",
+                messages: allMessages,
+                temperature: 0.7,
+                stream: true,
+                functions: [getTaskFunction, getTimeFunction],
+                function_call: nil
+            )
 
-        guard let data = try? encoder.encode(reqBody) else {
-            print("編碼請求失敗")
-            return nil
-        }
+            print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
 
-        var req = URLRequest(url: proxyURL)
-        req.httpMethod = "POST"
-        req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
-        req.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.addValue("text/event-stream", forHTTPHeaderField: "Accept")
-        req.httpBody = data
-
-        do {
-            print("開始發送請求")
-            let (bytes, resp) = try await URLSession.shared.bytes(for: req, delegate: nil)
-            guard let httpResponse = resp as? HTTPURLResponse else {
-                print("回應不是 HTTP 回應")
+            guard let data = try? encoder.encode(reqBody) else {
+                print("編碼請求失敗")
                 return nil
             }
-            print("收到回應，狀態碼：\(httpResponse.statusCode)")
-            guard httpResponse.statusCode == 200 else { return nil }
 
-            var full = ""
-            var hasFunctionCall = false
+            var req = URLRequest(url: proxyURL)
+            req.httpMethod = "POST"
+            req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
+            req.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.addValue("text/event-stream", forHTTPHeaderField: "Accept")
+            req.httpBody = data
 
-            for try await line in bytes.lines {
-                // 檢查任務是否被取消
-                try Task.checkCancellation()
-                
-                guard line.hasPrefix("data: ") else {
-                    print("跳過非資料行：\(line)")
-                    continue
+            do {
+                print("開始發送請求")
+                let (bytes, resp) = try await URLSession.shared.bytes(for: req, delegate: nil)
+                guard let httpResponse = resp as? HTTPURLResponse else {
+                    print("回應不是 HTTP 回應")
+                    return nil
                 }
-                let payload = String(line.dropFirst(6))
-                print("收到資料：\(payload)")
+                print("收到回應，狀態碼：\(httpResponse.statusCode)")
+                guard httpResponse.statusCode == 200 else { return nil }
 
-                if payload == "[DONE]" {
-                    print("收到完成標記")
-                    break
-                }
+                var currentFunctionCall: String?
+                var currentArguments = ""
 
-                if let json = payload.data(using: .utf8),
-                   let chunk = try? decoder.decode(OpenAIStreamChunk.self, from: json) {
-                    print("解析 chunk：\(String(describing: chunk.choices.first?.delta))")
+                for try await line in bytes.lines {
+                    // 檢查任務是否被取消
+                    try Task.checkCancellation()
                     
-                    if let functionCall = chunk.choices.first?.delta.function_call,
-                       let functionName = functionCall.name {
-                        print("檢測到 function call：\(functionName)")
-                        if functionName == "getTask" {
-                            print("執行 getTask 函數")
-                            hasFunctionCall = true
-                            let result = await executeGetTask()
-                            
-                            // 將結果發送回 GPT 繼續對話
-                            allMessages.append(OpenAIMessage(role: "function", content: result, name: "getTask"))
-                            allMessages.append(OpenAIMessage(role: "system", content: "請分析上面的任務列表，並用自然語言回答"))
-                            
-                            // 創建新的請求
-                            let newReqBody = OpenAIRequest(
-                                model: "gpt-4.1",
-                                messages: allMessages,
-                                temperature: 0.7,
-                                stream: true,
-                                functions: [getTaskFunction, getTimeFunction],
-                                function_call: nil
-                            )
-                            
-                            if let newData = try? encoder.encode(newReqBody) {
-                                print("發送新請求給 GPT")
-                                req.httpBody = newData
-                                let (newBytes, newResp) = try await URLSession.shared.bytes(for: req, delegate: nil)
-                                guard let httpResponse = newResp as? HTTPURLResponse else {
-                                    print("回應不是 HTTP 回應")
-                                    continue
-                                }
-                                print("收到新回應，狀態碼：\(httpResponse.statusCode)")
-                                guard httpResponse.statusCode == 200 else {
-                                    print("HTTP 狀態碼不是 200")
-                                    continue
-                                }
-                                
-                                for try await newLine in newBytes.lines {
-                                    guard newLine.hasPrefix("data: ") else {
-                                        print("跳過非資料行：\(newLine)")
-                                        continue
-                                    }
-                                    let newPayload = String(newLine.dropFirst(6))
-                                    print("收到新資料：\(newPayload)")
-                                    
-                                    if newPayload == "[DONE]" {
-                                        print("收到完成標記")
-                                        break
-                                    }
-                                    
-                                    if let newJson = newPayload.data(using: .utf8),
-                                       let newChunk = try? decoder.decode(OpenAIStreamChunk.self, from: newJson),
-                                       let piece = newChunk.choices.first?.delta.content {
-                                        print("解析到內容：\(piece)")
-                                        full += piece
-                                        await onToken?(piece)
-                                    }
-                                }
-                            }
-                        } else if functionName == "getTime" {
-                            print("執行 getTime 函數")
-                            hasFunctionCall = true
-                            let result = executeGetTime()
-                            print("getTime 結果：\(result)")
-                            
-                            // 將結果發送回 GPT 繼續對話
-                            allMessages.append(OpenAIMessage(role: "function", content: result, name: "getTime"))
-                            allMessages.append(OpenAIMessage(role: "system", content: "請根據當前時間，用自然語言回應用戶，並根據時間給出合適的建議。"))
-                            
-                            // 創建新的請求
-                            let newReqBody = OpenAIRequest(
-                                model: "gpt-4.1",
-                                messages: allMessages,
-                                temperature: 0.7,
-                                stream: true,
-                                functions: [getTaskFunction, getTimeFunction],
-                                function_call: nil
-                            )
-                            
-                            if let newData = try? encoder.encode(newReqBody) {
-                                print("發送新請求給 GPT")
-                                req.httpBody = newData
-                                let (newBytes, newResp) = try await URLSession.shared.bytes(for: req, delegate: nil)
-                                guard let httpResponse = newResp as? HTTPURLResponse else {
-                                    print("回應不是 HTTP 回應")
-                                    continue
-                                }
-                                print("收到新回應，狀態碼：\(httpResponse.statusCode)")
-                                guard httpResponse.statusCode == 200 else {
-                                    print("HTTP 狀態碼不是 200")
-                                    continue
-                                }
-                                
-                                for try await newLine in newBytes.lines {
-                                    guard newLine.hasPrefix("data: ") else {
-                                        print("跳過非資料行：\(newLine)")
-                                        continue
-                                    }
-                                    let newPayload = String(newLine.dropFirst(6))
-                                    print("收到新資料：\(newPayload)")
-                                    
-                                    if newPayload == "[DONE]" {
-                                        print("收到完成標記")
-                                        break
-                                    }
-                                    
-                                    if let newJson = newPayload.data(using: .utf8),
-                                       let newChunk = try? decoder.decode(OpenAIStreamChunk.self, from: newJson),
-                                       let piece = newChunk.choices.first?.delta.content {
-                                        print("解析到內容：\(piece)")
-                                        full += piece
-                                        await onToken?(piece)
-                                    }
-                                }
-                            } else {
-                                print("編碼新請求失敗")
-                            }
-                        }
-                    } else if let piece = chunk.choices.first?.delta.content {
-                        print("收到內容：\(piece)")
-                        full += piece
-                        await onToken?(piece)
+                    guard line.hasPrefix("data: ") else {
+                        print("跳過非資料行：\(line)")
+                        continue
                     }
-                } else {
-                    print("無法解析 JSON 或 chunk")
+                    let payload = String(line.dropFirst(6))
+                    print("收到資料：\(payload)")
+
+                    if payload == "[DONE]" {
+                        print("收到完成標記")
+                        
+                        // 如果有完整的 function call，執行它
+                        if let functionName = currentFunctionCall {
+                            shouldContinue = true
+                            var functionResult = ""
+                            
+                            if functionName == "getTask" {
+                                print("執行 getTask 函數")
+                                functionResult = await executeGetTask()
+                            } else if functionName == "getTime" {
+                                print("執行 getTime 函數")
+                                functionResult = executeGetTime()
+                            }
+                            
+                            // 將 function 結果添加到消息列表
+                            allMessages.append(OpenAIMessage(role: "function", content: functionResult, name: functionName))
+                            allMessages.append(OpenAIMessage(role: "system", content: "請根據上面的資訊，用自然語言回應用戶，並給出具體的建議。"))
+                        }
+                        break
+                    }
+
+                    if let json = payload.data(using: .utf8),
+                       let chunk = try? decoder.decode(OpenAIStreamChunk.self, from: json) {
+                        if let functionCall = chunk.choices.first?.delta.function_call {
+                            hasFunctionCall = true
+                            if let name = functionCall.name {
+                                currentFunctionCall = name
+                            }
+                            if let args = functionCall.arguments {
+                                currentArguments += args
+                            }
+                        } else if let piece = chunk.choices.first?.delta.content {
+                            full += piece
+                            await onToken?(piece)
+                        }
+                    }
                 }
+            } catch is CancellationError {
+                print("任務被取消")
+                return nil
+            } catch {
+                print("發生錯誤：\(error)")
+                return nil
             }
-
-            print("對話結束，hasFunctionCall: \(hasFunctionCall), full: \(full)")
-            
-
-            return full
-        } catch is CancellationError {
-            print("任務被取消")
-            return nil
-        } catch {
-            print("發生錯誤：\(error)")
-            return nil
         }
+
+        print("對話結束，hasFunctionCall: \(hasFunctionCall), full: \(full)")
+        return full
     }
 
     // ----------------------------- 產生標題（非串流） -----------------------------

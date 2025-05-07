@@ -79,6 +79,7 @@ struct ChatDemoDynamicView: View {
                 .foregroundColor(.white)
                 .cornerRadius(12)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
+                .frame(maxWidth: UIScreen.main.bounds.width , alignment: .trailing)
         }
         .padding(.horizontal)
     }
@@ -91,6 +92,7 @@ struct ChatDemoDynamicView: View {
                 .cornerRadius(12)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
                 .textSelection(.enabled)
+                .frame(maxWidth: UIScreen.main.bounds.width , alignment: .leading)
             Spacer()
         }
         .padding(.horizontal)
