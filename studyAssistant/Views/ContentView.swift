@@ -5,6 +5,7 @@ struct ContentView: View {
     @StateObject private var viewModel = TodoViewModel()
     @EnvironmentObject var authState: AuthState
     @EnvironmentObject var timerManager: TimerManager
+    @EnvironmentObject var chatViewModel: ChatViewModel
     @State private var selectedTab = 0
     // 假設有一個共享的待辦事項數據
     @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]

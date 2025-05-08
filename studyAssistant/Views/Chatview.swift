@@ -11,7 +11,8 @@ struct ChatDemoDynamicView: View {
     private let sidebarColor     = Color.hex(hex: "F3D4B7").opacity(0.7)  // 側邊欄顏色，與"開始"按鈕相似
     private let titleColor       = Color.hex(hex: "E27945") // 聊天室名稱顏色
 
-    @StateObject private var viewModel = ChatViewModel()
+    @EnvironmentObject private var viewModel: ChatViewModel
+    @EnvironmentObject private var staticViewModel: StaticViewModel
     @State private var inputText = ""
     @State private var showSidebar = false
     @State private var latestMessageId: UUID? // 追蹤最新訊息的 ID
@@ -27,6 +28,9 @@ struct ChatDemoDynamicView: View {
             }
             .offset(x: showSidebar ? 250 : 0)
             if showSidebar { sidebarOverlay }
+        }
+        .onAppear {
+            viewModel.staticViewModel = staticViewModel
         }
     }
 
@@ -197,9 +201,10 @@ struct ChatDemoDynamicView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 10)
-                                    .background(Color.blue)
+                                    .background(message.isProcessing ? Color.gray : Color.blue)
                                     .cornerRadius(8)
                             }
+                            .disabled(message.isProcessing)
                             
                             Button(action: {
                                 viewModel.rejectTask(for: messageId)
@@ -208,9 +213,20 @@ struct ChatDemoDynamicView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 10)
-                                    .background(Color.red)
+                                    .background(message.isProcessing ? Color.gray : Color.red)
                                     .cornerRadius(8)
                             }
+                            .disabled(message.isProcessing)
+                        }
+                    } else {
+                        // 顯示任務新增結果
+                        if message.isTaskConfirmed {
+                            Text(message.successCount > 0 ? 
+                                 "✅ \(message.successCount) 個任務已成功新增" + 
+                                 (message.failureCount > 0 ? "\n❌ \(message.failureCount) 個任務新增失敗" : "") :
+                                 "❌ 新增任務失敗")
+                                .foregroundColor(message.successCount > 0 ? .green : .red)
+                                .padding(.top, 8)
                         }
                     }
                 }
@@ -363,6 +379,13 @@ struct ChatDemoDynamicView: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 3)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        viewModel.deleteChatRoom(at: idx)
+                                    } label: {
+                                        Label("刪除聊天室", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
                     }

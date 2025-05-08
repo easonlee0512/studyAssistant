@@ -7,11 +7,13 @@ struct OpenAIMessage: Codable {
     let role: String
     let content: String
     let name: String?
+    let tool_calls: [ToolCall]?
     
-    init(role: String, content: String, name: String? = nil) {
+    init(role: String, content: String, name: String? = nil, tool_calls: [ToolCall]? = nil) {
         self.role = role
         self.content = content
         self.name = name
+        self.tool_calls = tool_calls
     }
 }
 
@@ -82,13 +84,75 @@ struct OpenAIFunctionCall: Codable {
     }
 }
 
+// Tool calling 相關結構
+struct Tool: Codable {
+    let type: String
+    let function: ToolFunction
+}
+
+struct ToolFunction: Codable {
+    let name: String
+    let description: String
+    let parameters: Parameters
+    
+    struct Parameters: Codable {
+        let type: String
+        let properties: [String: Property]
+        let required: [String]?
+        
+        struct Property: Codable {
+            let type: String
+            let description: String?
+            
+            // 用於陣列類型的額外屬性
+            private let itemsObject: PropertyObject?
+            
+            var items: PropertyObject? {
+                return itemsObject
+            }
+            
+            init(type: String, description: String? = nil, items: PropertyObject? = nil) {
+                self.type = type
+                self.description = description
+                self.itemsObject = items
+            }
+            
+            enum CodingKeys: String, CodingKey {
+                case type, description
+                case itemsObject = "items"
+            }
+        }
+        
+        struct PropertyObject: Codable {
+            let type: String
+            let properties: [String: Property]?
+            
+            init(type: String, properties: [String: Property]? = nil) {
+                self.type = type
+                self.properties = properties
+            }
+        }
+    }
+}
+
+struct ToolCall: Codable {
+    let id: String
+    let type: String
+    let function: ToolCallFunction
+}
+
+struct ToolCallFunction: Codable {
+    let name: String
+    let arguments: String
+}
+
 struct OpenAIRequest: Codable {
     let model: String
     let messages: [OpenAIMessage]
     let temperature: Float
     let stream: Bool
-    let functions: [OpenAIFunction]?
-    let function_call: OpenAIFunctionCall?
+    let tools: [Tool]?
+    let tool_choice: String?
 }
 
 // 非串流回傳格式（給 generateTitle 用）
@@ -96,14 +160,13 @@ struct OpenAIResponseChoice: Decodable {
     let index: Int
     let message: OpenAIMessage
     let finishReason: String?
-    let function_call: String?
 
     enum CodingKeys: String, CodingKey {
         case index, message
         case finishReason = "finish_reason"
-        case function_call
     }
 }
+
 struct OpenAIResponse: Decodable {
     let id: String
     let choices: [OpenAIResponseChoice]
@@ -113,13 +176,21 @@ struct OpenAIResponse: Decodable {
 struct OpenAIStreamDelta: Decodable {
     let role: String?
     let content: String?
-    let function_call: FunctionCallDelta?
+    let tool_calls: [ToolCallDelta]?
     
-    struct FunctionCallDelta: Decodable {
-        let name: String?
-        let arguments: String?
+    struct ToolCallDelta: Decodable {
+        let index: Int
+        let id: String?
+        let type: String?
+        let function: FunctionDelta?
+        
+        struct FunctionDelta: Decodable {
+            let name: String?
+            let arguments: String?
+        }
     }
 }
+
 struct OpenAIStreamChoice: Decodable {
     let index: Int
     let delta: OpenAIStreamDelta
@@ -130,35 +201,42 @@ struct OpenAIStreamChoice: Decodable {
         case finishReason = "finish_reason"
     }
 }
+
 struct OpenAIStreamChunk: Decodable {
     let id: String
     let choices: [OpenAIStreamChoice]
 }
 
 // MARK: - 基本聊天資料結構
-struct ChatMessage: Identifiable {
+struct ChatMessage: Identifiable, Codable {
     let id = UUID()
     var text: String
     let isMe: Bool
     var pendingTasks: [PendingTask]?
     var isTaskConfirmed: Bool
+    var isProcessing: Bool
+    var successCount: Int
+    var failureCount: Int
     
-    init(text: String, isMe: Bool, pendingTasks: [PendingTask]? = nil, isTaskConfirmed: Bool = false) {
+    init(text: String, isMe: Bool, pendingTasks: [PendingTask]? = nil, isTaskConfirmed: Bool = false, isProcessing: Bool = false, successCount: Int = 0, failureCount: Int = 0) {
         self.text = text
         self.isMe = isMe
         self.pendingTasks = pendingTasks
         self.isTaskConfirmed = isTaskConfirmed
+        self.isProcessing = isProcessing
+        self.successCount = successCount
+        self.failureCount = failureCount
     }
 }
 
-struct ChatRoom: Identifiable {
+struct ChatRoom: Identifiable, Codable {
     let id = UUID()
     var name: String
     var messages: [ChatMessage]
 }
 
 // MARK: - 待確認的任務結構
-struct PendingTask: Identifiable {
+struct PendingTask: Identifiable, Codable {
     let id = UUID()
     let title: String
     let note: String
@@ -174,6 +252,9 @@ struct PendingTask: Identifiable {
 final class ChatViewModel: ObservableObject {
     private let proxyURL   = URL(string: "https://gpt-proxy-api.studyassistant.workers.dev")!
     private let proxyToken = "my-secret-token"
+    
+    @Published var staticViewModel: StaticViewModel?
+    @Published var todoViewModel = TodoViewModel()
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -185,58 +266,90 @@ final class ChatViewModel: ObservableObject {
     @Published var currentFunction: String?
     @Published var isLoading: Bool = false
 
+    private let chatRoomsKey = "local_chat_rooms"
+
     // 聊天室資料
     @Published var chatRooms: [ChatRoom] = [
         ChatRoom(name: "新聊天室", messages: [
             ChatMessage(text: "我是讀書助手，有什麼可以幫您安排的讀書計劃嗎？", isMe: false)
         ])
-    ]
+    ] {
+        didSet {
+            // 限制最多 15 個聊天室，超過時自動刪除最舊的
+            while chatRooms.count > 15 {
+                chatRooms.removeFirst()
+                // 調整 selectedRoomIndex，避免越界
+                if selectedRoomIndex > 0 {
+                    selectedRoomIndex -= 1
+                }
+            }
+            // 限制每個聊天室最多 300 則訊息
+            for i in chatRooms.indices {
+                if chatRooms[i].messages.count > 300 {
+                    chatRooms[i].messages.removeFirst(chatRooms[i].messages.count - 300)
+                }
+            }
+            saveChatRoomsToLocal()
+        }
+    }
     @Published var selectedRoomIndex: Int = 0
 
     // 定義 getTask 函數
-    private let getTaskFunction = OpenAIFunction(
-        name: "getTask",
-        description: "Get all tasks from the system",
-        parameters: OpenAIFunction.Parameters(
-            type: "object",
-            properties: [:]
+    private let getTaskFunction = Tool(
+        type: "function",
+        function: ToolFunction(
+            name: "getTask",
+            description: "Get all tasks from the system",
+            parameters: ToolFunction.Parameters(
+                type: "object",
+                properties: [:],
+                required: []
+            )
         )
     )
 
     // 定義 getTime 函數
-    private let getTimeFunction = OpenAIFunction(
-        name: "getTime",
-        description: "Get current time from the system",
-        parameters: OpenAIFunction.Parameters(
-            type: "object",
-            properties: [:]
+    private let getTimeFunction = Tool(
+        type: "function",
+        function: ToolFunction(
+            name: "getTime",
+            description: "Get current time from the system",
+            parameters: ToolFunction.Parameters(
+                type: "object",
+                properties: [:],
+                required: []
+            )
         )
     )
 
     // 定義 saveTask 函數
-    private let saveTaskFunction = OpenAIFunction(
-        name: "saveTask",
-        description: "Save one or multiple tasks to the system. All fields are required for each task.",
-        parameters: OpenAIFunction.Parameters(
-            type: "object",
-            properties: [
-                "tasks": .init(
-                    type: "array",
-                    description: "Array of tasks to save. Each task must include all required fields.",
-                    items: .init(
-                        type: "object",
-                        properties: [
-                            "title": .init(type: "string", description: "Task title (required)"),
-                            "note": .init(type: "string", description: "Task note (required)"),
-                            "category": .init(type: "string", description: "Task category (required, e.g., '學習', '工作', '生活', '運動')"),
-                            "startDate": .init(type: "string", description: "Start date in ISO 8601 format (required)"),
-                            "endDate": .init(type: "string", description: "End date in ISO 8601 format (required)"),
-                            "isAllDay": .init(type: "string", description: "Whether the task is all day, must be 'true' or 'false' (required)"),
-                            "isCompleted": .init(type: "string", description: "Whether the task is completed, must be 'true' or 'false' (required)")
-                        ]
+    private let saveTaskFunction = Tool(
+        type: "function",
+        function: ToolFunction(
+            name: "saveTask",
+            description: "Save one or multiple tasks to the system. All fields are required for each task.",
+            parameters: ToolFunction.Parameters(
+                type: "object",
+                properties: [
+                    "tasks": .init(
+                        type: "array",
+                        description: "Array of tasks to save. Each task must include all required fields.",
+                        items: .init(
+                            type: "object",
+                            properties: [
+                                "title": .init(type: "string", description: "Task title (required)"),
+                                "note": .init(type: "string", description: "Task note (required)"),
+                                "category": .init(type: "string", description: "Task category (required, Based on these tasks, assign an overall category."),
+                                "startDate": .init(type: "string", description: "Start date in ISO 8601 format (required)"),
+                                "endDate": .init(type: "string", description: "End date in ISO 8601 format (required)"),
+                                "isAllDay": .init(type: "string", description: "Whether the task is all day, must be 'true' or 'false' (required)"),
+                                "isCompleted": .init(type: "string", description: "Whether the task is completed, must be 'true' or 'false' (required)")
+                            ]
+                        )
                     )
-                )
-            ]
+                ],
+                required: ["tasks"]
+            )
         )
     )
 
@@ -314,15 +427,51 @@ final class ChatViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
-    // 執行 saveTask 函數
+    // 檢查並創建類別統計
+    private func checkAndCreateStatisticsForCategory(_ category: String) async {
+        guard let staticViewModel = staticViewModel else { return }
+        
+        // 如果類別為空或為「未分類」，則不創建統計
+        guard !category.isEmpty && category != "未分類" else {
+            return
+        }
+        
+        // 檢查此類別是否已存在於統計中
+        let existingCategories = staticViewModel.statistics.map { $0.category }
+        
+        // 如果此類別不存在，建立新的統計記錄
+        if !existingCategories.contains(category) {
+            print("正在為新類別 \(category) 創建統計記錄")
+            
+            let newStatistic = LearningStatistic(
+                userId: Auth.auth().currentUser?.uid ?? "default",
+                category: category,
+                progress: 0.0,
+                taskcount: 1,
+                taskcompletecount: 0,
+                totalFocusTime: 0,
+                date: Date(),
+                updatedAt: Date(),
+                version: 1
+            )
+            
+            let result = await staticViewModel.saveStatistic(newStatistic)
+            if result {
+                print("已成功為新類別 \(category) 創建統計記錄")
+            } else {
+                print("創建統計記錄失敗：\(staticViewModel.errorMessage ?? "未知錯誤")")
+            }
+        }
+    }
+
+    // 執行保存任務函數
     private func executeSaveTask(arguments: String) async -> String {
         currentFunction = "saveTask"
-        print("Executing saveTask with arguments: \(arguments)")
+        defer { currentFunction = nil }
         
         // 檢查當前訊息是否已有待確認的任務
         let currentMessageIndex = chatRooms[selectedRoomIndex].messages.count - 1
         if chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingTasks != nil {
-            currentFunction = nil
             return "[WAITING_FOR_USER] 已有待確認的任務，描述安排的任務後請等待用戶處理。"
         }
         
@@ -357,7 +506,6 @@ final class ChatViewModel: ObservableObject {
         do {
             guard let jsonData = arguments.data(using: .utf8) else {
                 print("無法將參數轉換為 JSON 數據")
-                currentFunction = nil
                 return "無法解析任務參數"
             }
             
@@ -380,9 +528,7 @@ final class ChatViewModel: ObservableObject {
                 // 嘗試所有可能的格式
                 for format in dateFormats {
                     dateFormatter.dateFormat = format
-                    print("嘗試使用格式：\(format)")
                     if let date = dateFormatter.date(from: dateString) {
-                        print("成功使用格式 \(format) 解析日期：\(date)")
                         return date
                     }
                 }
@@ -391,7 +537,6 @@ final class ChatViewModel: ObservableObject {
                 if dateString.contains("+") || dateString.contains("-") {
                     let components = dateString.components(separatedBy: CharacterSet(charactersIn: "+-"))
                     if let basicString = components.first {
-                        print("嘗試解析不帶時區的日期：\(basicString)")
                         return parseDate(basicString)
                     }
                 }
@@ -407,7 +552,6 @@ final class ChatViewModel: ObservableObject {
                 guard let startDate = parseDate(task.startDate),
                       let endDate = parseDate(task.endDate) else {
                     print("日期格式無效：startDate=\(task.startDate), endDate=\(task.endDate)")
-                    currentFunction = nil
                     return "日期格式無效"
                 }
                 
@@ -424,6 +568,9 @@ final class ChatViewModel: ObservableObject {
                     isCompleted: isCompletedBool
                 )
                 
+                // 檢查並創建類別統計
+                await checkAndCreateStatisticsForCategory(task.resolvedCategory)
+                
                 pendingTasks.append(pendingTask)
             }
             
@@ -432,11 +579,9 @@ final class ChatViewModel: ObservableObject {
             
             // 返回確認消息
             let taskCount = pendingTasks.count
-            currentFunction = nil
             return "[WAITING_FOR_USER] 已創建 \(taskCount) 個待確認任務，描述安排的任務後，等待用戶確認中..."
             
         } catch {
-            currentFunction = nil
             print("解析參數時發生錯誤：\(error)")
             return "解析任務參數時發生錯誤：\(error.localizedDescription)"
         }
@@ -445,56 +590,66 @@ final class ChatViewModel: ObservableObject {
     // 確認並保存任務
     func confirmAndSaveTask(for messageId: UUID) async {
         guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }),
-              let tasks = chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks else { return }
+              let tasks = chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks,
+              !chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed else {
+            return
+        }
         
-        do {
-            for task in tasks {
-                // 創建新的 TodoTask
-                let newTask = TodoTask(
+        // 標記任務為處理中
+        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = true
+        
+        var successCount = 0
+        var failureCount = 0
+        
+        // 保存每個任務
+        for task in tasks {
+            do {
+                let todoTask = TodoTask(
                     title: task.title,
                     note: task.note,
-                    color: .red.opacity(0.4),  // 使用預設顏色
-                    focusTime: 0,              // 預設專注時間為 0
+                    color: Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),
+                    focusTime: 0,
                     category: task.category,
                     isAllDay: task.isAllDay,
                     isCompleted: task.isCompleted,
-                    repeatType: .none,         // 預設不重複
+                    repeatType: .none,
                     startDate: task.startDate,
-                    endDate: task.endDate
+                    endDate: task.endDate,
+                    userId: ""
                 )
                 
-                // 保存到 Firebase
-                try await FirebaseService.shared.saveTodoTask(newTask)
+                // 檢查並創建類別統計
+                await checkAndCreateStatisticsForCategory(task.category)
+                
+                // 保存任務
+                await todoViewModel.addTask(todoTask)
+                successCount += 1
+            } catch {
+                print("Error saving task: \(error)")
+                failureCount += 1
             }
-            
-            // 添加確認消息
-            let taskCount = tasks.count
-            chatRooms[selectedRoomIndex].messages.append(
-                ChatMessage(text: "\(taskCount) 個任務已成功保存！", isMe: false)
-            )
-            
-            // 標記任務為已確認，但保留任務預覽
-            chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed = true
-            
-        } catch {
-            print("保存任務時發生錯誤：\(error)")
-            chatRooms[selectedRoomIndex].messages.append(
-                ChatMessage(text: "保存任務時發生錯誤，請稍後再試。", isMe: false)
-            )
         }
+        
+        // 更新成功/失敗計數
+        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = successCount
+        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = failureCount
+        
+        // 完成處理並標記為已確認
+        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = false
+        chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed = true
     }
     
     // 拒絕任務
     func rejectTask(for messageId: UUID) {
         guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }) else { return }
         
-        // 添加拒絕消息
-        chatRooms[selectedRoomIndex].messages.append(
-            ChatMessage(text: "已取消新增任務。", isMe: false, pendingTasks: nil)
-        )
+        // 標記訊息為已確認，並設置失敗狀態
+        chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed = true
+        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = 0
+        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks?.count ?? 0
         
-        // 清除被拒絕訊息的待確認任務
-        chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks = nil
+        // 不清除待確認任務，保留顯示
+        // chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks = nil
     }
 
     // ----------------------------- 串流 GPT -----------------------------
@@ -515,19 +670,19 @@ final class ChatViewModel: ObservableObject {
             OpenAIMessage(role: $0.isMe ? "user" : "assistant", content: $0.text)
         }
         
-        let tone = "嬌羞色氣露骨女朋友語氣"
+        let tone = "沉著穩重的專家"
         // 添加 system message 來指導 GPT 使用 function
         let systemMsg = OpenAIMessage(
             role: "system",
             content: """
             你是一位「計畫大師」，目標是用最少的提問，為使用者排出具體且可執行的時間表。
-            可用函式：
+            可用工具：
             getTask()      ：取得使用者現有任務
             getTime()      ：取得目前時間
             saveTask({...}): 儲存新任務，所有欄位皆必填  
             - title：任務標題（用同一重要主題，多筆共用相同標題）  
             - note：任務備註（描述任務細項）
-            - category：任務類別（必須是：學習、工作、生活、運動其中之一）
+            - category：任務類別（根據這些任務，分配一個總體類別。）
             - startDate：開始時間（ISO 8601格式）
             - endDate：結束時間（ISO 8601格式）
             - isAllDay：是否全天（必須是 true 或 false）
@@ -556,8 +711,8 @@ final class ChatViewModel: ObservableObject {
                 messages: allMessages,
                 temperature: 0.7,
                 stream: true,
-                functions: [getTaskFunction, getTimeFunction, saveTaskFunction],
-                function_call: nil
+                tools: [getTaskFunction, getTimeFunction, saveTaskFunction],
+                tool_choice: "auto"
             )
 
             print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
@@ -637,13 +792,15 @@ final class ChatViewModel: ObservableObject {
 
                     if let json = payload.data(using: .utf8),
                        let chunk = try? decoder.decode(OpenAIStreamChunk.self, from: json) {
-                        if let functionCall = chunk.choices.first?.delta.function_call {
+                        if let toolCalls = chunk.choices.first?.delta.tool_calls,
+                           let firstToolCall = toolCalls.first {
                             hasFunctionCall = true
-                            if let name = functionCall.name {
+                            
+                            if let name = firstToolCall.function?.name {
                                 print("收到函數名稱：\(name)")
                                 currentFunctionCall = name
                             }
-                            if let args = functionCall.arguments {
+                            if let args = firstToolCall.function?.arguments {
                                 print("收到函數參數：\(args)")
                                 currentArguments += args
                             }
@@ -669,13 +826,15 @@ final class ChatViewModel: ObservableObject {
     // ----------------------------- 產生標題（非串流） -----------------------------
     func generateTitle(from firstUserMessage: String) async -> String? {
         let sys = OpenAIMessage(role: "system", content: "你是一個摘要大師，請根據使用者的第一句話，生成最多8個字的摘要。直接輸出名稱不要有簡體字。")
-        let usr = OpenAIMessage(role: "user",   content: firstUserMessage)
-        let body = OpenAIRequest(model: "gpt-4.1-mini",
-                                 messages: [sys, usr],
-                                 temperature: 0.2,
-                                 stream: false,
-                                 functions: nil,
-                                 function_call: nil)
+        let usr = OpenAIMessage(role: "user", content: firstUserMessage)
+        let body = OpenAIRequest(
+            model: "gpt-4.1-mini",
+            messages: [sys, usr],
+            temperature: 0.2,
+            stream: false,
+            tools: nil,
+            tool_choice: nil
+        )
         return await callOpenAIOnce(with: body)
     }
 
@@ -696,5 +855,58 @@ final class ChatViewModel: ObservableObject {
             }
         } catch { }
         return nil
+    }
+
+    // MARK: - 聊天室管理
+    func deleteChatRoom(at index: Int) {
+        guard chatRooms.count > 1 else { return }  // 確保至少保留一個聊天室
+        
+        // 如果要刪除的是當前選中的聊天室
+        if index == selectedRoomIndex {
+            // 如果刪除的是最後一個聊天室，選中前一個
+            if index == chatRooms.count - 1 {
+                selectedRoomIndex = index - 1
+            }
+            // 否則保持當前索引（會自動顯示下一個聊天室）
+        }
+        // 如果刪除的聊天室在當前選中的聊天室之前，需要調整選中索引
+        else if index < selectedRoomIndex {
+            selectedRoomIndex -= 1
+        }
+        
+        // 刪除聊天室
+        chatRooms.remove(at: index)
+        
+        // 如果刪除後沒有聊天室了，創建一個新的
+        if chatRooms.isEmpty {
+            chatRooms.append(ChatRoom(name: "新聊天室", messages: [
+                ChatMessage(text: "我是讀書助手，有什麼可以幫您安排的讀書計劃嗎？", isMe: false)
+            ]))
+            selectedRoomIndex = 0
+        }
+    }
+
+    func loadChatRoomsFromLocal() {
+        if let data = UserDefaults.standard.data(forKey: chatRoomsKey) {
+            do {
+                let decoded = try JSONDecoder().decode([ChatRoom].self, from: data)
+                self.chatRooms = decoded
+            } catch {
+                print("載入本地聊天記錄失敗: \(error)")
+            }
+        }
+    }
+
+    func saveChatRoomsToLocal() {
+        do {
+            let data = try JSONEncoder().encode(self.chatRooms)
+            UserDefaults.standard.set(data, forKey: chatRoomsKey)
+        } catch {
+            print("儲存本地聊天記錄失敗: \(error)")
+        }
+    }
+
+    init() {
+        loadChatRoomsFromLocal()
     }
 } 

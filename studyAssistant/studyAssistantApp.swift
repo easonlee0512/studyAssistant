@@ -128,6 +128,7 @@ struct studyAssistantApp: App {
     @StateObject private var authState = AuthState()
     @StateObject private var settingsViewModel = UserSettingsViewModel()
     @StateObject private var staticViewModel = StaticViewModel()
+    @StateObject private var chatViewModel = ChatViewModel()
     
     // 監聽場景階段變化
     @Environment(\.scenePhase) var scenePhase
@@ -141,6 +142,7 @@ struct studyAssistantApp: App {
                     .environmentObject(authState)
                     .environmentObject(settingsViewModel)
                     .environmentObject(staticViewModel)
+                    .environmentObject(chatViewModel)
                     .task {
                         // 首先嘗試遷移舊數據
                         do {
