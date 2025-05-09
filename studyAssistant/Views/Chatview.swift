@@ -31,6 +31,10 @@ struct ChatDemoDynamicView: View {
         }
         .onAppear {
             viewModel.staticViewModel = staticViewModel
+            // 每次進入聊天室頁面時自動選擇最新聊天室
+            if !viewModel.chatRooms.isEmpty {
+                viewModel.selectedRoomIndex = viewModel.chatRooms.count - 1
+            }
         }
     }
 
@@ -76,12 +80,14 @@ struct ChatDemoDynamicView: View {
                 .id("messageBottom") // 添加一個 ID 用於滾動
             }
             .onChange(of: viewModel.chatRooms[viewModel.selectedRoomIndex].messages.count) { _ in
-                withAnimation {
                     proxy.scrollTo("messageBottom", anchor: .bottom)
-                }
             }
             .onChange(of: latestMessageId) { _ in
-                withAnimation {
+                proxy.scrollTo("messageBottom", anchor: .bottom)
+            }
+            .onAppear {
+                // 每次進入聊天室頁面時自動滾動到底部
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     proxy.scrollTo("messageBottom", anchor: .bottom)
                 }
             }
@@ -361,7 +367,7 @@ struct ChatDemoDynamicView: View {
                         .padding(.leading, 20)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 5) {
-                            ForEach(Array(viewModel.chatRooms.enumerated()), id: \.element.id) { idx, room in
+                            ForEach(Array(viewModel.chatRooms.enumerated().reversed()), id: \ .element.id) { idx, room in
                                 Button {
                                     viewModel.selectedRoomIndex = idx
                                     withAnimation { showSidebar = false }

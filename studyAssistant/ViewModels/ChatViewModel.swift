@@ -292,7 +292,7 @@ final class ChatViewModel: ObservableObject {
             saveChatRoomsToLocal()
         }
     }
-    @Published var selectedRoomIndex: Int = 0
+    @Published var selectedRoomIndex: Int = 0 // 預設為 0，稍後在 init 設置為最新聊天室
 
     // 定義 getTask 函數
     private let getTaskFunction = Tool(
@@ -908,5 +908,9 @@ final class ChatViewModel: ObservableObject {
 
     init() {
         loadChatRoomsFromLocal()
+        // 預設選擇最新聊天室（最上方）
+        if !chatRooms.isEmpty {
+            selectedRoomIndex = chatRooms.count - 1
+        }
     }
 } 
