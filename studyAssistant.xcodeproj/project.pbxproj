@@ -25,12 +25,15 @@
 		9B5A80CA2DC24B32007E5758 /* TimerRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80C92DC24B32007E5758 /* TimerRecord.swift */; };
 		9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */; };
 		9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5A80CF2DC24F6A007E5758 /* View+Extension.swift */; };
+		9B6AA06B2DCE03E0001545E1 /* ChatSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6AA06A2DCE03CB001545E1 /* ChatSettingView.swift */; };
+		9B6AA06F2DCEF685001545E1 /* StudySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6AA06E2DCEF673001545E1 /* StudySettings.swift */; };
 		9B6D68F92DC3758800D0A3A8 /* TodoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */; };
 		9B6D68FB2DC3CC9B00D0A3A8 /* FirebaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */; };
 		9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */; };
 		9B6D68FF2DC3D06900D0A3A8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */; };
 		9B6D69012DC3D06900D0A3A8 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69002DC3D06900D0A3A8 /* FirebaseDatabase */; };
 		9B6D69032DC3D06900D0A3A8 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69022DC3D06900D0A3A8 /* FirebaseFirestore */; };
+		9BADA1AB2DCDF11300A7B235 /* Chatview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BADA1AA2DCDF11300A7B235 /* Chatview.swift */; };
 		9BCA070B2DB5F8E00039EA2B /* TodoAddView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */; };
 		9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9832DC499DC00B3FF29 /* Date+Extension.swift */; };
 		9BD7A9892DC4F79D00B3FF29 /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */; };
@@ -43,7 +46,6 @@
 		9BEA4DBA2DCB5A2100C351E3 /* StaticViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BEA4DB92DCB5A0E00C351E3 /* StaticViewModel.swift */; };
 		9BF0B3942DC5CD30006131DD /* NotificationConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF0B3922DC5CD30006131DD /* NotificationConstants.swift */; };
 		E82A79C52DB13265007ED175 /* CalenderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B22DB13265007ED175 /* CalenderView.swift */; };
-		E82A79C62DB13265007ED175 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B32DB13265007ED175 /* MessageView.swift */; };
 		E82A79C72DB13265007ED175 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B42DB13265007ED175 /* Config.swift */; };
 		E82A79C82DB13265007ED175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79B52DB13265007ED175 /* ContentView.swift */; };
 		E82A79CE2DB13265007ED175 /* studyAssistantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */; };
@@ -88,10 +90,13 @@
 		9B5A80C92DC24B32007E5758 /* TimerRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerRecord.swift; sourceTree = "<group>"; };
 		9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		9B5A80CF2DC24F6A007E5758 /* View+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Extension.swift"; sourceTree = "<group>"; };
+		9B6AA06A2DCE03CB001545E1 /* ChatSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSettingView.swift; sourceTree = "<group>"; };
+		9B6AA06E2DCEF673001545E1 /* StudySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudySettings.swift; sourceTree = "<group>"; };
 		9B6D68F82DC3757B00D0A3A8 /* TodoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoViewModel.swift; sourceTree = "<group>"; };
 		9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
 		9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		9B70AE8C2DCA27B4002AEF32 /* studyAssistant.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = studyAssistant.entitlements; sourceTree = "<group>"; };
+		9BADA1AA2DCDF11300A7B235 /* Chatview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chatview.swift; sourceTree = "<group>"; };
 		9BC153402D78771600FCA465 /* studyAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = studyAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC1535A2D78771A00FCA465 /* studyAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -108,7 +113,6 @@
 		E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		E82A79B12DB13265007ED175 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E82A79B22DB13265007ED175 /* CalenderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalenderView.swift; sourceTree = "<group>"; };
-		E82A79B32DB13265007ED175 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
 		E82A79B42DB13265007ED175 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		E82A79B52DB13265007ED175 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
@@ -169,6 +173,7 @@
 		9B5A80B12DC2162F007E5758 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				9B6AA06E2DCEF673001545E1 /* StudySettings.swift */,
 				9BEA4DB72DCB59F000C351E3 /* Static.swift */,
 				9B5A80C92DC24B32007E5758 /* TimerRecord.swift */,
 				9B5A80AE2DC2162F007E5758 /* AppSettings.swift */,
@@ -203,6 +208,8 @@
 		9B5A80BA2DC2162F007E5758 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				9B6AA06A2DCE03CB001545E1 /* ChatSettingView.swift */,
+				9BADA1AA2DCDF11300A7B235 /* Chatview.swift */,
 				9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */,
 				9B499B782DC25F7700DD115C /* TimerView.swift */,
 				9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */,
@@ -213,7 +220,6 @@
 				9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */,
 				E82A79C22DB13265007ED175 /* TodoDetailView.swift */,
 				E82A79B22DB13265007ED175 /* CalenderView.swift */,
-				E82A79B32DB13265007ED175 /* MessageView.swift */,
 				E82A79B52DB13265007ED175 /* ContentView.swift */,
 			);
 			path = Views;
@@ -455,11 +461,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B6AA06F2DCEF685001545E1 /* StudySettings.swift in Sources */,
 				E82A79C52DB13265007ED175 /* CalenderView.swift in Sources */,
-				E82A79C62DB13265007ED175 /* MessageView.swift in Sources */,
 				9BEA4DB82DCB5A0700C351E3 /* Static.swift in Sources */,
 				9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */,
 				9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */,
+				9BADA1AB2DCDF11300A7B235 /* Chatview.swift in Sources */,
 				9B366A2E2DCA2CCA00CCA59B /* TodoEditView.swift in Sources */,
 				9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */,
 				9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */,
@@ -467,6 +474,7 @@
 				9B5A80BD2DC2162F007E5758 /* ProfileSettingView.swift in Sources */,
 				9B5A80BE2DC2162F007E5758 /* DataServiceProtocol.swift in Sources */,
 				9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */,
+				9B6AA06B2DCE03E0001545E1 /* ChatSettingView.swift in Sources */,
 				9B5A80C12DC2162F007E5758 /* SettingsView.swift in Sources */,
 				9B5A80C52DC21905007E5758 /* SettingsComponents.swift in Sources */,
 				9B499B7B2DC25F8400DD115C /* TimerManager.swift in Sources */,

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import FirebaseAuth
+import FirebaseFirestore
 
 // MARK: - OpenAI API 資料結構
 struct OpenAIMessage: Codable {
@@ -267,6 +268,15 @@ final class ChatViewModel: ObservableObject {
     @Published var isLoading: Bool = false
 
     private let chatRoomsKey = "local_chat_rooms"
+    
+    // Firestore 相關
+    private let db = Firestore.firestore()
+    private let studySettingsCollection = "studySettings"
+    
+    // 使用者讀書設定
+    @Published var studySettings: StudySettings?
+    @Published var isLoadingSettings: Bool = false
+    @Published var settingsError: String?
 
     // 聊天室資料
     @Published var chatRooms: [ChatRoom] = [
@@ -906,7 +916,89 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    // MARK: - 讀書設定相關方法
+    
+    // 從Firestore載入讀書設定
+    func loadStudySettingsFromFirestore() async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            settingsError = "尚未登入，無法載入讀書設定"
+            return
+        }
+        
+        isLoadingSettings = true
+        settingsError = nil
+        
+        do {
+            let docRef = db.collection(studySettingsCollection).document(userId)
+            let document = try await docRef.getDocument()
+            
+            if document.exists, let settings = StudySettings(document: document) {
+                self.studySettings = settings
+                print("成功從Firestore載入讀書設定")
+            } else {
+                // 文件不存在，建立預設設定
+                print("無現有讀書設定，建立預設值")
+                let newSettings = StudySettings(userId: userId)
+                self.studySettings = newSettings
+                
+                // 儲存新建立的預設設定到Firestore
+                try await saveStudySettingsToFirestore(settings: newSettings)
+            }
+        } catch {
+            settingsError = "載入讀書設定失敗: \(error.localizedDescription)"
+            print("載入讀書設定錯誤: \(error)")
+        }
+        
+        isLoadingSettings = false
+    }
+    
+    // 儲存讀書設定到Firestore
+    private func saveStudySettingsToFirestore(settings: StudySettings) async throws {
+        guard !settings.userId.isEmpty else {
+            throw NSError(domain: "app.studyAssistant", code: 1, userInfo: [NSLocalizedDescriptionKey: "未指定使用者ID"])
+        }
+        
+        let docRef = db.collection(studySettingsCollection).document(settings.userId)
+        
+        // 更新時間戳
+        var settingsToSave = settings
+        settingsToSave.updatedAt = Timestamp()
+        
+        try await docRef.setData(settingsToSave.toFirestoreData())
+        print("成功儲存讀書設定到Firestore")
+    }
+    
+    // 更新讀書設定
+    func updateStudySettings(_ newSettings: StudySettings) async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            settingsError = "尚未登入，無法更新讀書設定"
+            return
+        }
+        
+        isLoadingSettings = true
+        settingsError = nil
+        currentFunction = "updateStudySettings"
+        
+        do {
+            var settingsToUpdate = newSettings
+            settingsToUpdate.userId = userId
+            try await saveStudySettingsToFirestore(settings: settingsToUpdate)
+            self.studySettings = settingsToUpdate
+        } catch {
+            settingsError = "更新讀書設定失敗: \(error.localizedDescription)"
+            print("更新讀書設定錯誤: \(error)")
+        }
+        
+        isLoadingSettings = false
+        currentFunction = nil
+    }
+
     init() {
         loadChatRoomsFromLocal()
+        
+        // 異步載入讀書設定
+        Task {
+            await loadStudySettingsFromFirestore()
+        }
     }
 } 

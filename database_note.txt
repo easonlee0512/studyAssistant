@@ -63,6 +63,31 @@
 - lastModifiedAt: Timestamp (最後修改時間)
 - isDeleted: Boolean
 
+5. 助理個人化設定 - 需要同步
+- id: String (主鍵)
+- userId: String (外鍵，關聯使用者)
+- lastModifiedAt: Timestamp (最後修改時間)
+- isDeleted: Boolean
+
+一週七天的可用時間
+struct StudySchedulePreference: Codable, Identifiable {
+    var id: String // 通常與 userId 一樣
+    var userId: String
+    var weeklyAvailableSlots: [WeekdaySlot] // 一週七天的可用時間
+    var updatedAt: Date
+}
+
+struct WeekdaySlot: Codable {
+    var weekday: Int    // 1 = Sunday, 7 = Saturday（或你自己定義）
+    var timeSlots: [TimeRange] // 每天可以讀書的時段
+}
+
+struct TimeRange: Codable {
+    var startHour: Int // 0~23
+    var endHour: Int   // 0~23
+}
+
+
 6. 學習統計 (LearningStatistic) - 需要同步
 - id: String (主鍵)
 - userId: String (外鍵，關聯使用者)

@@ -17,6 +17,7 @@ struct ChatDemoDynamicView: View {
     @State private var showSidebar = false
     @State private var latestMessageId: UUID? // 追蹤最新訊息的 ID
     @State private var expandedTaskMessages: Set<UUID> = [] // 追蹤哪些訊息的任務列表被展開
+    @State private var showSettings = false // 控制設定頁面的展示
 
     var body: some View {
         ZStack {
@@ -31,6 +32,10 @@ struct ChatDemoDynamicView: View {
         }
         .onAppear {
             viewModel.staticViewModel = staticViewModel
+        }
+        .sheet(isPresented: $showSettings) {
+            ChatSettingView()
+                .environmentObject(viewModel)
         }
     }
 
@@ -49,6 +54,15 @@ struct ChatDemoDynamicView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer()
+            
+            // 設定圖示
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(Color.hex(hex: "E27844"))
+            }
+            .padding(.trailing, 8)
+            
             Button(action: viewModel.createNewChatRoom) {
                 Image(systemName: "plus")
                     .font(.system(size: 28, weight: .bold))

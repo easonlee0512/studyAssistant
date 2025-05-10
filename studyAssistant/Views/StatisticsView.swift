@@ -473,12 +473,12 @@ struct StatisticsView: View {
     
     // MARK: - 全部時間統計視圖
     private var allTimeStatisticsView: some View {
-        VStack(spacing: 20) {
+            VStack(spacing: 20) {
             // 任務完成情況區塊
             VStack(alignment: .leading, spacing: 15) {
                 Text("任務完成情況")
-                    .font(.headline)
-                    .padding(.leading)
+                        .font(.headline)
+                        .padding(.leading)
                 
                 VStack(spacing: 20) {
                     let taskCompletionRates = staticViewModel.getCategoryTaskCompletionRate()
@@ -497,8 +497,8 @@ struct StatisticsView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Text(category)
-                                        .font(.headline)
-                                    
+                                    .font(.headline)
+                                
                                     Spacer()
                                     
                                     Text("\(completedTasks)/\(totalTasks)")
@@ -508,21 +508,21 @@ struct StatisticsView: View {
                                 
                                 ZStack(alignment: .leading) {
                                     // 背景
-                                    Capsule()
-                                        .fill(Color.gray.opacity(0.3))
+                                        Capsule()
+                                            .fill(Color.gray.opacity(0.3))
                                         .frame(height: 25)
-                                    
+                                            
                                     // 進度
-                                    Capsule()
+                                        Capsule()
                                         .fill(Color.hex(hex: "E28A5F"))
                                         .frame(width: max(60, UIScreen.main.bounds.width - 80) * CGFloat(completionRate), height: 25)
-                                        .overlay(
+                                            .overlay(
                                             Text("\(Int(completionRate * 100))%")
-                                                .foregroundColor(.black)
-                                                .padding(.leading, 20)
+                                                    .foregroundColor(.black)
+                                                    .padding(.leading, 20)
                                                 .opacity(completionRate > 0.05 ? 1 : 0)
-                                            , alignment: .leading
-                                        )
+                                                , alignment: .leading
+                                            )
                                 }
                             }
                         }
@@ -531,14 +531,14 @@ struct StatisticsView: View {
             }
             .padding()
             .background(Color.white)
-            .cornerRadius(12)
-            .padding(.horizontal)
-            
+                .cornerRadius(12)
+                .padding(.horizontal)
+                
             // 分類總專注時長區塊
             VStack(alignment: .leading, spacing: 15) {
                 Text("總專注時長")
-                    .font(.headline)
-                    .padding(.leading)
+                            .font(.headline)
+                            .padding(.leading)
                 
                 let categoryTimes = staticViewModel.totalFocusTimeByCategory()
                 let totalCategories = staticViewModel.categoryCount()
@@ -606,16 +606,16 @@ struct StatisticsView: View {
                             }
                             .padding()
                             .background(Color.white)
-                            .cornerRadius(12)
-                            .padding(.horizontal)
+                    .cornerRadius(12)
+                    .padding(.horizontal)
                         }
                     }
                 }
             }
             .padding(.vertical)
-            .background(Color.hex(hex: "FEECD8"))
-            .cornerRadius(12)
-            .padding(.horizontal)
+        .background(Color.hex(hex: "FEECD8"))
+        .cornerRadius(12)
+        .padding(.horizontal)
             
             // 底部間距
             Spacer(minLength: 80)
