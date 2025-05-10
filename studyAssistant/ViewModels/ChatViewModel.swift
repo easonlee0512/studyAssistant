@@ -998,6 +998,8 @@ final class ChatViewModel: ObservableObject {
         if !chatRooms.isEmpty {
             selectedRoomIndex = chatRooms.count - 1
         }
-
+        Task {
+            await loadStudySettingsFromFirestore()
+        }
     }
 } 
