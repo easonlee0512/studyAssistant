@@ -302,7 +302,7 @@ final class ChatViewModel: ObservableObject {
             saveChatRoomsToLocal()
         }
     }
-    @Published var selectedRoomIndex: Int = 0
+    @Published var selectedRoomIndex: Int = 0 // 預設為 0，稍後在 init 設置為最新聊天室
 
     // 定義 getTask 函數
     private let getTaskFunction = Tool(
@@ -995,10 +995,9 @@ final class ChatViewModel: ObservableObject {
 
     init() {
         loadChatRoomsFromLocal()
-        
-        // 異步載入讀書設定
-        Task {
-            await loadStudySettingsFromFirestore()
+        if !chatRooms.isEmpty {
+            selectedRoomIndex = chatRooms.count - 1
         }
+
     }
 } 
