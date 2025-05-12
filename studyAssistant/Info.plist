@@ -39,7 +39,5 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>CFBundleIdentifier</key>
-	<string>eason.studyAssistant</string>
 </dict>
 </plist>

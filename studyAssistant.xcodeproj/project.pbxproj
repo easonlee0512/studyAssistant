@@ -33,7 +33,6 @@
 		9B6D68FF2DC3D06900D0A3A8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */; };
 		9B6D69012DC3D06900D0A3A8 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69002DC3D06900D0A3A8 /* FirebaseDatabase */; };
 		9B6D69032DC3D06900D0A3A8 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B6D69022DC3D06900D0A3A8 /* FirebaseFirestore */; };
-		9BADA1AB2DCDF11300A7B235 /* Chatview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BADA1AA2DCDF11300A7B235 /* Chatview.swift */; };
 		9BCA070B2DB5F8E00039EA2B /* TodoAddView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCA070A2DB5F8CA0039EA2B /* TodoAddView.swift */; };
 		9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9832DC499DC00B3FF29 /* Date+Extension.swift */; };
 		9BD7A9892DC4F79D00B3FF29 /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7A9852DC4F79D00B3FF29 /* Authentication.swift */; };
@@ -54,6 +53,8 @@
 		E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */; };
 		E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B12DB13265007ED175 /* Assets.xcassets */; };
 		E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E82F5CFF2D8B76C80016DF22 /* Alamofire */; };
+		E8C63FCC2DD1E21D002A56E6 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E8C63FCB2DD1E21D002A56E6 /* Launch Screen.storyboard */; };
+		E8C63FD42DD22ED2002A56E6 /* Chatview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C63FD32DD22ED2002A56E6 /* Chatview.swift */; };
 		E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */; };
 		E8E897432DC0980E00027E88 /* TodoTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E897412DC0980D00027E88 /* TodoTask.swift */; };
 /* End PBXBuildFile section */
@@ -96,7 +97,6 @@
 		9B6D68FA2DC3CC8900D0A3A8 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
 		9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 		9B70AE8C2DCA27B4002AEF32 /* studyAssistant.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = studyAssistant.entitlements; sourceTree = "<group>"; };
-		9BADA1AA2DCDF11300A7B235 /* Chatview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chatview.swift; sourceTree = "<group>"; };
 		9BC153402D78771600FCA465 /* studyAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = studyAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC153502D78771A00FCA465 /* studyAssistantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BC1535A2D78771A00FCA465 /* studyAssistantUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = studyAssistantUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -118,6 +118,8 @@
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
 		E82A79C22DB13265007ED175 /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
 		E82A79C32DB13265007ED175 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
+		E8C63FCB2DD1E21D002A56E6 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
+		E8C63FD32DD22ED2002A56E6 /* Chatview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chatview.swift; sourceTree = "<group>"; };
 		E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -208,8 +210,8 @@
 		9B5A80BA2DC2162F007E5758 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E8C63FD32DD22ED2002A56E6 /* Chatview.swift */,
 				9B6AA06A2DCE03CB001545E1 /* ChatSettingView.swift */,
-				9BADA1AA2DCDF11300A7B235 /* Chatview.swift */,
 				9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */,
 				9B499B782DC25F7700DD115C /* TimerView.swift */,
 				9B5A80CD2DC24B51007E5758 /* StatisticsView.swift */,
@@ -291,6 +293,7 @@
 				E82A79B42DB13265007ED175 /* Config.swift */,
 				9BD7A98D2DC4F7F200B3FF29 /* GoogleService-Info.plist */,
 				E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */,
+				E8C63FCB2DD1E21D002A56E6 /* Launch Screen.storyboard */,
 			);
 			path = studyAssistant;
 			sourceTree = "<group>";
@@ -436,6 +439,7 @@
 			files = (
 				E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */,
 				E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */,
+				E8C63FCC2DD1E21D002A56E6 /* Launch Screen.storyboard in Resources */,
 				9BD7A98E2DC4F7F200B3FF29 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -466,7 +470,6 @@
 				9BEA4DB82DCB5A0700C351E3 /* Static.swift in Sources */,
 				9B6D68FD2DC3CD1A00D0A3A8 /* ProfileViewModel.swift in Sources */,
 				9B5A80BB2DC2162F007E5758 /* UserSettingsViewModel.swift in Sources */,
-				9BADA1AB2DCDF11300A7B235 /* Chatview.swift in Sources */,
 				9B366A2E2DCA2CCA00CCA59B /* TodoEditView.swift in Sources */,
 				9B5A80BC2DC2162F007E5758 /* UserProfile.swift in Sources */,
 				9BD7A9842DC499DD00B3FF29 /* Date+Extension.swift in Sources */,
@@ -486,6 +489,7 @@
 				9BEA4DBA2DCB5A2100C351E3 /* StaticViewModel.swift in Sources */,
 				9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */,
 				9BF0B3942DC5CD30006131DD /* NotificationConstants.swift in Sources */,
+				E8C63FD42DD22ED2002A56E6 /* Chatview.swift in Sources */,
 				E82A79C72DB13265007ED175 /* Config.swift in Sources */,
 				9B6D68F92DC3758800D0A3A8 /* TodoViewModel.swift in Sources */,
 				E82A79C82DB13265007ED175 /* ContentView.swift in Sources */,
@@ -665,9 +669,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = studdy;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -700,9 +706,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = studdy;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
