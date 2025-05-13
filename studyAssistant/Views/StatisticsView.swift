@@ -297,14 +297,14 @@ struct StatisticsView: View {
     
     // MARK: - 每日統計視圖
     private var dailyStatisticsView: some View {
-            VStack(spacing: 20) {
+        VStack(spacing: 20) {
             // 日期顯示
             Text(formattedDate)
                 .font(.title2)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.hex(hex: "576CBC"))
+                .background(Color.hex(hex: "E09772"))
                 .cornerRadius(12)
                 .padding(.horizontal)
             
@@ -314,7 +314,7 @@ struct StatisticsView: View {
                 VStack(spacing: 5) {
                     Text("總學習時間")
                         .font(.title3)
-                        .foregroundColor(Color.hex(hex: "8B9DFA"))
+                        .foregroundColor(.black)
                     
                     Text(formatDuration(getTotalFocusTime()))
                         .font(.system(size: 60, weight: .bold))
@@ -334,7 +334,7 @@ struct StatisticsView: View {
                 VStack(spacing: 5) {
                     Text("最長集中時間")
                         .font(.title3)
-                        .foregroundColor(Color.hex(hex: "8B9DFA"))
+                        .foregroundColor(.black)
                     
                     Text(formatDuration(maxFocusTime))
                         .font(.system(size: 60, weight: .bold))
@@ -351,11 +351,11 @@ struct StatisticsView: View {
                         HStack {
                             Image(systemName: "checkmark.circle")
                                 .font(.system(size: 24))
-                                .foregroundColor(Color.hex(hex: "E28A5F"))
+                                .foregroundColor(Color.hex(hex: "E09772"))
                             
                             Text("專注次數")
                                 .font(.headline)
-                                .foregroundColor(Color.hex(hex: "8B9DFA"))
+                                .foregroundColor(.black)
                         }
                         
                         Text("\(timerRecords.count)次")
@@ -370,11 +370,11 @@ struct StatisticsView: View {
                         HStack {
                             Image(systemName: "chart.bar.fill")
                                 .font(.system(size: 24))
-                                .foregroundColor(Color.hex(hex: "E28A5F"))
+                                .foregroundColor(Color.hex(hex: "E09772"))
                             
                             Text("完成率")
                                 .font(.headline)
-                                .foregroundColor(Color.hex(hex: "8B9DFA"))
+                                .foregroundColor(.black)
                         }
                         
                         let completionRate = getCompletionRateValue()
@@ -388,20 +388,26 @@ struct StatisticsView: View {
                                 Spacer()
                             }
                                 
-                                // 進度條
-                                GeometryReader { geometry in
-                                    ZStack(alignment: .leading) {
-                                        // 背景
-                                        Rectangle()
-                                            .fill(Color.gray.opacity(0.2))
+                            // 進度條 - 修改為新的實現方式
+                            GeometryReader { geo in
+                                let filledW = geo.size.width * CGFloat(completionRate)
+
+                                ZStack(alignment: .leading) {
+                                    // 灰底
+                                    Capsule()
+                                        .fill(Color.gray.opacity(0.2))
                                         .frame(height: 12)
-                                        .cornerRadius(6)
-                                        
-                                        // 進度
-                                        Rectangle()
-                                            .fill(Color.hex(hex: "E28A5F"))
-                                        .frame(width: geometry.size.width * CGFloat(completionRate), height: 12)
-                                        .cornerRadius(6)
+
+                                    // 橙色條 & 文字
+                                    Capsule()
+                                        .fill(Color.hex(hex: "E09772"))
+                                        .frame(width: filledW, height: 12)
+                                        .overlay(
+                                            Text("\(Int(completionRate*100))%")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .frame(width: filledW, alignment: .center)
+                                        )
                                 }
                             }
                             .frame(height: 12)
@@ -411,56 +417,9 @@ struct StatisticsView: View {
                     .padding(.trailing)
                 }
                 .padding(.vertical, 10)
-                        }
-                        .padding()
-            .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 1)
-                        .padding(.horizontal)
-            
-            // 時間分布長條圖
-            VStack(alignment: .leading, spacing: 10) {
-                Text("專注時長")
-                    .font(.headline)
-                    .padding(.leading)
-                
-                VStack(spacing: 12) {
-                    // 時間標記
-                    HStack(spacing: 0) {
-                        ForEach([15, 30, 45, 60, 75, 90, 150, 180], id: \.self) { minute in
-                            Text("\(minute)")
-                                .font(.caption)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 小時分布
-                    ForEach(Array(hourlyDistribution.keys.sorted()), id: \.self) { hour in
-                        HStack(spacing: 10) {
-                            // 小時標籤
-                            Text("\(hour)")
-                                .font(.caption)
-                                .frame(width: 20)
-                            
-                            // 長條圖
-                            let duration = hourlyDistribution[hour] ?? 0
-                            let minutes = duration / 60
-                            let maxWidth = UIScreen.main.bounds.width - 80
-                            let width = min(maxWidth * CGFloat(minutes) / 180.0, maxWidth)
-                            
-                            Capsule()
-                                .fill(getColorForHour(hour))
-                                .frame(width: width, height: 25)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color.white.opacity(0.8))
-                .cornerRadius(8)
             }
-            .background(Color.hex(hex: "FEECD8"))
+            .padding()
+            .background(Color.white)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 1)
             .padding(.horizontal)
@@ -473,12 +432,12 @@ struct StatisticsView: View {
     
     // MARK: - 全部時間統計視圖
     private var allTimeStatisticsView: some View {
-            VStack(spacing: 20) {
+        VStack(spacing: 20) {
             // 任務完成情況區塊
             VStack(alignment: .leading, spacing: 15) {
                 Text("任務完成情況")
-                        .font(.headline)
-                        .padding(.leading)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 
                 VStack(spacing: 20) {
                     let taskCompletionRates = staticViewModel.getCategoryTaskCompletionRate()
@@ -497,48 +456,56 @@ struct StatisticsView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Text(category)
-                                    .font(.headline)
-                                
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                        .frame(width: 80, alignment: .leading)
+                                    
                                     Spacer()
                                     
                                     Text("\(completedTasks)/\(totalTasks)")
                                         .font(.subheadline)
-                                        .foregroundColor(.gray)
+                                        .background(Color.hex(hex: "F5F5F5"))
                                 }
                                 
-                                ZStack(alignment: .leading) {
-                                    // 背景
+                                // 修改進度條和百分比顯示
+                                GeometryReader { geo in
+                                    let filledW = geo.size.width * CGFloat(completionRate)
+
+                                    ZStack(alignment: .leading) {
                                         Capsule()
                                             .fill(Color.gray.opacity(0.3))
-                                        .frame(height: 25)
-                                            
-                                    // 進度
+                                            .frame(height: 25)
+
                                         Capsule()
-                                        .fill(Color.hex(hex: "E28A5F"))
-                                        .frame(width: max(60, UIScreen.main.bounds.width - 80) * CGFloat(completionRate), height: 25)
+                                            .fill(Color.hex(hex: "E09772"))
+                                            .frame(width: filledW, height: 25)
                                             .overlay(
-                                            Text("\(Int(completionRate * 100))%")
+                                                Text("\(Int(completionRate*100))%")
+                                                    .font(.system(size: 16, weight: .bold))
                                                     .foregroundColor(.black)
-                                                    .padding(.leading, 20)
-                                                .opacity(completionRate > 0.05 ? 1 : 0)
-                                                , alignment: .leading
+                                                    .frame(width: filledW, alignment: .center)
                                             )
+                                    }
                                 }
+                                .frame(height: 25)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
             }
-            .padding()
+            .padding(.vertical, 15)
+            .padding(.horizontal, 15)
             .background(Color.white)
-                .cornerRadius(12)
-                .padding(.horizontal)
-                
-            // 分類總專注時長區塊
+            .cornerRadius(12)
+            .padding(.horizontal, 5)
+            
+            // 分類總專注時長區塊 - 修改配色
             VStack(alignment: .leading, spacing: 15) {
                 Text("總專注時長")
-                            .font(.headline)
-                            .padding(.leading)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundColor(.black)
                 
                 let categoryTimes = staticViewModel.totalFocusTimeByCategory()
                 let totalCategories = staticViewModel.categoryCount()
@@ -547,7 +514,7 @@ struct StatisticsView: View {
                     VStack(spacing: 15) {
                         Text("總時長：")
                             .font(.title3)
-                            .foregroundColor(Color.hex(hex: "8B9DFA"))
+                            .foregroundColor(.black)
                         
                         let totalMinutes = categoryTimes.values.reduce(0, +)
                         let hours = totalMinutes / 60
@@ -559,13 +526,13 @@ struct StatisticsView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical)
-                    .background(Color.white)
+                    .background(Color.hex(hex: "F5F5F5"))
                     .cornerRadius(12)
                     
                     VStack(spacing: 15) {
                         Text("專注次數：")
                             .font(.title3)
-                            .foregroundColor(Color.hex(hex: "8B9DFA"))
+                            .foregroundColor(.black)
                         
                         Text("\(totalCategories)個")
                             .font(.system(size: 25, weight: .bold))
@@ -573,19 +540,19 @@ struct StatisticsView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical)
-                    .background(Color.white)
+                    .background(Color.hex(hex: "F5F5F5"))
                     .cornerRadius(12)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 5)
                 
                 VStack(spacing: 15) {
                     if categoryTimes.isEmpty {
                         Text("暫無分類數據")
                             .foregroundColor(.gray)
                             .frame(maxWidth: .infinity, minHeight: 100)
-                            .background(Color.white)
+                            .background(Color.hex(hex: "F5F5F5"))
                             .cornerRadius(12)
-                            .padding(.horizontal)
+                            .padding(.horizontal, 5)
                     } else {
                         ForEach(Array(categoryTimes.keys.sorted()), id: \.self) { category in
                             let minutes = categoryTimes[category] ?? 0
@@ -605,22 +572,24 @@ struct StatisticsView: View {
                                     .bold()
                             }
                             .padding()
-                            .background(Color.white)
-                    .cornerRadius(12)
-                    .padding(.horizontal)
+                            .background(Color.hex(hex: "F5F5F5"))
+                            .cornerRadius(12)
+                            .padding(.horizontal, 5)
                         }
                     }
                 }
             }
-            .padding(.vertical)
-        .background(Color.hex(hex: "FEECD8"))
-        .cornerRadius(12)
-        .padding(.horizontal)
+            .padding(.vertical, 15)
+            .padding(.horizontal, 15)
+            .background(Color.white)
+            .cornerRadius(12)
+            .padding(.horizontal, 5)
             
             // 底部間距
             Spacer(minLength: 80)
         }
         .padding(.vertical)
+        .padding(.horizontal, 5)
     }
 }
 

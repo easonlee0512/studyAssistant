@@ -49,36 +49,6 @@ struct SettingsView: View {
                         }
                         .padding(.vertical, 15)
                         
-                        // VIP卡片
-                        ZStack(alignment: .topTrailing) {
-                            VStack(spacing: 2) {
-                                Text("VIP")
-                                    .font(.custom("Helvetica", size: 35))
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.top, 15)
-                                
-                                VStack(spacing: 6) {
-                                    VIPFeatureText(text: "解鎖 讀書助理")
-                                    VIPFeatureText(text: "解鎖 進階統計")
-                                    VIPFeatureText(text: "解鎖 自訂主題")
-                                }
-                                .padding(.vertical, 10)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .background(Color.hex(hex: "3A4B5E"))
-                            .cornerRadius(16)
-                            
-                            Image(systemName: "crown.fill")
-                                .resizable()
-                                .frame(width: 30, height: 20)
-                                .foregroundColor(.yellow.opacity(0.8))
-                                .padding(.top, 10)
-                                .padding(.trailing, 15)
-                        }
-                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 2)
-                        .padding(.horizontal, 15)
-                        
                         // 統計資料區域
                         HStack {
                             Text("統計資料")
@@ -122,30 +92,8 @@ struct SettingsView: View {
                             Spacer()
                         }
                         
-                        // 設定選項卡片
+                        // 設定選項卡片 - 只保留通知
                         VStack(spacing: 0) {
-                            // 深色模式
-                            SettingRowNew(
-                                iconName: "moon.fill",
-                                title: "深色模式",
-                                isOn: Binding(
-                                    get: { viewModel.appSettings.isDarkMode },
-                                    set: { newValue in
-                                        Task {
-                                            await viewModel.updateAppSettings(
-                                            isDarkMode: newValue,
-                                            notificationsEnabled: viewModel.appSettings.notificationsEnabled,
-                                            isShockEnabled: viewModel.appSettings.isShockEnabled
-                                        )
-                                        }
-                                    }
-                                )
-                            )
-                            
-                            Divider()
-                                .background(Color.black.opacity(0.1))
-                                .padding(.horizontal, 15)
-                            
                             // 通知
                             SettingRowNew(
                                 iconName: "bell.fill",
@@ -158,28 +106,6 @@ struct SettingsView: View {
                                             isDarkMode: viewModel.appSettings.isDarkMode,
                                             notificationsEnabled: newValue,
                                             isShockEnabled: viewModel.appSettings.isShockEnabled
-                                        )
-                                        }
-                                    }
-                                )
-                            )
-                            
-                            Divider()
-                                .background(Color.black.opacity(0.1))
-                                .padding(.horizontal, 15)
-                            
-                            // 震動模式
-                            SettingRowNew(
-                                iconName: "iphone.radiowaves.left.and.right",
-                                title: "震動回饋",
-                                isOn: Binding(
-                                    get: { viewModel.appSettings.isShockEnabled },
-                                    set: { newValue in
-                                        Task {
-                                            await viewModel.updateAppSettings(
-                                            isDarkMode: viewModel.appSettings.isDarkMode,
-                                            notificationsEnabled: viewModel.appSettings.notificationsEnabled,
-                                            isShockEnabled: newValue
                                         )
                                         }
                                     }
