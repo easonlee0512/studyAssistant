@@ -49,142 +49,142 @@ struct TodoView: View {
     
     var body: some View {
         NavigationView {
-            Group {
+            ZStack {
+                // 背景色永遠存在
+                backgroundColor
+                    .ignoresSafeArea()
+                
+                // 載入指示器
                 if isLoading {
                     ProgressView()
-                } else {
-                    ZStack {
-                        // 背景色
-                        backgroundColor
-                            .ignoresSafeArea()
-                        
-                        VStack(spacing: 0) {
-                            VStack(spacing: 16) {
-                                // 顯示用戶目標或默認倒數天數
-                                VStack(alignment: .leading, spacing: 5) {
-                                    if !userGoal.isEmpty {
-                                        Text(userGoal)
-                                            .font(.system(size: 30, weight: .bold))
-                                    } else {
-                                        // 顯示距離目標日期的倒數，使用 targetDate 的日期名稱
-                                        if daysRemaining >= 0 {
-                                            Text("考試倒數 \(daysRemaining) 天")
-                                                .font(.system(size: 30, weight: .bold))
-                                        } else {
-                                            Text("\(formattedTargetDate) 已過期 \(abs(daysRemaining)) 天")
-                                                .font(.system(size: 30, weight: .bold))
-                                                .foregroundColor(.red)
-                                        }
-                                    }
-                                    
-                                    // 顯示當前日期
-                                    Text(formattedDate)
-                                        .font(.system(size: 24, weight: .bold))
+                        .scaleEffect(1.5)  // 放大載入圈圈
+                        .progressViewStyle(CircularProgressViewStyle())  // 使用圓形進度樣式
+                }
+                
+                // 主要內容
+                VStack(spacing: 0) {
+                    VStack(spacing: 16) {
+                        // 顯示用戶目標或默認倒數天數
+                        VStack(alignment: .leading, spacing: 5) {
+                            if !userGoal.isEmpty {
+                                Text(userGoal)
+                                    .font(.system(size: 30, weight: .bold))
+                            } else {
+                                // 顯示距離目標日期的倒數，使用 targetDate 的日期名稱
+                                if daysRemaining >= 0 {
+                                    Text("考試倒數 \(daysRemaining) 天")
+                                        .font(.system(size: 30, weight: .bold))
+                                } else {
+                                    Text("\(formattedTargetDate) 已過期 \(abs(daysRemaining)) 天")
+                                        .font(.system(size: 30, weight: .bold))
+                                        .foregroundColor(.red)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                                .padding(.top, 12)
-                                
-                                // 週曆視圖
-                                WeekViewNew(selectedDate: $selectedDate)
-                                    .padding(.horizontal)
-                                
-                                // 待辦事項標題
-                                HStack {
-                                    Text("To Do List")
-                                        .font(.system(size: 24, weight: .bold))
-                                    Spacer()
-                                    Button(action: {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                            showingAddTask = true // 顯示添加任務視圖
-                                        }
-                                    }) {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(Color.hex(hex: "E28A5F"))
-                                    }
-                                }
-                                .padding(.horizontal)
                             }
                             
-                            // 任務列表
-                            ScrollView {
-                                VStack(spacing: 15) {
-                                    ForEach(filteredTasks(for: selectedDate)) { task in
-                                        TaskRowNewView(task: task) { updatedTask in
-                                            Task {
-                                                await viewModel.updateTask(updatedTask)
-                                            }
-                                        } onTaskSelected: { selectedTask in
-                                            // 當任務被點擊時，設置要編輯的任務並顯示編輯視圖
-                                            taskToEdit = selectedTask
-                                            withAnimation {
-                                                showingEditTask = true
-                                            }
-                                        }
+                            // 顯示當前日期
+                            Text(formattedDate)
+                                .font(.system(size: 24, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                        
+                        // 週曆視圖
+                        WeekViewNew(selectedDate: $selectedDate)
+                            .padding(.horizontal)
+                        
+                        // 待辦事項標題
+                        HStack {
+                            Text("To Do List")
+                                .font(.system(size: 24, weight: .bold))
+                            Spacer()
+                            Button(action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showingAddTask = true
+                                }
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Color.hex(hex: "E28A5F"))
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    // 任務列表
+                    ScrollView {
+                        VStack(spacing: 15) {
+                            ForEach(filteredTasks(for: selectedDate)) { task in
+                                TaskRowNewView(task: task) { updatedTask in
+                                    Task {
+                                        await viewModel.updateTask(updatedTask)
                                     }
-                                    
-                                    if filteredTasks(for: selectedDate).isEmpty {
-                                        // 如果没有任务，顯示空狀態
-                                        Text("目前沒有任務")
-                                            .foregroundColor(.gray)
-                                            .padding()
+                                } onTaskSelected: { selectedTask in
+                                    taskToEdit = selectedTask
+                                    withAnimation {
+                                        showingEditTask = true
                                     }
                                 }
-                                .padding(.horizontal)
-                                .padding(.top, 8)
-                                .padding(.bottom, 15)
                             }
-                            .padding(.bottom, 0)
-                        }
-                        
-                        // 使用懶加載避免在條件判斷中創建視圖
-                        Group {
-                            if showingAddTask {
-                                TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
-                                    .environmentObject(staticViewModel)
-                                    .transition(.move(edge: .bottom))
-                                    .zIndex(1)
+                            
+                            if filteredTasks(for: selectedDate).isEmpty {
+                                Text("目前沒有任務")
+                                    .foregroundColor(.gray)
+                                    .padding()
                             }
                         }
-                        
-                        Group {
-                            if showingTodoDetail {
-                                TodoDetailView(
-                                    viewModel: viewModel,
-                                    date: selectedDate,
-                                    isPresented: $showingTodoDetail
-                                )
-                                .transition(.scale)
-                                .zIndex(1)
-                            }
-                        }
-                        
-                        // 新增編輯任務視圖
-                        Group {
-                            if showingEditTask && taskToEdit != nil {
-                                TodoEditView(
-                                    viewModel: viewModel,
-                                    isPresented: $showingEditTask,
-                                    task: taskToEdit!
-                                )
-                                .transition(.move(edge: .bottom))
-                                .zIndex(1)
-                            }
-                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 15)
+                    }
+                    .padding(.bottom, 0)
+                }
+                .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
+                
+                // 添加任務視圖
+                Group {
+                    if showingAddTask {
+                        TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
+                            .environmentObject(staticViewModel)
+                            .transition(.move(edge: .bottom))
+                            .zIndex(1)
+                    }
+                }
+                
+                // 任務詳情視圖
+                Group {
+                    if showingTodoDetail {
+                        TodoDetailView(
+                            viewModel: viewModel,
+                            date: selectedDate,
+                            isPresented: $showingTodoDetail
+                        )
+                        .transition(.scale)
+                        .zIndex(1)
+                    }
+                }
+                
+                // 編輯任務視圖
+                Group {
+                    if showingEditTask && taskToEdit != nil {
+                        TodoEditView(
+                            viewModel: viewModel,
+                            isPresented: $showingEditTask,
+                            task: taskToEdit!
+                        )
+                        .transition(.move(edge: .bottom))
+                        .zIndex(1)
                     }
                 }
             }
-            .navigationBarTitleDisplayMode(.inline) // 將標題設為inline，不顯示大標題
+            .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
-            // 當視圖出現時立即載入用戶設定
             loadUserProfile()
         }
         .task {
             await loadTasks()
             
-            // 添加通知觀察者，當資料變更時重新載入
             NotificationCenter.default.addObserver(
                 forName: .todoDataDidChange,
                 object: nil,
@@ -195,9 +195,8 @@ struct TodoView: View {
                 }
             }
             
-            // 添加通知觀察者，當使用者設定變更時更新鼓勵語句
             NotificationCenter.default.addObserver(
-                forName: .userProfileDidChange, // 使用專門的使用者個人資料更新通知
+                forName: .userProfileDidChange,
                 object: nil,
                 queue: .main
             ) { _ in
@@ -206,7 +205,6 @@ struct TodoView: View {
             }
         }
         .onDisappear {
-            // 移除通知觀察者
             NotificationCenter.default.removeObserver(self, name: .todoDataDidChange, object: nil)
             NotificationCenter.default.removeObserver(self, name: .userProfileDidChange, object: nil)
         }
@@ -239,15 +237,19 @@ struct TodoView: View {
     }
     
     private func loadTasks() async {
-        isLoading = true
-        defer { isLoading = false }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isLoading = true
+        }
         
         do {
             try await viewModel.loadTasks()
-            // 載入使用者設定中的鼓勵語句
             loadUserProfile()
         } catch {
             print("Error loading tasks: \(error)")
+        }
+        
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isLoading = false
         }
     }
     
