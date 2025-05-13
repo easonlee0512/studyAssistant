@@ -42,7 +42,9 @@ struct TodoDetailView: View {
                     Spacer()
                     
                     Button(action: {
-                        isPresented = false
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isPresented = false
+                        }
                     }) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
@@ -70,18 +72,23 @@ struct TodoDetailView: View {
                 
                 // 沒有待辦事項時顯示的訊息
                 if filteredTasks.isEmpty {
-                    VStack {
-                        Spacer()
-                        Text("沒有待辦事項")
-                            .font(.system(size: 18))
-                            .foregroundColor(.gray)
-                        Spacer()
+                    // 與有任務時同樣放在 ScrollView → LazyVStack，排版就完全一致
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            Text("沒有待辦事項")
+                                .font(.system(size: 18))
+                                .foregroundColor(.gray)
+                                .padding(.vertical, 20)      // 想要一點緩衝就加這行
+                        }
+                        .padding(.top, 10)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
-                    .frame(height: 300)
                 } else {
                     // 滾動事項列表
                     ScrollView {
-                        VStack(spacing: 10) {
+                        LazyVStack(spacing: 10) {
                             ForEach(filteredTasks) { task in
                                 todoCard(task: task)
                                     .frame(height: 90)

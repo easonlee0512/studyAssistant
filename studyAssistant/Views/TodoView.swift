@@ -89,8 +89,8 @@ struct TodoView: View {
                         .padding(.horizontal)
                         .padding(.top, 12)
                         
-                        // 週曆視圖
-                        WeekViewNew(selectedDate: $selectedDate)
+                        // 週曆視圖 - 使用新的WeekPagerView替換舊的WeekViewNew
+                        WeekPagerView(selectedDate: $selectedDate)
                             .padding(.horizontal)
                         
                         // 待辦事項標題
@@ -121,7 +121,7 @@ struct TodoView: View {
                                     }
                                 } onTaskSelected: { selectedTask in
                                     taskToEdit = selectedTask
-                                    withAnimation {
+                                    withAnimation (.easeInOut(duration: 0.15)){
                                         showingEditTask = true
                                     }
                                 }
@@ -288,33 +288,37 @@ struct TaskRowNewView: View {
     var onTaskSelected: ((TodoTask) -> Void)? = nil
     
     var body: some View {
-        HStack {
-            Image(systemName: "checklist")
-                .resizable()
-                .frame(width: 30, height: 30)
-                .foregroundColor(.black.opacity(0.8))
+        HStack(spacing: 14) {
+            // 左側彩色標識 - 改為自適應高度
+            Rectangle()
+                .fill(task.color)
+                .frame(width: 9)
+                .frame(maxHeight: .infinity)
+                .cornerRadius(9)
             
+            // 中間任務內容區域
             VStack(alignment: .leading, spacing: 5) {
+                // 任務標題
                 Text(task.title)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.black)
                     .strikethrough(task.isCompleted)
                 
+                // 備註文字
                 Text(task.note)
                     .font(.system(size: 15))
                     .foregroundColor(.black.opacity(0.6))
+                    .lineLimit(1)
                 
+                // 時間顯示 - 改為純文字形式
                 Text(task.formattedTime)
-                    .font(.system(size: 15))
-            }
-            .padding(.leading, 10)
-            .onTapGesture {
-                if !isExample && onTaskSelected != nil {
-                    onTaskSelected?(task)
-                }
+                    .font(.system(size: 14))
+                    .foregroundColor(.black.opacity(0.7))
             }
             
             Spacer()
             
+            // 右側完成按鈕 - 改為方形且與背景色一致，添加淺黑色粗邊框
             if !isExample {
                 Button(action: {
                     task.isCompleted.toggle()
@@ -322,80 +326,146 @@ struct TaskRowNewView: View {
                         onUpdate(task)
                     }
                 }) {
-                    Image(systemName: task.isCompleted ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 24))
-                        .foregroundColor(.black)
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.hex(hex: "FEECD8"))
+                        .frame(width: 30, height: 30)
+                        .overlay(
+                            Image(systemName: task.isCompleted ? "checkmark" : "")
+                                .font(.system(size: 22, weight: .black))
+                                .foregroundColor(Color.black.opacity(0.8))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color.black.opacity(0.7), lineWidth: 2.5)
+                        )
                 }
             } else {
-                Image(systemName: "square")
-                    .font(.system(size: 24))
-                    .foregroundColor(.black)
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.hex(hex: "FEECD8"))
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.black.opacity(0.7), lineWidth: 2.5)
+                    )
             }
         }
-        .padding()
-        .background(task.color)
+        .padding(.vertical, 7)
+        .frame(height: 96)       // 添加固定高度
+        .padding(.horizontal, 14)
+        .background(Color.hex(hex: "FEECD8"))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.09), radius: 10, x: 3, y: 3)
         .contentShape(Rectangle()) // 確保整個區域可點擊
+        .onTapGesture {
+            if !isExample && onTaskSelected != nil {
+                onTaskSelected?(task)
+            }
+        }
     }
 }
 
-// 新的週曆視圖 - 使用新的样式
-struct WeekViewNew: View {
+// 新的週曆分頁視圖 - 使用TabView實現水平滑動，但背景框固定
+struct WeekPagerView: View {
     @Binding var selectedDate: Date
+    @State private var pageIndex = 50  // 中間那頁 = 本週
+    private let calendar = Calendar.current
     let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    // 取得本週的日期陣列（Date型別）
-    var weekDates: [Date] {
-        let calendar = Calendar.current
-        let today = Date()
-        let weekday = calendar.component(.weekday, from: today) // 1=Sunday
-        // 計算本週的第一天（週日）
-        let startOfWeek = calendar.date(byAdding: .day, value: -(weekday-1), to: calendar.startOfDay(for: today))!
-        return (0..<7).map { calendar.date(byAdding: .day, value: $0, to: startOfWeek)! }
+    
+    // 預先準備 101 週（-50 ~ +50）
+    private var weekStarts: [Date] {
+        let today = calendar.startOfDay(for: Date())
+        let weekday = calendar.component(.weekday, from: today)
+        let thisWeekStart = calendar.date(byAdding: .day, value: -(weekday-1), to: today)!
+        return (-50...50).map {
+            calendar.date(byAdding: .weekOfYear, value: $0, to: thisWeekStart)!
+        }
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let cellWidth = (geometry.size.width - 24) / 7 // 每個日期單元格的寬度
+            
+            ZStack(alignment: .center) {
+                // 背景框層 - 固定不動
+                HStack(alignment: .center, spacing: 4) {
+                    ForEach(0..<7) { index in
+                        // 使用selectedDate計算當前是否選中
+                        let isSelected = calendar.component(.weekday, from: selectedDate) - 1 == index
+                        
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(isSelected ? Color(red: 0.86, green: 0.55, blue: 0.38, opacity: 0.9) : Color.hex(hex: "FEECD8"))
+                            .frame(width: cellWidth, height: 78)
+                    }
+                }
+                .padding(.horizontal, 4)
+                
+                // 日期內容層 - 可滑動
+                TabView(selection: $pageIndex) {
+                    ForEach(weekStarts.indices, id: \.self) { idx in
+                        WeekContent(
+                            weekStart: weekStarts[idx],
+                            selectedDate: $selectedDate,
+                            days: days,
+                            cellWidth: cellWidth
+                        )
+                        .tag(idx)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .background(Color.hex(hex: "FEECD8"))
+            .cornerRadius(20)
+            .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
+        }
+        .frame(height: 90)
+        // 當分頁變動時，更新選中日期
+        .onChange(of: pageIndex) { newIdx in
+            // 保持當前選中日期在新週的相同星期幾
+            let currentWeekday = calendar.component(.weekday, from: selectedDate) - 1
+            if let newDate = calendar.date(byAdding: .day, value: currentWeekday, to: weekStarts[newIdx]) {
+                selectedDate = newDate
+            }
+        }
+    }
+}
+
+// 只包含週內容（數字部分）的視圖
+struct WeekContent: View {
+    let weekStart: Date
+    @Binding var selectedDate: Date
+    let days: [String]
+    let cellWidth: CGFloat
+    private let calendar = Calendar.current
+    
+    // 計算該週的所有日期
+    private var weekDates: [Date] {
+        return (0..<7).map { dayOffset in
+            calendar.date(byAdding: .day, value: dayOffset, to: weekStart)!
+        }
     }
     
     var body: some View {
         HStack(alignment: .center, spacing: 4) {
             ForEach(0..<7) { index in
-                dayView(for: index)
+                let date = weekDates[index]
+                let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+                
+                VStack(spacing: 5) {
+                    Text(days[index])
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(isSelected ? .black : Color.hex(hex: "222222"))
+                    Text("\(calendar.component(.day, from: date))")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.black)
+                }
+                .frame(width: cellWidth, height: 78)
+                .contentShape(Rectangle()) // 確保整個區域可點擊
+                .onTapGesture {
+                    selectedDate = date
+                }
             }
         }
-        .padding(.leading, 0)
-        .padding(.trailing, 1)
-        .padding(.vertical, 0.84615)
-        .frame(width: 373, alignment: .center)
-        .background(Color.hex(hex: "FEECD8"))
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
-    }
-    
-    private func dayView(for index: Int) -> some View {
-        let date = weekDates[index]
-        let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
-        
-        return VStack(spacing: 5) {
-            Text(days[index])
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .black : Color.hex(hex: "222222"))
-            Text("\(Calendar.current.component(.day, from: date))")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.black)
-        }
-        .frame(width: (373 - 24) / 7, height: 78)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(isSelected ? Color(red: 0.86, green: 0.55, blue: 0.38, opacity: 0.9) : Color.hex(hex: "FEECD8"))
-        )
-        .onTapGesture {
-            selectedDate = date
-        }
-    }
-    
-    // 日期格式化器
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd"
-        return formatter
+        .padding(.horizontal, 4)
     }
 }
 
@@ -404,5 +474,3 @@ struct WeekViewNew: View {
         .environmentObject(TodoViewModel())
         .environmentObject(UserSettingsViewModel()) // 添加 UserSettingsViewModel
 }
-
-
