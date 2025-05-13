@@ -31,6 +31,8 @@ struct TodoEditView: View {
     @State private var isDismissing = false // 標記是否正在關閉
     @State private var isLoading = false // 是否正在保存
     @State private var errorMessage: String? = nil // 錯誤信息
+    @State private var showDeleteConfirmation = false  // 用於顯示刪除確認對話框
+    @State private var isDeletingTask = false  // 用於追蹤刪除狀態
     
     // 重複選項
     let repeatOptions: [RepeatType] = [
@@ -172,11 +174,12 @@ struct TodoEditView: View {
     // 標題區域
     private var headerView: some View {
         HStack {
-            Button("取消") {
-                dismissWithAnimation()
+            Button("刪除") {
+                showDeleteConfirmation = true
             }
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.blue)
+            .foregroundColor(.red)
+            .disabled(isDeletingTask || isLoading)
             
             Spacer()
             
@@ -189,12 +192,20 @@ struct TodoEditView: View {
                 saveTask()
             }
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(isLoading ? Color.gray :
+            .foregroundColor(isLoading || isDeletingTask ? Color.gray :
                              (title.isEmpty ? Color.blue.opacity(0.5) : Color.blue))
-            .disabled(isLoading || title.isEmpty)
+            .disabled(isLoading || isDeletingTask || title.isEmpty)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 15)
+        .alert("確認刪除", isPresented: $showDeleteConfirmation) {
+            Button("取消", role: .cancel) { }
+            Button("刪除", role: .destructive) {
+                deleteTask()
+            }
+        } message: {
+            Text("確定要刪除這個任務嗎？此操作無法復原。")
+        }
     }
     
     // 標題和備註欄位
@@ -350,7 +361,7 @@ struct TodoEditView: View {
             offset = UIScreen.main.bounds.height
         }
         
-        // 觸發資料重新載入，確保其他視圖能看到更新的任務
+        // 觸發資料重新載入
         Task {
             do {
                 try await viewModel.loadTasks()
@@ -359,7 +370,7 @@ struct TodoEditView: View {
             }
         }
         
-        // 延遲關閉以等待動畫完成
+        // 延遲關閉視窗
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 isPresented = false
@@ -457,6 +468,32 @@ struct TodoEditView: View {
             // 不重複，若endDate在startDate之前，則設為startDate
             if endDate < startDate {
                 endDate = startDate
+            }
+        }
+    }
+    
+    // 新增刪除任務的方法
+    private func deleteTask() {
+        // 避免重複刪除
+        if isDeletingTask {
+            return
+        }
+        
+        isDeletingTask = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                // 刪除任務
+                try await viewModel.deleteTask(task)
+                
+                // 關閉編輯視窗
+                dismissWithAnimation()
+            } catch {
+                // 顯示錯誤訊息
+                errorMessage = "刪除任務失敗：\(error.localizedDescription)"
+                isDeletingTask = false
+                print("Error deleting task: \(error)")
             }
         }
     }

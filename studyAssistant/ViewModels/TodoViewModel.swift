@@ -242,11 +242,31 @@ class TodoViewModel: ObservableObject {
     
     // 刪除任務
     func deleteTask(_ task: TodoTask) async throws {
-        try await firebaseService.deleteTodoTask(task.id)
-        tasks.removeAll { $0.id == task.id }
+        // 確保已經登入
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw ValidationError.notLoggedIn
+        }
         
-        // 發送資料變更通知
-        postDataChangeNotification()
+        // 確保只能刪除自己的任務
+        guard task.userId == currentUserId else {
+            throw ValidationError.unauthorized
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            // 從 Firestore 刪除任務
+            try await firebaseService.deleteTodoTask(task.id)
+            
+            // 從本地陣列中移除任務
+            tasks.removeAll { $0.id == task.id }
+            
+            // 發送資料變更通知
+            postDataChangeNotification()
+        } catch {
+            throw error
+        }
     }
     
     func addTask(_ task: TodoTask) async {
@@ -350,13 +370,16 @@ class TodoViewModel: ObservableObject {
 enum ValidationError: LocalizedError {
     case emptyTitle
     case notLoggedIn
+    case unauthorized
     
     var errorDescription: String? {
         switch self {
         case .emptyTitle:
             return "任務標題不能為空"
         case .notLoggedIn:
-            return "請先登入再新增任務"
+            return "請先登入再操作任務"
+        case .unauthorized:
+            return "您沒有權限刪除此任務"
         }
     }
 }
