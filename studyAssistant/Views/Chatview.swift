@@ -127,9 +127,10 @@ struct ChatDemoDynamicView: View {
         HStack {
             VStack(alignment: .leading, spacing: 8) {
                 // Check if this is the latest AI message
-                let isLatestAIMessage = viewModel.chatRooms[viewModel.selectedRoomIndex].messages.last?.text == text &&
-                                       !viewModel.chatRooms[viewModel.selectedRoomIndex].messages.last!.isMe
-                
+                let isLatestAIMessage =
+                    viewModel.chatRooms[viewModel.selectedRoomIndex].messages.last?.text == text
+                    && !viewModel.chatRooms[viewModel.selectedRoomIndex].messages.last!.isMe
+
                 VStack(alignment: .leading, spacing: text.isEmpty ? 0 : 12) {
                     // 文字內容
                     if !text.isEmpty {
@@ -139,13 +140,15 @@ struct ChatDemoDynamicView: View {
 
                     // 顯示載入動畫（當正在載入時且是最新的AI訊息）
                     if viewModel.isLoading && isLatestAIMessage {
-                        HStack( spacing: 12) {
+                        HStack(spacing: 12) {
                             LoadingDots()
                                 .padding(.vertical, 12)
                             if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex]
                                 .messages.firstIndex(where: { $0.text == text }),
-                                viewModel.chatRooms[viewModel.selectedRoomIndex].messages[messageIndex]
-                                    .isWaitingFunction,
+                                viewModel.chatRooms[viewModel.selectedRoomIndex].messages[
+                                    messageIndex
+                                ]
+                                .isWaitingFunction,
                                 let functionName = viewModel.chatRooms[
                                     viewModel.selectedRoomIndex
                                 ].messages[messageIndex].currentExecutingFunction
@@ -156,8 +159,6 @@ struct ChatDemoDynamicView: View {
                             }
                         }
                     }
-
-                    
 
                     // 任務預覽（如果有）
                     if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex]
@@ -179,7 +180,7 @@ struct ChatDemoDynamicView: View {
                             .padding(.vertical, 4)
 
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(message.isTaskConfirmed ? "已確認的任務：" : "待確認的任務：")
+                            Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
                                 .font(.headline)
 
                             ForEach(displayTasks) { task in
@@ -218,6 +219,7 @@ struct ChatDemoDynamicView: View {
                                                 ? "chevron.up" : "chevron.down")
                                     }
                                     .foregroundColor(.blue)
+                                    .opacity(0.8)
                                     .padding(.vertical, 8)
                                 }
                             }
@@ -231,13 +233,14 @@ struct ChatDemoDynamicView: View {
                                         }
                                     }) {
                                         Text("確認新增")
-                                            .foregroundColor(.white)
+                                            .foregroundColor( .white)
+                                            .fontWeight(.bold)
                                             .padding(.horizontal, 20)
                                             .padding(.vertical, 10)
                                             .background(
                                                 message.isProcessing
                                                     ? Color.gray.opacity(0.4)
-                                                    : Color.blue.opacity(0.5)
+                                                    : Color.hex(hex: "74C3AF")
                                             )
                                             .cornerRadius(8)
                                     }
@@ -248,12 +251,13 @@ struct ChatDemoDynamicView: View {
                                     }) {
                                         Text("取消")
                                             .foregroundColor(.white)
+                                            .fontWeight(.bold)
                                             .padding(.horizontal, 20)
                                             .padding(.vertical, 10)
                                             .background(
                                                 message.isProcessing
                                                     ? Color.gray.opacity(0.4)
-                                                    : Color.red.opacity(0.5)
+                                                    : Color.hex(hex: "F1A154")
                                             )
                                             .cornerRadius(8)
                                     }
@@ -265,13 +269,13 @@ struct ChatDemoDynamicView: View {
                                 if message.isTaskConfirmed {
                                     Text(
                                         message.successCount > 0
-                                            ? "✅ \(message.successCount) 個任務已成功新增"
+                                            ? " \(message.successCount) 個任務已成功新增"
                                                 + (message.failureCount > 0
-                                                    ? "\n❌ \(message.failureCount) 個任務新增失敗"
+                                                    ? "\n\(message.failureCount) 個任務新增失敗"
                                                     : "")
-                                            : "❌ 新增任務失敗"
+                                            : "新增任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .green : .red)
+                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.9) : .red.opacity(0.9))
                                     .padding(.top, 8)
                                 }
                             }
@@ -391,24 +395,32 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Input Bar
     private var inputBar: some View {
-        HStack {
-            TextField("輸入訊息...", text: $inputText)
-                .font(.system(size: 18))
-                .padding(16)
-                .frame(height: 55)
-                .background(midBubbleColor)
-                .cornerRadius(12)
-                .foregroundColor(textColor)
-            Button(action: sendMessage) {
-                Image(systemName: "arrowshape.up")
-                    .font(.system(size: 22))
+
+            HStack {
+                TextField("輸入訊息...", text: $inputText)
+                    .font(.system(size: 18))
+                    .padding(16)
+                    .frame(height: 55)
+                    .background(midBubbleColor)
+                    .cornerRadius(12)
                     .foregroundColor(textColor)
-                    .padding()
+
+                Button(action: sendMessage) {
+                    Image(systemName: "arrowshape.up")
+                        .font(.system(size: 22))
+                        .foregroundColor(textColor)
+                        .padding()
+                }
+                .disabled(inputText.isEmpty)
             }
-            .disabled(inputText.isEmpty)
-        }
-        .padding(.horizontal)
-        .padding(.bottom, 90)
+            .padding(.horizontal)
+            .padding(.bottom, 76)
+            .padding(.top, 8)
+            .background( // 🔧 把背景與陰影包在一起，陰影只會畫在這塊背景矩形
+                backgroundColor
+                    .shadow(color: .black.opacity(0.085), radius: 10, x: 0, y: -2) // ⬅︎ 只有這裡加陰影
+            )
+
     }
 
     // MARK: Sidebar

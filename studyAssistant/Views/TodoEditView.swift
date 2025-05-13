@@ -38,8 +38,8 @@ struct TodoEditView: View {
     let repeatOptions: [RepeatType] = [
         .none,
         .daily,
-        .weekly([]),
-        .monthly([])
+        .weekly,
+        .monthly
     ]
     
     // Figma 設計中的顏色
@@ -338,8 +338,8 @@ struct TodoEditView: View {
                 Picker("", selection: $repeatOption) {
                     Text("不重複").tag(RepeatType.none)
                     Text("每天").tag(RepeatType.daily)
-                    Text("每週").tag(RepeatType.weekly([]))
-                    Text("每月").tag(RepeatType.monthly([]))
+                    Text("每週").tag(RepeatType.weekly)
+                    Text("每月").tag(RepeatType.monthly)
                 }
                 .pickerStyle(.menu)
                 .accentColor(.black)

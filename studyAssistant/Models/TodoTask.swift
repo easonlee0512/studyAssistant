@@ -6,8 +6,8 @@ import FirebaseAuth
 public enum RepeatType: Hashable, Codable {
     case none
     case daily
-    case weekly([Int])   // 0=Sunday, 1=Monday, ...
-    case monthly([Int])  // 幾號
+    case weekly
+    case monthly
     
     // 實現 Hashable
     public func hash(into hasher: inout Hasher) {
@@ -16,12 +16,10 @@ public enum RepeatType: Hashable, Codable {
             hasher.combine(0)
         case .daily:
             hasher.combine(1)
-        case .weekly(let days):
+        case .weekly:
             hasher.combine(2)
-            hasher.combine(days)
-        case .monthly(let days):
+        case .monthly:
             hasher.combine(3)
-            hasher.combine(days)
         }
     }
     
@@ -32,10 +30,10 @@ public enum RepeatType: Hashable, Codable {
             return true
         case (.daily, .daily):
             return true
-        case (.weekly(let lhsDays), .weekly(let rhsDays)):
-            return lhsDays == rhsDays
-        case (.monthly(let lhsDays), .monthly(let rhsDays)):
-            return lhsDays == rhsDays
+        case (.weekly, .weekly):
+            return true
+        case (.monthly, .monthly):
+            return true
         default:
             return false
         }
@@ -118,17 +116,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             case "daily":
                 self.repeatType = .daily
             case "weekly":
-                if let days = repeatTypeRaw["days"] as? [Int] {
-                    self.repeatType = .weekly(days)
-                } else {
-                    self.repeatType = .none
-                }
+                self.repeatType = .weekly
             case "monthly":
-                if let days = repeatTypeRaw["days"] as? [Int] {
-                    self.repeatType = .monthly(days)
-                } else {
-                    self.repeatType = .none
-                }
+                self.repeatType = .monthly
             default:
                 self.repeatType = .none
             }
@@ -151,16 +141,10 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         switch repeatType {
         case .daily:
             repeatTypeData = ["type": "daily"]
-        case .weekly(let days):
-            repeatTypeData = [
-                "type": "weekly",
-                "days": days
-            ]
-        case .monthly(let days):
-            repeatTypeData = [
-                "type": "monthly",
-                "days": days
-            ]
+        case .weekly:
+            repeatTypeData = ["type": "weekly"]
+        case .monthly:
+            repeatTypeData = ["type": "monthly"]
         case .none:
             break
         }
@@ -199,7 +183,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             // 每天無限重複，只要日期不早於起始日
             return startOfDate >= startOfStartDate
             
-        case .weekly(let days):
+        case .weekly:
             guard startOfDate >= startOfStartDate else { return false }
             
             // ① 這週的「起日」「迄日」各落在星期幾
@@ -213,13 +197,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             let shiftInWeek = (weekday - startW + 7) % 7
             
             // ③ 「有指定 days」→ 直接比對；否則就用 span 判斷連續區段
-            if !days.isEmpty {
-                return days.contains(weekday)
-            } else {
                 return shiftInWeek < span
-            }
             
-        case .monthly(let days):
+        case .monthly:
             guard startOfDate >= startOfStartDate else { return false }
             
             // ① 取得目標日期是幾號
@@ -235,11 +215,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             let shift = ((dayOfMonth - startDay + 31) % 31)
             
             // ④ 「有指定日期」→ 直接比對；否則就用 span 判斷連續區段
-            if !days.isEmpty {
-                return days.contains(dayOfMonth)
-            } else {
                 return shift < span
-            }
             
         case .none:
             // 不重複：仍只顯示在原始區段內
@@ -312,9 +288,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     }
 }
 
-// Date 擴充，取得當天 00:00:00
-// extension Date {
-//     var startOfDay: Date {
-//         Calendar.current.startOfDay(for: self)
-//     }
-// } 
+//// Date 擴充，取得當天 00:00:00
+//extension Date {
+//    var startOfDay: Date {
+//        Calendar.current.startOfDay(for: self)
+//    }
+//} 

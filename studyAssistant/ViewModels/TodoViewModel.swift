@@ -163,9 +163,9 @@ class TodoViewModel: ObservableObject {
         case "每天":
             return .daily
         case "每週":
-            return .weekly(Array(newTaskSelectedDays))
+            return .weekly
         case "每月":
-            return .monthly(Array(newTaskSelectedMonthDays))
+            return .monthly
         default:
             return .none
         }
