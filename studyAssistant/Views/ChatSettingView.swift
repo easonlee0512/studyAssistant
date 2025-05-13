@@ -5,8 +5,8 @@
 //  Created by 李翊辰 on 2025/5/9.
 //
 
-import SwiftUI
 import FirebaseFirestore
+import SwiftUI
 
 struct ChatSettingView: View {
     // 色票 - 與主畫面保持一致
@@ -14,31 +14,38 @@ struct ChatSettingView: View {
     private let accentColor = Color.hex(hex: "E27844")
     private let cardColor = Color.hex(hex: "FEECD8")
     private let textColor = Color.black.opacity(0.8)
-    
+
     // ViewModel 引用
     @EnvironmentObject private var viewModel: ChatViewModel
-    
+
     // 臨時存儲設定變更
     @State private var tempSettings: StudySettings?
     @State private var selectedDayForTimeSettings: Int = 1
     @State private var selectedDaysSet: Set<Int> = []
-    
+
     // 每天的開始和結束時間（臨時用於UI顯示）
     @State private var dailyStartTimes: [Int: Date] = [:]
     @State private var dailyEndTimes: [Int: Date] = [:]
-    
+
     // 狀態控制
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
     @State private var showErrorAlert: Bool = false
-    
+
     @Environment(\.dismiss) private var dismiss
-    
+
+    @State private var studyDuration: Double = 60
+    @State private var tone: String = ""
+
+    init() {
+        // 不在這裡設置初始值，而是在 onAppear 時從 viewModel 讀取
+    }
+
     var body: some View {
         NavigationView {
             ZStack {
                 backgroundColor.ignoresSafeArea()
-                
+
                 if viewModel.isLoadingSettings || isLoading {
                     ProgressView("載入中...")
                         .progressViewStyle(CircularProgressViewStyle())
@@ -67,94 +74,154 @@ struct ChatSettingView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 20) {
+                            // GPT 語氣設定
+                            settingCard(title: "助手語氣設定") {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    TextField("請輸入助手語氣...", text: $tone)
+                                        .font(.system(size: 18))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            Color.hex(hex: "F3CAA6")
+                                                .opacity(0.15)
+                                                .background(.ultraThinMaterial)
+                                        )
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                        )
+                                        .padding(.top, 2)
+
+                                    Text("提示：可以設定為「多拉A夢」、「女朋友」等")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 4)
+                                        .padding(.top, 2)
+                                }
+                            }
                             // 讀書時間設定
                             if let settings = tempSettings {
                                 settingCard(title: "讀書時間偏好") {
                                     VStack(alignment: .leading, spacing: 15) {
                                         Text("每次讀書時間：\(Int(settings.studyDuration)) 分鐘")
                                             .font(.system(size: 18))
-                                        
-                                        Slider(value: Binding(
-                                            get: { settings.studyDuration },
-                                            set: { tempSettings?.studyDuration = $0 }
-                                        ), in: 15...240, step: 15)
-                                            .accentColor(accentColor)
+
+                                        Slider(
+                                            value: Binding(
+                                                get: { settings.studyDuration },
+                                                set: { tempSettings?.studyDuration = $0 }
+                                            ), in: 15...240, step: 15
+                                        )
+                                        .accentColor(accentColor)
                                     }
                                 }
-                                
+
                                 // 讀書日期設定
                                 settingCard(title: "讀書日期偏好") {
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text("選擇習慣讀書的日子：")
                                             .font(.system(size: 18))
-                                        
+
                                         weekdaysSelector
-                                        
+
                                         if !selectedDaysSet.isEmpty {
                                             Divider()
                                                 .padding(.vertical, 10)
-                                            
+
                                             Text("選擇要設定時間的日子：")
                                                 .font(.system(size: 18))
                                                 .padding(.bottom, 5)
-                                            
+
                                             // 選擇要設定時間的日子
                                             ScrollView(.horizontal, showsIndicators: false) {
                                                 HStack(spacing: 10) {
-                                                    ForEach(Array(selectedDaysSet).sorted(), id: \.self) { day in
+                                                    ForEach(
+                                                        Array(selectedDaysSet).sorted(), id: \.self
+                                                    ) { day in
                                                         Button(action: {
                                                             selectedDayForTimeSettings = day
                                                         }) {
                                                             Text(weekdaySymbol(for: day))
-                                                                .font(.system(size: 18, weight: .bold))
+                                                                .font(
+                                                                    .system(size: 18, weight: .bold)
+                                                                )
                                                                 .frame(width: 40, height: 40)
-                                                                .background(selectedDayForTimeSettings == day ? accentColor : Color.white)
-                                                                .foregroundColor(selectedDayForTimeSettings == day ? .white : textColor)
+                                                                .background(
+                                                                    selectedDayForTimeSettings
+                                                                        == day
+                                                                        ? accentColor : Color.white
+                                                                )
+                                                                .foregroundColor(
+                                                                    selectedDayForTimeSettings
+                                                                        == day ? .white : textColor
+                                                                )
                                                                 .cornerRadius(20)
                                                                 .overlay(
                                                                     Circle()
-                                                                        .stroke(accentColor, lineWidth: 2)
+                                                                        .stroke(
+                                                                            accentColor,
+                                                                            lineWidth: 2)
                                                                 )
                                                         }
                                                     }
                                                 }
                                             }
                                             .padding(.bottom, 10)
-                                            
+
                                             // 顯示當前選擇日的設定
-                                            if selectedDaysSet.contains(selectedDayForTimeSettings) {
+                                            if selectedDaysSet.contains(selectedDayForTimeSettings)
+                                            {
                                                 VStack(alignment: .leading, spacing: 15) {
-                                                    Text("星期\(weekdaySymbol(for: selectedDayForTimeSettings))偏好時間：")
-                                                        .font(.system(size: 18, weight: .bold))
-                                                        .foregroundColor(accentColor)
-                                                    
+                                                    Text(
+                                                        "星期\(weekdaySymbol(for: selectedDayForTimeSettings))偏好時間："
+                                                    )
+                                                    .font(.system(size: 18, weight: .bold))
+                                                    .foregroundColor(accentColor)
+
                                                     Text("偏好開始時間：")
                                                         .font(.system(size: 18))
-                                                    
-                                                    DatePicker("", selection: Binding(
-                                                        get: { dailyStartTimes[selectedDayForTimeSettings] ?? Date() },
-                                                        set: { 
-                                                            dailyStartTimes[selectedDayForTimeSettings] = $0
-                                                            updateTempSettingsTime()
-                                                        }
-                                                    ), displayedComponents: .hourAndMinute)
-                                                        .datePickerStyle(.wheel)
-                                                        .labelsHidden()
-                                                        .frame(maxHeight: 150)
-                                                    
+
+                                                    DatePicker(
+                                                        "",
+                                                        selection: Binding(
+                                                            get: {
+                                                                dailyStartTimes[
+                                                                    selectedDayForTimeSettings]
+                                                                    ?? Date()
+                                                            },
+                                                            set: {
+                                                                dailyStartTimes[
+                                                                    selectedDayForTimeSettings] = $0
+                                                                updateTempSettingsTime()
+                                                            }
+                                                        ), displayedComponents: .hourAndMinute
+                                                    )
+                                                    .datePickerStyle(.wheel)
+                                                    .labelsHidden()
+                                                    .frame(maxHeight: 150)
+
                                                     Text("偏好結束時間：")
                                                         .font(.system(size: 18))
-                                                    
-                                                    DatePicker("", selection: Binding(
-                                                        get: { dailyEndTimes[selectedDayForTimeSettings] ?? Date() },
-                                                        set: { 
-                                                            dailyEndTimes[selectedDayForTimeSettings] = $0
-                                                            updateTempSettingsTime()
-                                                        }
-                                                    ), displayedComponents: .hourAndMinute)
-                                                        .datePickerStyle(.wheel)
-                                                        .labelsHidden()
-                                                        .frame(maxHeight: 150)
+
+                                                    DatePicker(
+                                                        "",
+                                                        selection: Binding(
+                                                            get: {
+                                                                dailyEndTimes[
+                                                                    selectedDayForTimeSettings]
+                                                                    ?? Date()
+                                                            },
+                                                            set: {
+                                                                dailyEndTimes[
+                                                                    selectedDayForTimeSettings] = $0
+                                                                updateTempSettingsTime()
+                                                            }
+                                                        ), displayedComponents: .hourAndMinute
+                                                    )
+                                                    .datePickerStyle(.wheel)
+                                                    .labelsHidden()
+                                                    .frame(maxHeight: 150)
                                                 }
                                                 .padding(.horizontal, 5)
                                                 .padding(.vertical, 10)
@@ -165,6 +232,7 @@ struct ChatSettingView: View {
                                     }
                                 }
                             }
+
                         }
                         .padding()
                     }
@@ -179,7 +247,7 @@ struct ChatSettingView: View {
                     }
                     .foregroundColor(accentColor)
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("儲存") {
                         saveSettings()
@@ -201,14 +269,16 @@ struct ChatSettingView: View {
             }
         }
     }
-    
+
     // 自定義卡片視圖
-    private func settingCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func settingCard<Content: View>(title: String, @ViewBuilder content: () -> Content)
+        -> some View
+    {
         VStack(alignment: .leading, spacing: 15) {
             Text(title)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(accentColor)
-            
+
             content()
         }
         .padding()
@@ -216,7 +286,7 @@ struct ChatSettingView: View {
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
     }
-    
+
     // 星期選擇器
     private var weekdaysSelector: some View {
         HStack(spacing: 10) {
@@ -253,25 +323,27 @@ struct ChatSettingView: View {
         }
         .padding(.vertical, 5)
     }
-    
+
     // 取得星期幾的符號
     private func weekdaySymbol(for day: Int) -> String {
         let symbols = ["一", "二", "三", "四", "五", "六", "日"]
-        return day <= symbols.count ? symbols[day-1] : ""
+        return day <= symbols.count ? symbols[day - 1] : ""
     }
-    
+
     // 從ViewModel載入設定
     private func loadSettingsFromViewModel() {
         if let settings = viewModel.studySettings {
             // 複製設定，創建可變副本
             self.tempSettings = settings
             self.selectedDaysSet = Set(settings.selectedDays)
-            
+            self.studyDuration = settings.studyDuration
+            self.tone = settings.tone
+
             // 如果有選擇的日子，設定第一個為當前編輯的日子
             if let firstDay = settings.selectedDays.first {
                 self.selectedDayForTimeSettings = firstDay
             }
-            
+
             // 建立每日開始/結束時間的Date物件用於UI
             for day in 1...7 {
                 dailyStartTimes[day] = settings.getStartTimeForDay(day)
@@ -285,6 +357,8 @@ struct ChatSettingView: View {
                 if let settings = viewModel.studySettings {
                     self.tempSettings = settings
                     self.selectedDaysSet = Set(settings.selectedDays)
+                    self.studyDuration = settings.studyDuration
+                    self.tone = settings.tone
                     if let firstDay = settings.selectedDays.first {
                         self.selectedDayForTimeSettings = firstDay
                     }
@@ -296,11 +370,11 @@ struct ChatSettingView: View {
             }
         }
     }
-    
+
     // 更新臨時設定中的時間
     private func updateTempSettingsTime() {
         guard var settings = tempSettings else { return }
-        
+
         // 更新所有日子的時間設定
         for day in 1...7 {
             if let startTime = dailyStartTimes[day] {
@@ -310,10 +384,10 @@ struct ChatSettingView: View {
                 settings.setEndTimeForDay(day, date: endTime)
             }
         }
-        
+
         self.tempSettings = settings
     }
-    
+
     // 儲存設定
     private func saveSettings() {
         guard var settingsToSave = tempSettings else {
@@ -321,18 +395,21 @@ struct ChatSettingView: View {
             showErrorAlert = true
             return
         }
-        
+
+        // 更新語氣設定
+        settingsToSave.tone = tone
+
         // 確保選擇的日子已更新
         settingsToSave.selectedDays = Array(selectedDaysSet)
-        
+
         // 顯示載入狀態
         isLoading = true
-        
+
         // 同步到Firestore
         Task {
             do {
                 await viewModel.updateStudySettings(settingsToSave)
-                
+
                 // 如果成功，關閉設定畫面
                 if viewModel.settingsError == nil {
                     dismiss()
@@ -346,7 +423,7 @@ struct ChatSettingView: View {
                 errorMessage = error.localizedDescription
                 showErrorAlert = true
             }
-            
+
             isLoading = false
         }
     }
@@ -360,4 +437,3 @@ struct ChatSettingView_Previews: PreviewProvider {
             .environmentObject(viewModel)
     }
 }
-

@@ -247,7 +247,7 @@ struct ChatRoom: Identifiable, Codable {
 
 // MARK: - 待確認的任務結構
 struct PendingTask: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     let title: String
     let note: String
     let category: String
@@ -255,6 +255,66 @@ struct PendingTask: Identifiable, Codable {
     let endDate: Date
     let isAllDay: Bool
     let isCompleted: Bool
+    let color: Color
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, note, category, startDate, endDate, isAllDay, isCompleted, color
+    }
+
+    init(
+        title: String, note: String, category: String, startDate: Date, endDate: Date,
+        isAllDay: Bool, isCompleted: Bool, color: Color
+    ) {
+        self.id = UUID()
+        self.title = title
+        self.note = note
+        self.category = category
+        self.startDate = startDate
+        self.endDate = endDate
+        self.isAllDay = isAllDay
+        self.isCompleted = isCompleted
+        self.color = color
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        note = try container.decode(String.self, forKey: .note)
+        category = try container.decode(String.self, forKey: .category)
+        startDate = try container.decode(Date.self, forKey: .startDate)
+        endDate = try container.decode(Date.self, forKey: .endDate)
+        isAllDay = try container.decode(Bool.self, forKey: .isAllDay)
+        isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
+
+        // 解碼顏色
+        let colorData = try container.decode(Data.self, forKey: .color)
+        if let uiColor = try NSKeyedUnarchiver.unarchivedObject(
+            ofClass: UIColor.self, from: colorData)
+        {
+            color = Color(uiColor)
+        } else {
+            color = Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4)  // 預設顏色
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(note, forKey: .note)
+        try container.encode(category, forKey: .category)
+        try container.encode(startDate, forKey: .startDate)
+        try container.encode(endDate, forKey: .endDate)
+        try container.encode(isAllDay, forKey: .isAllDay)
+        try container.encode(isCompleted, forKey: .isCompleted)
+
+        // 編碼顏色
+        let uiColor = UIColor(color)
+        let colorData = try NSKeyedArchiver.archivedData(
+            withRootObject: uiColor, requiringSecureCoding: false)
+        try container.encode(colorData, forKey: .color)
+    }
 }
 
 // MARK: - 與 GPT 通訊的 View-Model
@@ -384,6 +444,21 @@ final class ChatViewModel: ObservableObject {
                                     type: "string",
                                     description:
                                         "Whether the task is completed, must be 'true' or 'false' (required)"
+                                ),
+                                "color": .init(
+                                    type: "string",
+                                    description: """
+                                        Task color must be one of these four options:
+                                        - '0.7,0.16,0.13,0.4' (Red)
+                                        - '0.7,0.56,0,0.4' (Yellow)
+                                        - '0.18,0.7,0.31,0.4' (Green)
+                                        - '0.29,0.28,0.7,0.4' (Blue)
+                                        Choose a color based on the task category:
+                                        - Red: Urgent or important tasks
+                                        - Yellow: Medium priority tasks
+                                        - Green: Learning or growth tasks
+                                        - Blue: Routine or regular tasks
+                                        """
                                 ),
                             ]
                         )
@@ -530,6 +605,14 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    // 預定義的顏色選項
+    private let colorOptions: [Color] = [
+        Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),
+        Color(red: 0.7, green: 0.56, blue: 0).opacity(0.4),
+        Color(red: 0.18, green: 0.7, blue: 0.31).opacity(0.4),
+        Color(red: 0.29, green: 0.28, blue: 0.7).opacity(0.4),
+    ]
+
     // 執行保存任務函數
     private func executeSaveTask(arguments: String) async -> String {
         currentFunction = "saveTask"
@@ -550,6 +633,7 @@ final class ChatViewModel: ObservableObject {
             let category: String?
             let isAllDay: String?
             let isCompleted: String?
+            let color: String?
 
             // 為可選欄位提供預設值
             var resolvedCategory: String {
@@ -562,6 +646,23 @@ final class ChatViewModel: ObservableObject {
 
             var resolvedIsCompleted: String {
                 return isCompleted ?? "false"
+            }
+
+            // 解析顏色字串為 Color
+            func resolveColor() -> Color {
+                guard let colorStr = color else {
+                    return Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4)
+                }
+
+                let components = colorStr.split(separator: ",").compactMap {
+                    Double($0.trimmingCharacters(in: .whitespaces))
+                }
+                guard components.count == 4 else {
+                    return Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4)
+                }
+
+                return Color(red: components[0], green: components[1], blue: components[2]).opacity(
+                    components[3])
             }
         }
 
@@ -625,6 +726,7 @@ final class ChatViewModel: ObservableObject {
 
                 let isAllDayBool = task.resolvedIsAllDay.lowercased() == "true"
                 let isCompletedBool = task.resolvedIsCompleted.lowercased() == "true"
+                let taskColor = task.resolveColor()
 
                 let pendingTask = PendingTask(
                     title: task.title,
@@ -633,7 +735,8 @@ final class ChatViewModel: ObservableObject {
                     startDate: startDate,
                     endDate: endDate,
                     isAllDay: isAllDayBool,
-                    isCompleted: isCompletedBool
+                    isCompleted: isCompletedBool,
+                    color: taskColor
                 )
 
                 // 檢查並創建類別統計
@@ -679,7 +782,7 @@ final class ChatViewModel: ObservableObject {
                 let todoTask = TodoTask(
                     title: task.title,
                     note: task.note,
-                    color: Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),
+                    color: task.color,  // 使用任務的顏色
                     focusTime: 0,
                     category: task.category,
                     isAllDay: task.isAllDay,
@@ -759,12 +862,16 @@ final class ChatViewModel: ObservableObject {
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { OpenAIMessage(role: $0.isMe ? "user" : "assistant", content: $0.text) }
 
-        let tone = "沉著穩重的專家"
+        let tone = studySettings?.tone ?? "沉著穩重的專家"
         // 添加 system message 來指導 GPT 使用 function
         let systemMsg = OpenAIMessage(
             role: "system",
             content: """
                 你是一位「計畫大師」，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
+
+                使用者的讀書習慣設定：
+                \(formatStudySettings())
+
                 可用工具：
                 getTask()      ：取得使用者現有任務
                 getTime()      ：取得目前時間
@@ -783,6 +890,11 @@ final class ChatViewModel: ObservableObject {
                     - 使用者已確認或拒絕所有建議的任務
                     - 對話已經沒有明確目標或進展
                 7. 如需要詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
+                8. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
+                    - 只能在使用者設定的可讀書日期和時間內安排任務
+                    - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
+                    - 不要在設定的時間範圍外安排任務
+                    - 不要與原有的任務時間重疊
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1198,6 +1310,44 @@ final class ChatViewModel: ObservableObject {
 
         isLoadingSettings = false
         currentFunction = nil
+    }
+
+    // 添加格式化讀書設定的輔助函數
+    private func formatStudySettings() -> String {
+        guard let settings = studySettings else {
+            return "尚未設定讀書習慣"
+        }
+
+        var result = "可讀書時段如下：\n"
+
+        for day in settings.selectedDays.sorted() {
+            let dayString = String(day)
+            if let startHour = settings.dailyStartHours[dayString],
+                let startMinute = settings.dailyStartMinutes[dayString],
+                let endHour = settings.dailyEndHours[dayString],
+                let endMinute = settings.dailyEndMinutes[dayString]
+            {
+
+                let weekday =
+                    switch day {
+                    case 1: "星期一"
+                    case 2: "星期二"
+                    case 3: "星期三"
+                    case 4: "星期四"
+                    case 5: "星期五"
+                    case 6: "星期六"
+                    case 7: "星期日"
+                    default: "未知"
+                    }
+
+                result +=
+                    "\(weekday)：\(String(format: "%02d:%02d", startHour, startMinute)) - \(String(format: "%02d:%02d", endHour, endMinute))\n"
+            }
+        }
+
+        result += "\n每次讀書時間：\(Int(settings.studyDuration))分鐘"
+
+        return result
     }
 
     init() {
