@@ -895,6 +895,8 @@ final class ChatViewModel: ObservableObject {
                     - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
                     - 不要在設定的時間範圍外安排任務
                     - 不要與原有的任務時間重疊
+                9. gpt的文字對話中並不需要發送[WAITING_FOR_USER]、getTask、getTime、saveTask、end_conversation。
+                10. 任務的安排需要參考時間
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1322,6 +1324,7 @@ final class ChatViewModel: ObservableObject {
 
         for day in settings.selectedDays.sorted() {
             let dayString = String(day)
+            result += "每次讀書時間：\(Int(settings.studyDuration))分鐘\n"
             if let startHour = settings.dailyStartHours[dayString],
                 let startMinute = settings.dailyStartMinutes[dayString],
                 let endHour = settings.dailyEndHours[dayString],
@@ -1344,8 +1347,6 @@ final class ChatViewModel: ObservableObject {
                     "\(weekday)：\(String(format: "%02d:%02d", startHour, startMinute)) - \(String(format: "%02d:%02d", endHour, endMinute))\n"
             }
         }
-
-        result += "\n每次讀書時間：\(Int(settings.studyDuration))分鐘"
 
         return result
     }

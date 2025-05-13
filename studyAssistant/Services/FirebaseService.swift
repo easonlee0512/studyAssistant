@@ -192,24 +192,24 @@ class FirebaseService: DataServiceProtocol {
                     currentDate = nextDate
                 }
                 
-            case .weekly(let days):
-                for weekday in days {
+            case .weekly:
+                // 使用創建時的星期幾
+                let weekday = calendar.component(.weekday, from: task.startDate)
                     if let nextDate = calendar.nextDate(after: currentDate,
-                                                      matching: DateComponents(weekday: weekday + 1),
+                                                  matching: DateComponents(weekday: weekday),
                                                       matchingPolicy: .nextTime) {
                         occurrences.append(nextDate)
                         currentDate = nextDate
-                    }
                 }
                 
-            case .monthly(let days):
-                for day in days {
+            case .monthly:
+                // 使用創建時的日期
+                let dayOfMonth = calendar.component(.day, from: task.startDate)
                     if let nextDate = calendar.nextDate(after: currentDate,
-                                                      matching: DateComponents(day: day),
+                                                  matching: DateComponents(day: dayOfMonth),
                                                       matchingPolicy: .nextTime) {
                         occurrences.append(nextDate)
                         currentDate = nextDate
-                    }
                 }
                 
             case .none:

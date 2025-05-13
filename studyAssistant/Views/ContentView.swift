@@ -105,7 +105,10 @@ struct TabBarNew: View {
                 .fill(Color.clear)
                 .frame(height: 45)
         }
-        .background(Color.hex(hex: "FEECD8"))
+        .background(
+            Color.hex(hex: "FEECD8")
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
+        )
     }
 }
 

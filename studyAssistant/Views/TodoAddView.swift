@@ -32,8 +32,8 @@ struct TodoAddView: View {
     let repeatOptions: [RepeatType] = [
         .none,
         .daily,
-        .weekly([]),  // 空陣列，表示使用連續區段
-        .monthly([])  // 空陣列，表示使用連續區段
+        .weekly,
+        .monthly
     ]
     
     // Figma 設計中的顏色
@@ -330,8 +330,8 @@ struct TodoAddView: View {
                 Picker("", selection: $repeatOption) {
                     Text("不重複").tag(RepeatType.none)
                     Text("每天").tag(RepeatType.daily)
-                    Text("每週").tag(RepeatType.weekly([]))
-                    Text("每月").tag(RepeatType.monthly([]))
+                    Text("每週").tag(RepeatType.weekly)
+                    Text("每月").tag(RepeatType.monthly)
                 }
                 .pickerStyle(.menu)
                 .accentColor(.black)
