@@ -405,6 +405,7 @@ final class ChatViewModel: ObservableObject {
     // 追蹤當前使用的函數
     @Published var currentFunction: String?
     @Published var isLoading: Bool = false
+    @Published var conversationEndedSignal = UUID()  // 用於發送對話結束的信號
 
     private let chatRoomsKey = "local_chat_rooms"
 
@@ -993,7 +994,13 @@ final class ChatViewModel: ObservableObject {
     // 執行 end_conversation 函數
     private func executeEndConversation() -> String {
         currentFunction = "end_conversation"
-        defer { currentFunction = nil }
+        defer { 
+            currentFunction = nil
+            // 發送對話結束信號
+            DispatchQueue.main.async {
+                self.conversationEndedSignal = UUID()
+            }
+        }
         return "感謝您的使用，祝您學習順利！如果需要再次規劃，隨時歡迎找我聊天。"
     }
 

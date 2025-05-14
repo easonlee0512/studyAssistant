@@ -28,6 +28,8 @@ struct ChatDemoDynamicView: View {
     @State private var editingTitleText = ""  // 編輯中的標題文字
     @FocusState private var isTitleFocused: Bool  // 追蹤標題輸入框是否有焦點
     @State private var isGenerating = false   // 追蹤 GPT 是否正在生成回覆
+    @State private var isUserScrolling = false  // 追蹤使用者是否正在滑動
+    @State private var isConversationEnded = false  // 追蹤對話是否已結束
 
     var body: some View {
         ZStack {
@@ -161,20 +163,64 @@ struct ChatDemoDynamicView: View {
                 .padding(.bottom, 20)
                 .id("messageBottom")  // 添加一個 ID 用於滾動
             }
+            .simultaneousGesture(
+                DragGesture().onChanged { _ in
+                    // 使用者開始滑動時，設置標記為true
+                    isUserScrolling = true
+                    
+                    // 設置定時器，如果3秒內沒有再次滑動，就重置標記
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        isUserScrolling = false
+                    }
+                }
+            )
             .onChange(of: viewModel.chatRooms[viewModel.selectedRoomIndex].messages.count) { _ in
-                proxy.scrollTo("messageBottom", anchor: .bottom)
+                // 新增訊息時總是滾動到底部
+                scrollToBottom(proxy: proxy)
             }
             .onChange(of: latestMessageId) { _ in
-                proxy.scrollTo("messageBottom", anchor: .bottom)
+                // 文字串流中，除非使用者手動滾動或對話已結束，否則始終跟隨最新文字
+                if !isUserScrolling && !isConversationEnded {
+                    scrollToBottomImmediate(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.conversationEndedSignal) { _ in
+                // 當收到對話結束信號時，設置標記
+                isConversationEnded = true
+                
+                // 最後滾動一次到底部然後不再自動滾動
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.selectedRoomIndex) { _ in
+                // 當切換聊天室時，重置對話結束標記
+                isConversationEnded = false
             }
             .onAppear {
                 // 每次進入聊天室頁面時自動滾動到底部
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    proxy.scrollTo("messageBottom", anchor: .bottom)
+                    scrollToBottom(proxy: proxy)
                 }
+                
+                // 重置對話結束標記
+                isConversationEnded = false
             }
         }
     }
+    
+    // 帶動畫的滾動到底部
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo("messageBottom", anchor: .bottom)
+        }
+    }
+    
+    // 立即滾動到底部（無動畫，用於文字串流）
+    private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
+        proxy.scrollTo("messageBottom", anchor: .bottom)
+    }
+    
     private func userBubble(_ text: String) -> some View {
         HStack {
             Spacer()
@@ -1018,11 +1064,17 @@ struct ChatDemoDynamicView: View {
             cancelGeneration()
         }
         
+        // 重置對話結束標記
+        isConversationEnded = false
+        
         viewModel.resetSendToGPTCount()  // 每次使用者發送訊息時重設計數
         let userMsg = ChatMessage(text: inputText, isMe: true)
         let firstUserMessage = inputText
         viewModel.chatRooms[viewModel.selectedRoomIndex].messages.append(userMsg)
         inputText = ""
+        
+        // 重置使用者滾動標記，確保在發送新訊息後會自動滾動
+        isUserScrolling = false
 
         // 插入一顆空白 AI 泡泡，用來即時累加
         let aiIndex: Int = {
@@ -1047,8 +1099,8 @@ struct ChatDemoDynamicView: View {
                 messages: viewModel.chatRooms[viewModel.selectedRoomIndex].messages
             ) { token in
                 viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].text += token
-                latestMessageId =
-                    viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].id
+                // 每收到一個新的token就更新latestMessageId觸發滾動
+                latestMessageId = UUID()
             }
             
             // 對話完成後，重置生成狀態
@@ -1106,3 +1158,4 @@ struct ChatDemoDynamicView: View {
 #Preview {
     ChatDemoDynamicView()
 }
+
