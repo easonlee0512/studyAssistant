@@ -120,6 +120,14 @@ struct ChatDemoDynamicView: View {
                 .cornerRadius(12)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.6, alignment: .trailing)
+                .textSelection(.enabled)
+                .contextMenu {
+                    Button(action: {
+                        UIPasteboard.general.string = text
+                    }) {
+                        Label("複製", systemImage: "doc.on.doc")
+                    }
+                }
         }
         .padding(.horizontal)
     }
@@ -148,141 +156,285 @@ struct ChatDemoDynamicView: View {
                                 viewModel.chatRooms[viewModel.selectedRoomIndex].messages[
                                     messageIndex
                                 ]
-                                .isWaitingFunction,
-                                let functionName = viewModel.chatRooms[
+                                .isWaitingFunction
+                            {
+                                // 使用單一函數名稱顯示，如果有多個函數調用，只顯示最後一個
+                                if let functionName = viewModel.chatRooms[
                                     viewModel.selectedRoomIndex
                                 ].messages[messageIndex].currentExecutingFunction
-                            {
-                                Text("正在執行：\(functionName)")
-                                    .foregroundColor(textColor.opacity(0.7))
-                                    .font(.system(size: 16))
+                                {
+                                    Text("正在執行：\(functionName)")
+                                        .foregroundColor(textColor.opacity(0.7))
+                                        .font(.system(size: 16))
+                                }
                             }
                         }
                     }
 
                     // 任務預覽（如果有）
-                    if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex]
-                        .messages
-                        .firstIndex(where: { $0.text == text }),
-                        let tasks = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[
-                            messageIndex
-                        ]
-                        .pendingTasks
-                    {
-                        let message = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[
-                            messageIndex]
-                        let messageId = message.id
-                        let isExpanded = expandedTaskMessages.contains(messageId)
-                        let displayTasks = isExpanded ? tasks : Array(tasks.prefix(1))
+                    if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex].messages.firstIndex(where: { $0.text == text }) {
+                        let message = viewModel.chatRooms[viewModel.selectedRoomIndex].messages[messageIndex]
+                        
+                        // 顯示待新增的任務
+                        if let tasks = message.pendingTasks {
+                            let messageId = message.id
+                            let isExpanded = expandedTaskMessages.contains(messageId)
+                            let displayTasks = isExpanded ? tasks : Array(tasks.prefix(1))
 
-                        Divider()
-                            .background(textColor.opacity(0.3))
-                            .padding(.vertical, 4)
+                            Divider()
+                                .background(textColor.opacity(0.3))
+                                .padding(.vertical, 4)
 
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
-                                .font(.headline)
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
+                                    .font(.headline)
 
-                            ForEach(displayTasks) { task in
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text("標題：\(task.title)")
-                                    Text("備註：\(task.note)")
-                                    Text("類別：\(task.category)")
-                                    Text(
-                                        "開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))"
-                                    )
-                                    Text(
-                                        "結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))"
-                                    )
-                                    Text("全天：\(task.isAllDay ? "是" : "否")")
-                                    Text("已完成：\(task.isCompleted ? "是" : "否")")
-                                }
-                                .padding()
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                            }
-
-                            if tasks.count > 1 {
-                                Button(action: {
-                                    withAnimation {
-                                        if isExpanded {
-                                            expandedTaskMessages.remove(messageId)
-                                        } else {
-                                            expandedTaskMessages.insert(messageId)
+                                ForEach(displayTasks) { task in
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("標題：\(task.title)")
+                                        Text("備註：\(task.note)")
+                                        Text("類別：\(task.category)")
+                                        Text(
+                                            "開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))"
+                                        )
+                                        Text(
+                                            "結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))"
+                                        )
+                                        Text("全天：\(task.isAllDay ? "是" : "否")")
+                                        Text("已完成：\(task.isCompleted ? "是" : "否")")
+                                    }
+                                    .padding()
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(8)
+                                    .textSelection(.enabled)
+                                    .contextMenu {
+                                        Button(action: {
+                                            let taskDetail = """
+                                            標題：\(task.title)
+                                            備註：\(task.note)
+                                            類別：\(task.category)
+                                            開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
+                                            結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
+                                            全天：\(task.isAllDay ? "是" : "否")
+                                            已完成：\(task.isCompleted ? "是" : "否")
+                                            """
+                                            UIPasteboard.general.string = taskDetail
+                                        }) {
+                                            Label("複製任務詳情", systemImage: "doc.on.doc")
                                         }
                                     }
-                                }) {
+                                }
+
+                                if tasks.count > 1 {
+                                    Button(action: {
+                                        withAnimation {
+                                            if isExpanded {
+                                                expandedTaskMessages.remove(messageId)
+                                            } else {
+                                                expandedTaskMessages.insert(messageId)
+                                            }
+                                        }
+                                    }) {
+                                        HStack {
+                                            Text(isExpanded ? "收起" : "展開全部 (\(tasks.count) 個任務)")
+                                            Image(
+                                                systemName: isExpanded
+                                                    ? "chevron.up" : "chevron.down")
+                                        }
+                                        .foregroundColor(.blue)
+                                        .opacity(0.8)
+                                        .padding(.vertical, 8)
+                                    }
+                                }
+
+                                // 只在任務未確認時顯示確認和取消按鈕
+                                if !message.isTaskConfirmed {
                                     HStack {
-                                        Text(isExpanded ? "收起" : "展開全部 (\(tasks.count) 個任務)")
-                                        Image(
-                                            systemName: isExpanded
-                                                ? "chevron.up" : "chevron.down")
+                                        Button(action: {
+                                            Task {
+                                                await viewModel.confirmAndSaveTask(for: messageId)
+                                            }
+                                        }) {
+                                            Text("確認新增")
+                                                .foregroundColor( .white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.hex(hex: "74C3AF")
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
+
+                                        Button(action: {
+                                            viewModel.rejectTask(for: messageId)
+                                        }) {
+                                            Text("取消")
+                                                .foregroundColor(.white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.hex(hex: "F1A154")
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
                                     }
-                                    .foregroundColor(.blue)
-                                    .opacity(0.8)
-                                    .padding(.vertical, 8)
+                                    .padding(.top, 8)
+                                } else {
+                                    // 顯示任務新增結果
+                                    if message.isTaskConfirmed {
+                                        Text(
+                                            message.successCount > 0
+                                                ? " \(message.successCount) 個任務已成功新增"
+                                                    + (message.failureCount > 0
+                                                        ? "\n\(message.failureCount) 個任務新增失敗"
+                                                        : "")
+                                                : "新增任務失敗"
+                                        )
+                                        .foregroundColor(message.successCount > 0 ? .green.opacity(0.9) : .red.opacity(0.9))
+                                        .padding(.top, 8)
+                                    }
                                 }
                             }
-
-                            // 只在任務未確認時顯示確認和取消按鈕
-                            if !message.isTaskConfirmed {
-                                HStack {
+                            .padding(8)
+                            .background(Color.gray.opacity(0.05))
+                            .cornerRadius(12)
+                        }
+                        
+                        // 顯示待刪除的任務
+                        if let tasksToDelete = message.pendingDeleteTasks {
+                            let messageId = message.id
+                            let isExpanded = expandedTaskMessages.contains(messageId)
+                            let displayTasks = isExpanded ? tasksToDelete : Array(tasksToDelete.prefix(1))
+                            
+                            Divider()
+                                .background(textColor.opacity(0.3))
+                                .padding(.vertical, 4)
+                            
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(message.isDeleteConfirmed ? "已刪除的任務：" : "待刪除的任務：")
+                                    .font(.headline)
+                                
+                                ForEach(displayTasks) { task in
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("標題：\(task.title)")
+                                        if !task.note.isEmpty {
+                                            Text("備註：\(task.note)")
+                                        }
+                                        Text("類別：\(task.category)")
+                                        Text("開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))")
+                                        Text("結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))")
+                                        Text("全天：\(task.isAllDay ? "是" : "否")")
+                                        Text("已完成：\(task.isCompleted ? "是" : "否")")
+                                    }
+                                    .padding()
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(8)
+                                    .textSelection(.enabled)
+                                    .contextMenu {
+                                        Button(action: {
+                                            let taskDetail = """
+                                            標題：\(task.title)
+                                            \(!task.note.isEmpty ? "備註：\(task.note)\n" : "")類別：\(task.category)
+                                            開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
+                                            結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
+                                            全天：\(task.isAllDay ? "是" : "否")
+                                            已完成：\(task.isCompleted ? "是" : "否")
+                                            """
+                                            UIPasteboard.general.string = taskDetail
+                                        }) {
+                                            Label("複製任務詳情", systemImage: "doc.on.doc")
+                                        }
+                                    }
+                                }
+                                
+                                if tasksToDelete.count > 1 {
                                     Button(action: {
-                                        Task {
-                                            await viewModel.confirmAndSaveTask(for: messageId)
+                                        withAnimation {
+                                            if isExpanded {
+                                                expandedTaskMessages.remove(messageId)
+                                            } else {
+                                                expandedTaskMessages.insert(messageId)
+                                            }
                                         }
                                     }) {
-                                        Text("確認新增")
-                                            .foregroundColor( .white)
-                                            .fontWeight(.bold)
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(
-                                                message.isProcessing
-                                                    ? Color.gray.opacity(0.4)
-                                                    : Color.hex(hex: "74C3AF")
-                                            )
-                                            .cornerRadius(8)
+                                        HStack {
+                                            Text(isExpanded ? "收起" : "展開全部 (\(tasksToDelete.count) 個任務)")
+                                            Image(
+                                                systemName: isExpanded
+                                                    ? "chevron.up" : "chevron.down")
+                                        }
+                                        .foregroundColor(.blue)
+                                        .opacity(0.8)
+                                        .padding(.vertical, 8)
                                     }
-                                    .disabled(message.isProcessing)
-
-                                    Button(action: {
-                                        viewModel.rejectTask(for: messageId)
-                                    }) {
-                                        Text("取消")
-                                            .foregroundColor(.white)
-                                            .fontWeight(.bold)
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(
-                                                message.isProcessing
-                                                    ? Color.gray.opacity(0.4)
-                                                    : Color.hex(hex: "F1A154")
-                                            )
-                                            .cornerRadius(8)
-                                    }
-                                    .disabled(message.isProcessing)
                                 }
-                                .padding(.top, 8)
-                            } else {
-                                // 顯示任務新增結果
-                                if message.isTaskConfirmed {
+
+                                // 只在任務未確認時顯示確認和取消按鈕
+                                if !message.isDeleteConfirmed {
+                                    HStack {
+                                        Button(action: {
+                                            Task {
+                                                await viewModel.confirmAndDeleteTask(for: messageId)
+                                            }
+                                        }) {
+                                            Text("確認刪除")
+                                                .foregroundColor(.white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.red.opacity(0.8)
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
+                                        
+                                        Button(action: {
+                                            viewModel.rejectDeleteTask(for: messageId)
+                                        }) {
+                                            Text("取消")
+                                                .foregroundColor(.white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.hex(hex: "F1A154")
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
+                                    }
+                                    .padding(.top, 8)
+                                } else {
+                                    // 顯示刪除結果
                                     Text(
                                         message.successCount > 0
-                                            ? " \(message.successCount) 個任務已成功新增"
+                                            ? "\(message.successCount) 個任務已成功刪除"
                                                 + (message.failureCount > 0
-                                                    ? "\n\(message.failureCount) 個任務新增失敗"
+                                                    ? "\n\(message.failureCount) 個任務刪除失敗"
                                                     : "")
-                                            : "新增任務失敗"
+                                            : "刪除任務失敗"
                                     )
                                     .foregroundColor(message.successCount > 0 ? .green.opacity(0.9) : .red.opacity(0.9))
                                     .padding(.top, 8)
                                 }
                             }
+                            .padding(8)
+                            .background(Color.gray.opacity(0.05))
+                            .cornerRadius(12)
                         }
-                        .padding(8)
-                        .background(Color.gray.opacity(0.05))
-                        .cornerRadius(12)
                     }
                 }
             }
@@ -388,6 +540,13 @@ struct ChatDemoDynamicView: View {
                     } else {
                         parseText(line)
                     }
+                }
+            }
+            .contextMenu {  // 添加長按選單
+                Button(action: {
+                    UIPasteboard.general.string = text
+                }) {
+                    Label("複製全文", systemImage: "doc.on.doc")
                 }
             }
         }
