@@ -10,6 +10,12 @@ struct ChatDemoDynamicView: View {
     private let textColor = Color.black.opacity(0.8)  // 深色文字
     private let sidebarColor = Color.hex(hex: "F3D4B7").opacity(0.7)  // 側邊欄顏色，與"開始"按鈕相似
     private let titleColor = Color.hex(hex: "E27945")  // 聊天室名稱顏色
+    
+    // 任務卡片字體大小
+    private let taskTitleSize: CGFloat = 16  // 任務標題字體大小
+    private let taskContentSize: CGFloat = 14  // 任務內容字體大小
+    private let taskHeaderSize: CGFloat = 17  // 任務卡片標題字體大小（如"原始資料"、"更新後資料"）
+    private let taskCountSize: CGFloat = 15  // 任務計數字體大小（如"任務 1/3"）
 
     @EnvironmentObject private var viewModel: ChatViewModel
     @EnvironmentObject private var staticViewModel: StaticViewModel
@@ -18,10 +24,24 @@ struct ChatDemoDynamicView: View {
     @State private var latestMessageId: UUID?  // 追蹤最新訊息的 ID
     @State private var expandedTaskMessages: Set<UUID> = []  // 追蹤哪些訊息的任務列表被展開
     @State private var showSettings = false  // 控制設定頁面的展示
+    @State private var isEditingTitle = false  // 是否正在編輯標題
+    @State private var editingTitleText = ""  // 編輯中的標題文字
+    @FocusState private var isTitleFocused: Bool  // 追蹤標題輸入框是否有焦點
+    @State private var isGenerating = false   // 追蹤 GPT 是否正在生成回覆
 
     var body: some View {
         ZStack {
             backgroundColor.ignoresSafeArea()
+                .onTapGesture {
+                    // 點擊背景時取消編輯狀態
+                    if isEditingTitle {
+                        if !editingTitleText.isEmpty {
+                            viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                        }
+                        isEditingTitle = false
+                        isTitleFocused = false
+                    }
+                }
             VStack(spacing: 0) {
                 header
                 messageList
@@ -36,6 +56,11 @@ struct ChatDemoDynamicView: View {
             if !viewModel.chatRooms.isEmpty {
                 viewModel.selectedRoomIndex = viewModel.chatRooms.count - 1
             }
+        }
+        .onChange(of: viewModel.selectedRoomIndex) { _ in
+            // 切換聊天室時重設編輯狀態
+            isEditingTitle = false
+            editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
         }
         .sheet(isPresented: $showSettings) {
             ChatSettingView()
@@ -54,22 +79,63 @@ struct ChatDemoDynamicView: View {
                     .foregroundColor(Color.hex(hex: "E27844"))
             }
             Spacer()
-            Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name)
+            
+            // 可編輯的標題
+            if isEditingTitle {
+                TextField("聊天室名稱", text: $editingTitleText, onCommit: {
+                    if !editingTitleText.isEmpty {
+                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                    }
+                    isEditingTitle = false
+                    isTitleFocused = false
+                })
+                .focused($isTitleFocused)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(titleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
+                .padding(.horizontal, 10)
+                .background(Color.hex(hex: "F3D4B8").opacity(0.7))
+                .cornerRadius(8)
+                .padding(.leading, 23)  // 增加左側間距，向右移動更多
+                .padding(.trailing, -23)  // 相應調整右側間距
+                .onAppear {
+                    // 顯示輸入框時自動獲取焦點
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isTitleFocused = true
+                    }
+                }
+            } else {
+                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(titleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.leading, 23)  // 增加左側間距，向右移動更多
+                    .padding(.trailing, -23)  // 相應調整右側間距
+                    .onTapGesture {
+                        editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
+                        isEditingTitle = true
+                    }
+            }
+            
             Spacer()
 
             // 設定圖示
-            Button(action: { showSettings = true }) {
+            Button(action: { 
+                isEditingTitle = false  // 打開設定時取消編輯狀態
+                showSettings = true 
+            }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color.hex(hex: "E27844"))
             }
             .padding(.trailing, 8)
 
-            Button(action: viewModel.createNewChatRoom) {
+            Button(action: {
+                isEditingTitle = false  // 創建新聊天室時取消編輯狀態
+                viewModel.createNewChatRoom()
+            }) {
                 Image(systemName: "plus")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color.hex(hex: "E27844"))
@@ -151,6 +217,7 @@ struct ChatDemoDynamicView: View {
                         HStack(spacing: 12) {
                             LoadingDots()
                                 .padding(.vertical, 12)
+                                .id(UUID()) // 強制視圖重新創建，確保動畫重新開始
                             if let messageIndex = viewModel.chatRooms[viewModel.selectedRoomIndex]
                                 .messages.firstIndex(where: { $0.text == text }),
                                 viewModel.chatRooms[viewModel.selectedRoomIndex].messages[
@@ -166,6 +233,7 @@ struct ChatDemoDynamicView: View {
                                     Text("正在執行：\(functionName)")
                                         .foregroundColor(textColor.opacity(0.7))
                                         .font(.system(size: 16))
+                                        .id(UUID()) // 確保文字也會更新
                                 }
                             }
                         }
@@ -189,39 +257,19 @@ struct ChatDemoDynamicView: View {
                                 Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
                                     .font(.headline)
 
-                                ForEach(displayTasks) { task in
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text("標題：\(task.title)")
-                                        Text("備註：\(task.note)")
-                                        Text("類別：\(task.category)")
-                                        Text(
-                                            "開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))"
-                                        )
-                                        Text(
-                                            "結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))"
-                                        )
-                                        Text("全天：\(task.isAllDay ? "是" : "否")")
-                                        Text("已完成：\(task.isCompleted ? "是" : "否")")
-                                    }
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(8)
-                                    .textSelection(.enabled)
-                                    .contextMenu {
-                                        Button(action: {
-                                            let taskDetail = """
-                                            標題：\(task.title)
-                                            備註：\(task.note)
-                                            類別：\(task.category)
-                                            開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
-                                            結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
-                                            全天：\(task.isAllDay ? "是" : "否")
-                                            已完成：\(task.isCompleted ? "是" : "否")
-                                            """
-                                            UIPasteboard.general.string = taskDetail
-                                        }) {
-                                            Label("複製任務詳情", systemImage: "doc.on.doc")
+                                // 使用滾動視圖限制最大高度
+                                if isExpanded && tasks.count > 3 {
+                                    ScrollView {
+                                        LazyVStack(alignment: .leading, spacing: 10) {
+                                            ForEach(displayTasks) { task in
+                                                taskAddItemView(task: task)
+                                            }
                                         }
+                                    }
+                                    .frame(maxHeight: 2000)  // 增加最大高度至4000像素
+                                } else {
+                                    ForEach(displayTasks) { task in
+                                        taskAddItemView(task: task)
                                     }
                                 }
 
@@ -298,7 +346,7 @@ struct ChatDemoDynamicView: View {
                                                         : "")
                                                 : "新增任務失敗"
                                         )
-                                        .foregroundColor(message.successCount > 0 ? .green.opacity(0.9) : .red.opacity(0.9))
+                                        .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
                                         .padding(.top, 8)
                                     }
                                 }
@@ -322,36 +370,19 @@ struct ChatDemoDynamicView: View {
                                 Text(message.isDeleteConfirmed ? "已刪除的任務：" : "待刪除的任務：")
                                     .font(.headline)
                                 
-                                ForEach(displayTasks) { task in
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text("標題：\(task.title)")
-                                        if !task.note.isEmpty {
-                                            Text("備註：\(task.note)")
+                                // 使用滾動視圖限制最大高度
+                                if isExpanded && tasksToDelete.count > 3 {
+                                    ScrollView {
+                                        LazyVStack(alignment: .leading, spacing: 10) {
+                                            ForEach(displayTasks) { task in
+                                                taskDeleteItemView(task: task)
+                                            }
                                         }
-                                        Text("類別：\(task.category)")
-                                        Text("開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))")
-                                        Text("結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))")
-                                        Text("全天：\(task.isAllDay ? "是" : "否")")
-                                        Text("已完成：\(task.isCompleted ? "是" : "否")")
                                     }
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(8)
-                                    .textSelection(.enabled)
-                                    .contextMenu {
-                                        Button(action: {
-                                            let taskDetail = """
-                                            標題：\(task.title)
-                                            \(!task.note.isEmpty ? "備註：\(task.note)\n" : "")類別：\(task.category)
-                                            開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
-                                            結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
-                                            全天：\(task.isAllDay ? "是" : "否")
-                                            已完成：\(task.isCompleted ? "是" : "否")
-                                            """
-                                            UIPasteboard.general.string = taskDetail
-                                        }) {
-                                            Label("複製任務詳情", systemImage: "doc.on.doc")
-                                        }
+                                    .frame(maxHeight: 2000)  // 增加最大高度至2000像素
+                                } else {
+                                    ForEach(displayTasks) { task in
+                                        taskDeleteItemView(task: task)
                                     }
                                 }
                                 
@@ -427,7 +458,126 @@ struct ChatDemoDynamicView: View {
                                                     : "")
                                             : "刪除任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.9) : .red.opacity(0.9))
+                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
+                                    .padding(.top, 8)
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.gray.opacity(0.05))
+                            .cornerRadius(12)
+                        }
+                        
+                        // 顯示待修改的任務
+                        if let updateData = message.pendingUpdateTask {
+                            let messageId = message.id
+                            
+                            Divider()
+                                .background(textColor.opacity(0.3))
+                                .padding(.vertical, 4)
+                            
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(message.isUpdateConfirmed ? "已修改的任務：" : "待修改的任務：")
+                                    .font(.headline)
+                                
+                                // 使用一個通用函數來格式化原始和更新後的任務數據
+                                if let updateDataList = message.pendingUpdateTasks {
+                                    let isExpanded = expandedTaskMessages.contains(messageId)
+                                    let displayTasks = isExpanded ? updateDataList : Array(updateDataList.prefix(1))
+                                    
+                                    // 使用滾動視圖限制最大高度
+                                    if isExpanded && updateDataList.count > 3 {
+                                        ScrollView {
+                                            LazyVStack(alignment: .leading, spacing: 10) {
+                                                ForEach(0..<displayTasks.count, id: \.self) { index in
+                                                    taskUpdateItemView(updateData: displayTasks[index], 
+                                                                     index: index, total: updateDataList.count)
+                                                }
+                                            }
+                                        }
+                                        .frame(maxHeight: 2000)  // 限制最大高度
+                                    } else {
+                                        ForEach(0..<displayTasks.count, id: \.self) { index in
+                                            taskUpdateItemView(updateData: displayTasks[index], 
+                                                             index: index, total: updateDataList.count)
+                                        }
+                                    }
+                                    
+                                    // 如果有多個任務，添加展開/收起按鈕
+                                    if updateDataList.count > 1 {
+                                        Button(action: {
+                                            withAnimation {
+                                                if isExpanded {
+                                                    expandedTaskMessages.remove(messageId)
+                                                } else {
+                                                    expandedTaskMessages.insert(messageId)
+                                                }
+                                            }
+                                        }) {
+                                            HStack {
+                                                Text(isExpanded ? "收起" : "展開全部 (\(updateDataList.count) 個任務)")
+                                                Image(
+                                                    systemName: isExpanded
+                                                        ? "chevron.up" : "chevron.down")
+                                            }
+                                            .foregroundColor(.blue)
+                                            .opacity(0.8)
+                                            .padding(.vertical, 8)
+                                        }
+                                    }
+                                }
+
+                                // 只在任務未確認時顯示確認和取消按鈕
+                                if !message.isUpdateConfirmed {
+                                    HStack {
+                                        Button(action: {
+                                            Task {
+                                                await viewModel.confirmAndUpdateTask(for: messageId)
+                                            }
+                                        }) {
+                                            Text("確認修改")
+                                                .foregroundColor(.white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.blue.opacity(0.8)
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
+                                        
+                                        Button(action: {
+                                            viewModel.rejectUpdateTask(for: messageId)
+                                        }) {
+                                            Text("取消")
+                                                .foregroundColor(.white)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 20)
+                                                .padding(.vertical, 10)
+                                                .background(
+                                                    message.isProcessing
+                                                        ? Color.gray.opacity(0.4)
+                                                        : Color.hex(hex: "F1A154")
+                                                )
+                                                .cornerRadius(8)
+                                        }
+                                        .disabled(message.isProcessing)
+                                    }
+                                    .padding(.top, 8)
+                                } else {
+                                    // 顯示更新結果
+                                    let totalTasks = message.successCount + message.failureCount
+                                    Text(
+                                        message.successCount > 0
+                                            ? "\(message.successCount)/\(totalTasks) 個任務已成功修改"
+                                                + (message.failureCount > 0
+                                                    ? "\n\(message.failureCount) 個任務修改失敗"
+                                                    : "")
+                                            : "修改任務失敗"
+                                    )
+                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
                                     .padding(.top, 8)
                                 }
                             }
@@ -458,6 +608,215 @@ struct ChatDemoDynamicView: View {
             formatter.dateFormat = "yyyy/MM/dd HH:mm"
         }
         return formatter.string(from: date)
+    }
+
+    // 顯示單個待刪除任務的視圖
+    private func taskDeleteItemView(task: TodoTask) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("標題：\(task.title)")
+                .font(.system(size: taskTitleSize, weight: .medium))
+            if !task.note.isEmpty {
+                Text("備註：\(task.note)")
+                    .font(.system(size: taskContentSize))
+            }
+            Text("類別：\(task.category)")
+                .font(.system(size: taskContentSize))
+            Text("開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))")
+                .font(.system(size: taskContentSize))
+            Text("結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))")
+                .font(.system(size: taskContentSize))
+            Text("全天：\(task.isAllDay ? "是" : "否")")
+                .font(.system(size: taskContentSize))
+            Text("已完成：\(task.isCompleted ? "是" : "否")")
+                .font(.system(size: taskContentSize))
+        }
+        .padding()
+        .background(Color.red.opacity(0.1))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+        )
+        .textSelection(.enabled)
+        .contextMenu {
+            Button(action: {
+                let taskDetail = """
+                標題：\(task.title)
+                \(!task.note.isEmpty ? "備註：\(task.note)\n" : "")類別：\(task.category)
+                開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
+                結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
+                全天：\(task.isAllDay ? "是" : "否")
+                已完成：\(task.isCompleted ? "是" : "否")
+                """
+                UIPasteboard.general.string = taskDetail
+            }) {
+                Label("複製任務詳情", systemImage: "doc.on.doc")
+            }
+        }
+    }
+    
+    // 顯示單個待修改任務的視圖
+    private func taskUpdateItemView(updateData: (original: TodoTask, updated: PendingTask), index: Int, total: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if total > 1 {
+                Text("任務 \(index + 1) / \(total)")
+                    .font(.system(size: taskCountSize))
+                    .foregroundColor(.blue.opacity(0.8))
+                    .padding(.bottom, 2)
+            }
+            
+            HStack(alignment: .top, spacing: 15) {
+                // 原始任務數據
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("原始資料")
+                        .font(.system(size: taskHeaderSize, weight: .semibold))
+                        .foregroundColor(.gray)
+                        .padding(.bottom, 2)
+                        
+                    Text("標題：\(updateData.original.title)")
+                        .font(.system(size: taskTitleSize, weight: .medium))
+                    Text("備註：\(updateData.original.note)")
+                        .font(.system(size: taskContentSize))
+                    Text("類別：\(updateData.original.category)")
+                        .font(.system(size: taskContentSize))
+                    Text(
+                        "開始時間：\(formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))"
+                    )
+                    .font(.system(size: taskContentSize))
+                    Text(
+                        "結束時間：\(formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))"
+                    )
+                    .font(.system(size: taskContentSize))
+                    Text("全天：\(updateData.original.isAllDay ? "是" : "否")")
+                        .font(.system(size: taskContentSize))
+                    Text("已完成：\(updateData.original.isCompleted ? "是" : "否")")
+                        .font(.system(size: taskContentSize))
+                }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                
+                // 更新後的任務數據
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("更新後資料")
+                        .font(.system(size: taskHeaderSize, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .padding(.bottom, 2)
+                        
+                    Text("標題：\(updateData.updated.title)")
+                        .font(.system(size: taskTitleSize, weight: .medium))
+                        .foregroundColor(updateData.original.title != updateData.updated.title ? .blue : .primary)
+                    Text("備註：\(updateData.updated.note)")
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.note != updateData.updated.note ? .blue : .primary)
+                    Text("類別：\(updateData.updated.category)")
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.category != updateData.updated.category ? .blue : .primary)
+                    Text(
+                        "開始時間：\(formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))"
+                    )
+                    .font(.system(size: taskContentSize))
+                    .foregroundColor(updateData.original.startDate != updateData.updated.startDate ? .blue : .primary)
+                    Text(
+                        "結束時間：\(formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))"
+                    )
+                    .font(.system(size: taskContentSize))
+                    .foregroundColor(updateData.original.endDate != updateData.updated.endDate ? .blue : .primary)
+                    Text("全天：\(updateData.updated.isAllDay ? "是" : "否")")
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.isAllDay != updateData.updated.isAllDay ? .blue : .primary)
+                    Text("已完成：\(updateData.updated.isCompleted ? "是" : "否")")
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.isCompleted != updateData.updated.isCompleted ? .blue : .primary)
+                }
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .textSelection(.enabled)
+            .contextMenu {
+                Button(action: {
+                    let taskDetail = """
+                    【原始】
+                    標題：\(updateData.original.title)
+                    備註：\(updateData.original.note)
+                    類別：\(updateData.original.category)
+                    開始時間：\(formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))
+                    結束時間：\(formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))
+                    全天：\(updateData.original.isAllDay ? "是" : "否")
+                    已完成：\(updateData.original.isCompleted ? "是" : "否")
+                    
+                    【更新後】
+                    標題：\(updateData.updated.title)
+                    備註：\(updateData.updated.note)
+                    類別：\(updateData.updated.category)
+                    開始時間：\(formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))
+                    結束時間：\(formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))
+                    全天：\(updateData.updated.isAllDay ? "是" : "否")
+                    已完成：\(updateData.updated.isCompleted ? "是" : "否")
+                    """
+                    UIPasteboard.general.string = taskDetail
+                }) {
+                    Label("複製任務詳情", systemImage: "doc.on.doc")
+                }
+            }
+        }
+    }
+
+    // 顯示單個待新增任務的視圖
+    private func taskAddItemView(task: PendingTask) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("標題：\(task.title)")
+                .font(.system(size: taskTitleSize, weight: .medium))
+            Text("備註：\(task.note)")
+                .font(.system(size: taskContentSize))
+            Text("類別：\(task.category)")
+                .font(.system(size: taskContentSize))
+            Text(
+                "開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))"
+            )
+            .font(.system(size: taskContentSize))
+            Text(
+                "結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))"
+            )
+            .font(.system(size: taskContentSize))
+            Text("全天：\(task.isAllDay ? "是" : "否")")
+                .font(.system(size: taskContentSize))
+            Text("已完成：\(task.isCompleted ? "是" : "否")")
+                .font(.system(size: taskContentSize))
+        }
+        .padding()
+        .background(Color.green.opacity(0.1))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
+        .textSelection(.enabled)
+        .contextMenu {
+            Button(action: {
+                let taskDetail = """
+                標題：\(task.title)
+                備註：\(task.note)
+                類別：\(task.category)
+                開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
+                結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
+                全天：\(task.isAllDay ? "是" : "否")
+                已完成：\(task.isCompleted ? "是" : "否")
+                """
+                UIPasteboard.general.string = taskDetail
+            }) {
+                Label("複製任務詳情", systemImage: "doc.on.doc")
+            }
+        }
     }
 
     // 自定義 Markdown 文字視圖
@@ -554,7 +913,6 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Input Bar
     private var inputBar: some View {
-
             HStack {
                 TextField("輸入訊息...", text: $inputText)
                     .font(.system(size: 18))
@@ -563,23 +921,34 @@ struct ChatDemoDynamicView: View {
                     .background(midBubbleColor)
                     .cornerRadius(12)
                     .foregroundColor(textColor)
+                    .disabled(isGenerating)  // 在生成過程中禁用輸入框
 
-                Button(action: sendMessage) {
-                    Image(systemName: "arrowshape.up")
-                        .font(.system(size: 22))
-                        .foregroundColor(textColor)
-                        .padding()
+                if isGenerating {
+                    // 取消按鈕
+                    Button(action: cancelGeneration) {
+                        Image(systemName: "stop.circle")
+                            .font(.system(size: 22))
+                            .foregroundColor(.gray.opacity(0.8))
+                            .padding()
+                    }
+                } else {
+                    // 發送按鈕
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrowshape.up")
+                            .font(.system(size: 22))
+                            .foregroundColor(textColor)
+                            .padding()
+                    }
+                    .disabled(inputText.isEmpty)
                 }
-                .disabled(inputText.isEmpty)
             }
             .padding(.horizontal)
             .padding(.bottom, 76)
             .padding(.top, 8)
             .background( // 🔧 把背景與陰影包在一起，陰影只會畫在這塊背景矩形
                 backgroundColor
-                    .shadow(color: .black.opacity(0.085), radius: 10, x: 0, y: -2) // ⬅︎ 只有這裡加陰影
+                    .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: -2) // ⬅︎ 只有這裡加陰影
             )
-
     }
 
     // MARK: Sidebar
@@ -643,6 +1012,12 @@ struct ChatDemoDynamicView: View {
     // MARK: - 發送訊息（串流）
     private func sendMessage() {
         guard !inputText.isEmpty else { return }
+        
+        // 如果有正在進行的對話，先取消它
+        if isGenerating {
+            cancelGeneration()
+        }
+        
         viewModel.resetSendToGPTCount()  // 每次使用者發送訊息時重設計數
         let userMsg = ChatMessage(text: inputText, isMe: true)
         let firstUserMessage = inputText
@@ -665,6 +1040,8 @@ struct ChatDemoDynamicView: View {
             }
         }
 
+        isGenerating = true  // 設置生成狀態為 true
+        
         Task {
             _ = await viewModel.sendMessageToGPT(
                 messages: viewModel.chatRooms[viewModel.selectedRoomIndex].messages
@@ -673,6 +1050,24 @@ struct ChatDemoDynamicView: View {
                 latestMessageId =
                     viewModel.chatRooms[viewModel.selectedRoomIndex].messages[aiIndex].id
             }
+            
+            // 對話完成後，重置生成狀態
+            isGenerating = false
+        }
+    }
+
+    // 添加取消生成的方法
+    private func cancelGeneration() {
+        viewModel.cancelCurrentTask()
+        isGenerating = false
+        
+        // 不再添加「對話已被中斷」文字
+        // 如果對話泡泡是空的，可以考慮移除它
+        if let lastIndex = viewModel.chatRooms[viewModel.selectedRoomIndex].messages.indices.last,
+           !viewModel.chatRooms[viewModel.selectedRoomIndex].messages[lastIndex].isMe,
+           viewModel.chatRooms[viewModel.selectedRoomIndex].messages[lastIndex].text.isEmpty {
+            // 如果是空的 AI 泡泡，則移除
+            viewModel.chatRooms[viewModel.selectedRoomIndex].messages.remove(at: lastIndex)
         }
     }
 
@@ -698,6 +1093,10 @@ struct ChatDemoDynamicView: View {
             }
             .onAppear {
                 isAnimating = true
+            }
+            .onDisappear {
+                // 確保動畫正確停止
+                isAnimating = false
             }
         }
     }

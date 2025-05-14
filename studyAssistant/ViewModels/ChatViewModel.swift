@@ -216,8 +216,14 @@ struct ChatMessage: Identifiable, Codable {
     let isMe: Bool
     var pendingTasks: [PendingTask]?
     var pendingDeleteTasks: [TodoTask]?  // 新增：待刪除的任務
+    
+    // 修改為陣列以支援批量修改
+    var pendingUpdateTasksOriginal: [TodoTask]?
+    var pendingUpdateTasksUpdated: [PendingTask]?
+    
     var isTaskConfirmed: Bool
     var isDeleteConfirmed: Bool  // 新增：是否確認刪除
+    var isUpdateConfirmed: Bool  // 新增：是否確認修改
     var isProcessing: Bool
     var successCount: Int
     var failureCount: Int
@@ -225,11 +231,50 @@ struct ChatMessage: Identifiable, Codable {
     var currentExecutingFunction: String?
     var executingFunctions: [String]?  // 新增：追踪多個正在執行的函數名稱
 
+    // 計算屬性，返回元組陣列
+    var pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]? {
+        get {
+            if let originals = pendingUpdateTasksOriginal, let updateds = pendingUpdateTasksUpdated,
+               originals.count == updateds.count, !originals.isEmpty {
+                return zip(originals, updateds).map { (original: $0.0, updated: $0.1) }
+            }
+            return nil
+        }
+        set {
+            if let newValue = newValue, !newValue.isEmpty {
+                pendingUpdateTasksOriginal = newValue.map { $0.original }
+                pendingUpdateTasksUpdated = newValue.map { $0.updated }
+            } else {
+                pendingUpdateTasksOriginal = nil
+                pendingUpdateTasksUpdated = nil
+            }
+        }
+    }
+
+    // 為了向後兼容，保留單一任務修改的介面
+    var pendingUpdateTask: (original: TodoTask, updated: PendingTask)? {
+        get {
+            if let tasks = pendingUpdateTasks, !tasks.isEmpty {
+                return tasks.first
+            }
+            return nil
+        }
+        set {
+            if let newValue = newValue {
+                pendingUpdateTasks = [newValue]
+            } else {
+                pendingUpdateTasks = nil
+            }
+        }
+    }
+
     init(
         text: String, isMe: Bool, pendingTasks: [PendingTask]? = nil,
         pendingDeleteTasks: [TodoTask]? = nil,  // 新增參數
+        pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]? = nil,  // 修改為多個任務
         isTaskConfirmed: Bool = false,
         isDeleteConfirmed: Bool = false,  // 新增參數
+        isUpdateConfirmed: Bool = false,  // 新增參數
         isProcessing: Bool = false,
         successCount: Int = 0,
         failureCount: Int = 0,
@@ -241,14 +286,26 @@ struct ChatMessage: Identifiable, Codable {
         self.isMe = isMe
         self.pendingTasks = pendingTasks
         self.pendingDeleteTasks = pendingDeleteTasks
+        self.pendingUpdateTasksOriginal = pendingUpdateTasks?.map { $0.original }
+        self.pendingUpdateTasksUpdated = pendingUpdateTasks?.map { $0.updated }
         self.isTaskConfirmed = isTaskConfirmed
         self.isDeleteConfirmed = isDeleteConfirmed
+        self.isUpdateConfirmed = isUpdateConfirmed
         self.isProcessing = isProcessing
         self.successCount = successCount
         self.failureCount = failureCount
         self.isWaitingFunction = isWaitingFunction
         self.currentExecutingFunction = currentExecutingFunction
         self.executingFunctions = executingFunctions
+    }
+
+    // 自定義編碼解碼邏輯
+    enum CodingKeys: String, CodingKey {
+        case id, text, isMe, pendingTasks, pendingDeleteTasks
+        case pendingUpdateTasksOriginal, pendingUpdateTasksUpdated
+        case isTaskConfirmed, isDeleteConfirmed, isUpdateConfirmed
+        case isProcessing, successCount, failureCount
+        case isWaitingFunction, currentExecutingFunction, executingFunctions
     }
 }
 
@@ -343,7 +400,7 @@ final class ChatViewModel: ObservableObject {
     private let decoder = JSONDecoder()
 
     // 當前的 GPT 對話任務
-    private var currentTask: Task<Void, Never>?
+    private var currentTask: Task<String?, Never>?
 
     // 追蹤當前使用的函數
     @Published var currentFunction: String?
@@ -512,6 +569,72 @@ final class ChatViewModel: ObservableObject {
                     )
                 ],
                 required: ["taskIds"]
+            )
+        )
+    )
+
+    // 定義 updateTask 函數
+    private let updateTaskFunction = Tool(
+        type: "function",
+        function: ToolFunction(
+            name: "updateTask",
+            description: "Update one or multiple existing tasks with new information",
+            parameters: ToolFunction.Parameters(
+                type: "object",
+                properties: [
+                    "tasks": .init(
+                        type: "array",
+                        description: "Array of tasks to update",
+                        items: .init(
+                            type: "object",
+                            properties: [
+                                "taskId": .init(
+                                    type: "string",
+                                    description: "ID of the task to update (required)"
+                                ),
+                                "title": .init(
+                                    type: "string",
+                                    description: "New task title"
+                                ),
+                                "note": .init(
+                                    type: "string",
+                                    description: "New task note"
+                                ),
+                                "category": .init(
+                                    type: "string",
+                                    description: "New task category"
+                                ),
+                                "startDate": .init(
+                                    type: "string",
+                                    description: "New start date in ISO 8601 format"
+                                ),
+                                "endDate": .init(
+                                    type: "string",
+                                    description: "New end date in ISO 8601 format"
+                                ),
+                                "isAllDay": .init(
+                                    type: "string",
+                                    description: "Whether the task is all day, must be 'true' or 'false'"
+                                ),
+                                "isCompleted": .init(
+                                    type: "string",
+                                    description: "Whether the task is completed, must be 'true' or 'false'"
+                                ),
+                                "color": .init(
+                                    type: "string",
+                                    description: """
+                                        Task color must be one of these four options:
+                                        - '0.7,0.16,0.13,0.4' (Red)
+                                        - '0.7,0.56,0,0.4' (Yellow)
+                                        - '0.18,0.7,0.31,0.4' (Green)
+                                        - '0.29,0.28,0.7,0.4' (Blue)
+                                        """
+                                )
+                            ]
+                        )
+                    )
+                ],
+                required: ["tasks"]
             )
         )
     )
@@ -891,152 +1014,268 @@ final class ChatViewModel: ObservableObject {
         onToken: ((String) -> Void)? = nil
     ) async -> String? {
         isLoading = true
-        defer { isLoading = false }
+        defer { 
+            // 只有在任務未被取消的情況下才關閉載入狀態
+            if !Task.isCancelled {
+                isLoading = false 
+            }
+        }
 
         // 取消之前的任務（如果有的話）
         currentTask?.cancel()
         currentTask = nil
+        
+        // 清空之前的函數調用
+        functionCalls = []
+        currentFunctionCall = nil
+        currentArguments = ""
 
-        print("開始發送訊息到 GPT")
-        let apiMsgs =
-            messages
-            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map { OpenAIMessage(role: $0.isMe ? "user" : "assistant", content: $0.text) }
+        // 創建新任務
+        let task = Task<String?, Never> {
+            print("開始發送訊息到 GPT")
+            let apiMsgs =
+                messages
+                .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map { OpenAIMessage(role: $0.isMe ? "user" : "assistant", content: $0.text) }
 
-        let tone = studySettings?.tone ?? "沉著穩重的專家"
-        // 添加 system message 來指導 GPT 使用 function
-        let systemMsg = OpenAIMessage(
-            role: "system",
-            content: """
-                你是一位「計畫大師」，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
+            let tone = studySettings?.tone ?? "沉著穩重的專家"
+            // 添加 system message 來指導 GPT 使用 function
+            let systemMsg = OpenAIMessage(
+                role: "system",
+                content: """
+                    你是一位「計畫大師」，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
 
-                使用者的讀書習慣設定：
-                \(formatStudySettings())
+                    使用者的讀書習慣設定：
+                    \(formatStudySettings())
 
-                可用工具：
-                getTask()      ：取得使用者現有任務與目前時間
-                getTime()      ：取得目前時間
-                saveTask({...}): 儲存新任務，所有欄位皆必填  
-                end_conversation()：結束對話
+                    可用工具：
+                    getTask()      ：取得使用者現有任務與目前時間
+                    getTime()      ：取得目前時間
+                    saveTask({...}): 儲存新任務，所有欄位皆必填  
+                    end_conversation()：結束對話
 
-                特別注意：
-                1. **如果你要結束對話，請務必呼叫 end_conversation function，不要只用文字說再見。**
-                2. 在以下情況要主動結束對話：
-                    - 使用者明確表示要結束對話
-                    - 使用者的需求已完整處理完畢
-                    - 對話已經沒有明確目標或進展
-                3. 避免冗長對話。
-                4. 不要重複呼叫同一個 function，除非有新需求或新資訊。
-                    
-                5. 如需要詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
-                6. 如有疑問需要向使用者請教，那先等使用者回答之後再使用除end_conversation外的function。
-                7. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
-                    - 只能在使用者設定的可讀書日期和時間內安排任務
-                    - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
-                    - 不要在設定的時間範圍外安排任務
-                    - 不要與原有的任務時間重疊
-                8. 使用saveTask時，如果使用者沒有指定時間，則任務的開始時間需要依照現在時間(不需用跟使用者講）。
-                9. 安排刪除修改任務後要跟使用者解釋做了什麼改變
-                """
-        )
-        var allMessages = [systemMsg] + apiMsgs
-        var full = ""
-        var hasFunctionCall = false
-        var endConversationReached = false
-
-        while !endConversationReached {
-
-            // 決定本次 tool_choice
-            var toolChoice: String? = nil
-            if sendToGPTCount == 0 {
-                toolChoice = "none"
-            } else if sendToGPTCount == 1 {
-                toolChoice = "required"
-            } else if let last = lastToolChoice {
-                if last == "required" {
-                    toolChoice = "auto"
-                } else if last == "auto" {
-                    if lastReplyType == "text" {
-                        toolChoice = "required"
-                    } else if lastReplyType == "function" {
-                        toolChoice = "auto"
-                    }
-                }
-            }
-
-            let reqBody = OpenAIRequest(
-                model: "gpt-4.1-mini",
-                messages: allMessages,
-                temperature: 0.7,
-                stream: true,
-                tools: [
-                    getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, endConversationFunction,
-                ],
-                tool_choice: toolChoice
+                    特別注意：
+                    1. **如果你要結束對話，請務必呼叫 end_conversation function，不要只用文字說再見。**
+                    2. 在以下情況要主動結束對話：
+                        - 使用者明確表示要結束對話
+                        - 使用者的需求已完整處理完畢
+                        - 對話已經沒有明確目標或進展
+                    3. 避免冗長對話。
+                    4. 不要重複呼叫同一個 function，除非有新需求或新資訊。
+                    5. 如需要詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
+                    6. 如有疑問需要向使用者請教，那先等使用者回答之後再使用除end_conversation外的function。
+                    7. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
+                        - 只能在使用者設定的可讀書日期和時間內安排任務
+                        - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
+                        - 不要在設定的時間範圍外安排任務
+                        - 不要與原有的任務時間重疊
+                    8. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
+                    9. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
+                    10. 安排任務時如果使用者要求安排很多任務，要遵從使用者的安排
+                    """
             )
+            var allMessages = [systemMsg] + apiMsgs
+            var full = ""
+            var hasFunctionCall = false
+            var endConversationReached = false
 
-            print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
-
-            guard let data = try? encoder.encode(reqBody) else {
-                print("編碼請求失敗")
-                return nil
-            }
-
-            var req = URLRequest(url: proxyURL)
-            req.httpMethod = "POST"
-            req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
-            req.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.addValue("text/event-stream", forHTTPHeaderField: "Accept")
-            req.httpBody = data
-
-            do {
-                sendToGPTCount += 1
-                print("開始發送請求（第 \(sendToGPTCount) 次）")
-                print("本次 tool_choice: \(toolChoice ?? "nil")")
-                print("傳送給 GPT 的訊息：")
-                for msg in allMessages {
-                    print("[\(msg.role)] \(msg.content)")
+            while !endConversationReached {
+                // 檢查任務是否被取消
+                if Task.isCancelled {
+                    print("任務被使用者取消")
+                    return nil
                 }
-                print("開始發送請求")
-                let (bytes, resp) = try await retryOnError {
-                    try await URLSession.shared.bytes(for: req, delegate: nil)
-                }
-                guard let httpResponse = resp as? HTTPURLResponse else {
-                    print("回應不是 HTTP 回應")
-                    return "無法連接到伺服器，請稍後再試"
-                }
-                print("收到回應，狀態碼：\(httpResponse.statusCode)")
-                if httpResponse.statusCode != 200 {
-                    return "伺服器回應錯誤（狀態碼：\(httpResponse.statusCode)），請稍後再試"
-                }
-
-                for try await line: AsyncLineSequence<URLSession.AsyncBytes>.AsyncIterator.Element
-                    in bytes.lines
-                {
-                    // 檢查任務是否被取消
-                    try Task.checkCancellation()
-
-                    guard line.hasPrefix("data: ") else {
-                        print("跳過非資料行：\(line)")
-                        continue
+                
+                // 決定本次 tool_choice
+                var toolChoice: String? = nil
+                if sendToGPTCount == 0 {
+                    toolChoice = "none"
+                } else if sendToGPTCount == 1 {
+                    toolChoice = "required"
+                } else if let last = lastToolChoice {
+                    if last == "required" {
+                        toolChoice = "auto"
+                    } else if last == "auto" {
+                        if lastReplyType == "text" {
+                            toolChoice = "required"
+                        } else if lastReplyType == "function" {
+                            toolChoice = "auto"
+                        }
                     }
-                    let payload = String(line.dropFirst(6))
-                    print("收到資料：\(payload)")
+                }
 
-                    if payload == "[DONE]" {
-                        print("收到完成標記")
+                let reqBody = OpenAIRequest(
+                    model: "gpt-4.1-mini",
+                    messages: allMessages,
+                    temperature: 0.7,
+                    stream: true,
+                    tools: [
+                        getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction,
+                    ],
+                    tool_choice: toolChoice
+                )
 
-                        // 處理多個函數調用的情況
-                        if !functionCalls.isEmpty {
-                            print("準備執行多個函數，數量：\(functionCalls.count)")
-                                
-                            for (index, functionCall) in functionCalls.enumerated() {
-                                let functionName = functionCall.name
-                                let arguments = functionCall.arguments
+                print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
+
+                guard let data = try? encoder.encode(reqBody) else {
+                    print("編碼請求失敗")
+                    return nil
+                }
+
+                var req = URLRequest(url: proxyURL)
+                req.httpMethod = "POST"
+                req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
+                req.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.addValue("text/event-stream", forHTTPHeaderField: "Accept")
+                req.httpBody = data
+
+                do {
+                    sendToGPTCount += 1
+                    print("開始發送請求（第 \(sendToGPTCount) 次）")
+                    print("本次 tool_choice: \(toolChoice ?? "nil")")
+                    print("傳送給 GPT 的訊息：")
+                    for msg in allMessages {
+                        print("[\(msg.role)] \(msg.content)")
+                    }
+                    print("開始發送請求")
+                    let (bytes, resp) = try await retryOnError {
+                        try await URLSession.shared.bytes(for: req, delegate: nil)
+                    }
+                    guard let httpResponse = resp as? HTTPURLResponse else {
+                        print("回應不是 HTTP 回應")
+                        return "無法連接到伺服器，請稍後再試"
+                    }
+                    print("收到回應，狀態碼：\(httpResponse.statusCode)")
+                    if httpResponse.statusCode != 200 {
+                        return "伺服器回應錯誤（狀態碼：\(httpResponse.statusCode)），請稍後再試"
+                    }
+
+                    for try await line: AsyncLineSequence<URLSession.AsyncBytes>.AsyncIterator.Element
+                        in bytes.lines
+                    {
+                        // 檢查任務是否被取消
+                        if Task.isCancelled {
+                            print("在處理回應時任務被取消")
+                            return nil
+                        }
+                        
+                        guard line.hasPrefix("data: ") else {
+                            print("跳過非資料行：\(line)")
+                            continue
+                        }
+                        let payload = String(line.dropFirst(6))
+                        print("收到資料：\(payload)")
+
+                        if payload == "[DONE]" {
+                            print("收到完成標記")
+
+                            // 處理多個函數調用的情況
+                            if !functionCalls.isEmpty {
+                                print("準備執行多個函數，數量：\(functionCalls.count)")
                                     
-                                print("執行函數(\(index+1)/\(functionCalls.count))：\(functionName)，參數：\(arguments)")
+                                for (index, functionCall) in functionCalls.enumerated() {
+                                    let functionName = functionCall.name
+                                    let arguments = functionCall.arguments
+                                        
+                                    print("執行函數(\(index+1)/\(functionCalls.count))：\(functionName)，參數：\(arguments)")
+                                    var functionResult = ""
+                                        
+                                    if functionName == "getTask" {
+                                        print("執行 getTask 函數")
+                                        functionResult = await executeGetTask()
+                                    } else if functionName == "getTime" {
+                                        print("執行 getTime 函數")
+                                        functionResult = executeGetTime()
+                                    } else if functionName == "saveTask" {
+                                        print("執行 saveTask 函數")
+                                        functionResult = await executeSaveTask(arguments: arguments)
+                                    } else if functionName == "end_conversation" {
+                                        print("執行 end_conversation 函數")
+                                        functionResult = executeEndConversation()
+                                        endConversationReached = true
+                                    } else if functionName == "deleteTask" {
+                                        print("執行 deleteTask 函數")
+                                        functionResult = await executeDeleteTask(arguments: arguments)
+                                    } else if functionName == "updateTask" {
+                                        print("執行 updateTask 函數")
+                                        functionResult = await executeUpdateTask(arguments: arguments)
+                                    }
+                                        
+                                    print("函數執行結果(\(index+1)/\(functionCalls.count))：\(functionResult)")
+                                        
+                                    // 只有 functionResult 非空時才 append function 回覆
+                                    if !functionResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        // 重置等待函數執行狀態
+                                        if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
+                                            var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
+                                            updatedMessage.isWaitingFunction = false
+                                            updatedMessage.currentExecutingFunction = nil
+                                            updatedMessage.executingFunctions = nil
+                                            chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
+                                        }
+                                            
+                                        // 如果是 saveTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
+                                        if functionName == "saveTask" && !arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            allMessages.append(
+                                                OpenAIMessage(
+                                                    role: "assistant",
+                                                    content: "執行函數: \(functionName)\n" + arguments,
+                                                    name: nil,
+                                                    tool_calls: nil
+                                                )
+                                            )
+                                        }
+                                        
+                                        // 如果是 deleteTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
+                                        if functionName == "deleteTask" && !arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            allMessages.append(
+                                                OpenAIMessage(
+                                                    role: "assistant",
+                                                    content: "執行函數: \(functionName)\n" + arguments,
+                                                    name: nil,
+                                                    tool_calls: nil
+                                                )
+                                            )
+                                        }
+                                        
+                                        // 如果是 updateTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
+                                        if functionName == "updateTask" && !arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            allMessages.append(
+                                                OpenAIMessage(
+                                                    role: "assistant",
+                                                    content: "執行函數: \(functionName)\n" + arguments,
+                                                    name: nil,
+                                                    tool_calls: nil
+                                                )
+                                            )
+                                        }
+                                            
+                                        allMessages.append(
+                                            OpenAIMessage(
+                                                role: "function",
+                                                content: functionResult,
+                                                name: functionName
+                                            ))
+                                    }
+                                }
+                                    
+                                // 標記本次回覆型態為 function
+                                lastReplyType = "function"
+                                lastToolChoice = toolChoice
+                                    
+                                // 重置 function calls 相關變量
+                                functionCalls = []
+                                currentFunctionCall = nil
+                                currentArguments = ""
+                                hasFunctionCall = true  // 標記已執行過 function，之後的文字要換行
+                                    
+                                break
+                            }
+                            // 保留原有的單一函數調用處理邏輯，作為兼容，未來可移除
+                            else if let functionName: String = currentFunctionCall {
+                                print("準備執行函數：\(functionName)，參數：\(currentArguments)")
                                 var functionResult = ""
-                                    
+
                                 if functionName == "getTask" {
                                     print("執行 getTask 函數")
                                     functionResult = await executeGetTask()
@@ -1045,18 +1284,21 @@ final class ChatViewModel: ObservableObject {
                                     functionResult = executeGetTime()
                                 } else if functionName == "saveTask" {
                                     print("執行 saveTask 函數")
-                                    functionResult = await executeSaveTask(arguments: arguments)
+                                    functionResult = await executeSaveTask(arguments: currentArguments)
                                 } else if functionName == "end_conversation" {
                                     print("執行 end_conversation 函數")
                                     functionResult = executeEndConversation()
                                     endConversationReached = true
                                 } else if functionName == "deleteTask" {
                                     print("執行 deleteTask 函數")
-                                    functionResult = await executeDeleteTask(arguments: arguments)
+                                    functionResult = await executeDeleteTask(arguments: currentArguments)
+                                } else if functionName == "updateTask" {
+                                    print("執行 updateTask 函數")
+                                    functionResult = await executeUpdateTask(arguments: currentArguments)
                                 }
-                                    
-                                print("函數執行結果(\(index+1)/\(functionCalls.count))：\(functionResult)")
-                                    
+
+                                print("函數執行結果：\(functionResult)")
+
                                 // 只有 functionResult 非空時才 append function 回覆
                                 if !functionResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     // 重置等待函數執行狀態
@@ -1067,31 +1309,43 @@ final class ChatViewModel: ObservableObject {
                                         updatedMessage.executingFunctions = nil
                                         chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
                                     }
-                                        
+
                                     // 如果是 saveTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
-                                    if functionName == "saveTask" && !arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    if functionName == "saveTask" && !currentArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                         allMessages.append(
                                             OpenAIMessage(
                                                 role: "assistant",
-                                                content: "執行函數: \(functionName)\n" + arguments,
-                                                name: nil,
-                                                tool_calls: nil
-                                            )
-                                        )
-                                    }
-                                    
-                                    // 如果是 deleteTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
-                                    if functionName == "deleteTask" && !arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        allMessages.append(
-                                            OpenAIMessage(
-                                                role: "assistant",
-                                                content: "執行函數: \(functionName)\n" + arguments,
+                                                content: "執行函數: \(functionName)\n" + currentArguments,
                                                 name: nil,
                                                 tool_calls: nil
                                             )
                                         )
                                     }
                                         
+                                    // 如果是 deleteTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
+                                    if functionName == "deleteTask" && !currentArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        allMessages.append(
+                                            OpenAIMessage(
+                                                role: "assistant",
+                                                content: "執行函數: \(functionName)\n" + currentArguments,
+                                                name: nil,
+                                                tool_calls: nil
+                                            )
+                                        )
+                                    }
+                                        
+                                    // 如果是 updateTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
+                                    if functionName == "updateTask" && !currentArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        allMessages.append(
+                                            OpenAIMessage(
+                                                role: "assistant",
+                                                content: "執行函數: \(functionName)\n" + currentArguments,
+                                                name: nil,
+                                                tool_calls: nil
+                                            )
+                                        )
+                                    }
+
                                     allMessages.append(
                                         OpenAIMessage(
                                             role: "function",
@@ -1099,222 +1353,148 @@ final class ChatViewModel: ObservableObject {
                                             name: functionName
                                         ))
                                 }
+
+                                // 標記本次回覆型態為 function
+                                lastReplyType = "function"
+                                lastToolChoice = toolChoice
+
+                                // 重置 function call 相關變量
+                                currentFunctionCall = nil
+                                currentArguments = ""
+                                hasFunctionCall = true  // 標記已執行過 function，之後的文字要換行
+
+                                break
                             }
-                                
-                            // 標記本次回覆型態為 function
-                            lastReplyType = "function"
-                            lastToolChoice = toolChoice
-                                
-                            // 重置 function calls 相關變量
-                            functionCalls = []
-                            currentFunctionCall = nil
-                            currentArguments = ""
-                            hasFunctionCall = true  // 標記已執行過 function，之後的文字要換行
-                                
-                            break
-                        }
-                        // 保留原有的單一函數調用處理邏輯，作為兼容，未來可移除
-                        else if let functionName: String = currentFunctionCall {
-                            print("準備執行函數：\(functionName)，參數：\(currentArguments)")
-                            var functionResult = ""
-                                
-                            if functionName == "getTask" {
-                                print("執行 getTask 函數")
-                                functionResult = await executeGetTask()
-                            } else if functionName == "getTime" {
-                                print("執行 getTime 函數")
-                                functionResult = executeGetTime()
-                            } else if functionName == "saveTask" {
-                                print("執行 saveTask 函數")
-                                functionResult = await executeSaveTask(arguments: currentArguments)
-                            } else if functionName == "end_conversation" {
-                                print("執行 end_conversation 函數")
-                                functionResult = executeEndConversation()
-                                endConversationReached = true
-                            } else if functionName == "deleteTask" {
-                                print("執行 deleteTask 函數")
-                                functionResult = await executeDeleteTask(arguments: currentArguments)
-                            }
-                                
-                            print("函數執行結果：\(functionResult)")
-                                
-                            // 只有 functionResult 非空時才 append function 回覆
-                            if !functionResult.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                // 重置等待函數執行狀態
-                                if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
-                                    var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
-                                    updatedMessage.isWaitingFunction = false
-                                    updatedMessage.currentExecutingFunction = nil
-                                    updatedMessage.executingFunctions = nil
-                                    chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
-                                }
-                                    
-                                // 如果是 saveTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
-                                if functionName == "saveTask" && !currentArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    allMessages.append(
-                                        OpenAIMessage(
-                                            role: "assistant",
-                                            content: "執行函數: \(functionName)\n" + currentArguments,
-                                            name: nil,
-                                            tool_calls: nil
-                                        )
-                                    )
-                                }
-                                    
-                                // 如果是 deleteTask，將 function 的 arguments 也以 assistant 角色加入 allMessages
-                                if functionName == "deleteTask" && !currentArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    allMessages.append(
-                                        OpenAIMessage(
-                                            role: "assistant",
-                                            content: "執行函數: \(functionName)\n" + currentArguments,
-                                            name: nil,
-                                            tool_calls: nil
-                                        )
-                                    )
-                                }
-                                    
+                            // 在 [DONE] 處理完整回覆
+                            if !full.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 allMessages.append(
                                     OpenAIMessage(
-                                        role: "function",
-                                        content: functionResult,
-                                        name: functionName
-                                    ))
+                                        role: "assistant", content: full, name: nil, tool_calls: nil))
                             }
-                                
-                            // 標記本次回覆型態為 function
-                            lastReplyType = "function"
-                            lastToolChoice = toolChoice
-                                
-                            // 重置 function call 相關變量
-                            currentFunctionCall = nil
-                            currentArguments = ""
-                            hasFunctionCall = true  // 標記已執行過 function，之後的文字要換行
-                                
                             break
                         }
-                        // 在 [DONE] 處理完整回覆
-                        if !full.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            allMessages.append(
-                                OpenAIMessage(
-                                    role: "assistant", content: full, name: nil, tool_calls: nil))
-                        }
-                        break
-                    }
 
-                    if let json = payload.data(using: .utf8),
-                        let chunk = try? decoder.decode(OpenAIStreamChunk.self, from: json)
-                    {
-                        if let toolCalls = chunk.choices.first?.delta.tool_calls {
-                            // 處理每個工具調用
-                            for toolCall in toolCalls {
+                        if let json = payload.data(using: .utf8),
+                            let chunk = try? decoder.decode(OpenAIStreamChunk.self, from: json)
+                        {
+                            if let toolCalls = chunk.choices.first?.delta.tool_calls {
+                                // 處理每個工具調用
+                                for toolCall in toolCalls {
                                 hasFunctionCall = true
-                                
-                                let callIndex = toolCall.index
-                                
-                                if let name = toolCall.function?.name {
-                                    print("收到函數名稱（索引\(callIndex)）：\(name)")
+
+                                    let callIndex = toolCall.index
                                     
-                                    // 無論是哪個索引的函數調用，都更新currentExecutingFunction
+                                    if let name = toolCall.function?.name {
+                                        print("收到函數名稱（索引\(callIndex)）：\(name)")
+                                        
+                                        // 無論是哪個索引的函數調用，都更新currentExecutingFunction
                                     currentFunctionCall = name
-                                    
-                                    // 添加到函數調用數組或更新現有函數調用
-                                    if functionCalls.count <= callIndex {
-                                        // 擴展數組以容納新索引
-                                        while functionCalls.count <= callIndex {
-                                            functionCalls.append((name: "", arguments: ""))
+                                        
+                                        // 添加到函數調用數組或更新現有函數調用
+                                        if functionCalls.count <= callIndex {
+                                            // 擴展數組以容納新索引
+                                            while functionCalls.count <= callIndex {
+                                                functionCalls.append((name: "", arguments: ""))
+                                            }
+                                            // 設置函數名稱
+                                            functionCalls[callIndex].name = name
+                                        } else {
+                                            // 更新已有函數調用的名稱
+                                            functionCalls[callIndex].name = name
                                         }
-                                        // 設置函數名稱
-                                        functionCalls[callIndex].name = name
-                                    } else {
-                                        // 更新已有函數調用的名稱
-                                        functionCalls[callIndex].name = name
-                                    }
-                                    
+                                        
                                     // 批量更新最後一條消息的狀態，但 end_conversation 不顯示載入動畫
-                                    if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
-                                        var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
+                                        if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
+                                            var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
                                         // 只有在不是 end_conversation 時才顯示載入動畫
                                         if name != "end_conversation" {
                                             updatedMessage.isWaitingFunction = true
-                                            
+                                                
                                             // 始終更新currentExecutingFunction為最新的函數名稱
                                             updatedMessage.currentExecutingFunction = name
-                                            
+                                                
                                             // 不再使用executingFunctions數組
                                             updatedMessage.executingFunctions = nil
                                         }
+                                            chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
+                                    }
+                                }
+                                    
+                                    if let args = toolCall.function?.arguments {
+                                        print("收到函數參數（索引\(callIndex)）：\(args)")
+                                        
+                                        // 更新對應函數調用的參數
+                                        if callIndex < functionCalls.count {
+                                            functionCalls[callIndex].arguments += args
+                                        } else {
+                                            // 擴展數組以容納新索引，並設置參數
+                                            while functionCalls.count <= callIndex {
+                                                functionCalls.append((name: "", arguments: ""))
+                                            }
+                                            functionCalls[callIndex].arguments = args
+                                        }
+                                        
+                                        // 保留原有兼容
+                                        if callIndex == 0 {
+                                    currentArguments += args
+                                        }
+                                    }
+                                }
+                            } else if let piece = chunk.choices.first?.delta.content {
+                                print("hasFunctionCall: \(hasFunctionCall)")
+                                print("收到文字：\(piece)")
+                                // 如果是 function 執行完後的第一段文字，加入換行
+                                if hasFunctionCall {
+                                    // 不保留之前的文字，直接從函數調用後的回覆開始
+                                    full = ""
+                                    hasFunctionCall = false  // 重置標記
+                                    print("收到函數調用後的第一段文字：\(piece)")
+                                    // 批量更新消息狀態
+                                    if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
+                                        var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
+                                        updatedMessage.isWaitingFunction = false
+                                        updatedMessage.currentExecutingFunction = nil
+                                        updatedMessage.executingFunctions = nil
                                         chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
                                     }
+                                    await onToken?("\n")
+                                } else if full.isEmpty {
+                                    // 如果是第一段文字（不是函數調用後），正常添加
+                                    full = piece
+                                    await onToken?(piece)
+                                } else {
+                                    // 否則正常累加文字
+                                    full += piece
+                                    await onToken?(piece)
                                 }
-                                
-                                if let args = toolCall.function?.arguments {
-                                    print("收到函數參數（索引\(callIndex)）：\(args)")
-                                    
-                                    // 更新對應函數調用的參數
-                                    if callIndex < functionCalls.count {
-                                        functionCalls[callIndex].arguments += args
-                                    } else {
-                                        // 擴展數組以容納新索引，並設置參數
-                                        while functionCalls.count <= callIndex {
-                                            functionCalls.append((name: "", arguments: ""))
-                                        }
-                                        functionCalls[callIndex].arguments = args
-                                    }
-                                    
-                                    // 保留原有兼容
-                                    if callIndex == 0 {
-                                        currentArguments += args
-                                    }
-                                }
-                            }
-                        } else if let piece = chunk.choices.first?.delta.content {
-                            print("hasFunctionCall: \(hasFunctionCall)")
-                            print("收到文字：\(piece)")
-                            // 如果是 function 執行完後的第一段文字，加入換行
-                            if hasFunctionCall {
-                                // 不保留之前的文字，直接從函數調用後的回覆開始
-                                full = ""
-                                hasFunctionCall = false  // 重置標記
-                                print("收到函數調用後的第一段文字：\(piece)")
-                                // 批量更新消息狀態
-                                if let lastIndex = chatRooms[selectedRoomIndex].messages.indices.last {
-                                    var updatedMessage = chatRooms[selectedRoomIndex].messages[lastIndex]
-                                    updatedMessage.isWaitingFunction = false
-                                    updatedMessage.currentExecutingFunction = nil
-                                    updatedMessage.executingFunctions = nil
-                                    chatRooms[selectedRoomIndex].messages[lastIndex] = updatedMessage
-                                }
-                                await onToken?("\n")
-                            } else if full.isEmpty {
-                                // 如果是第一段文字（不是函數調用後），正常添加
-                                full = piece
-                                await onToken?(piece)
-                            } else {
-                                // 否則正常累加文字
-                                full += piece
-                                await onToken?(piece)
-                            }
 
-                            // 標記本次回覆型態為 text
-                            lastReplyType = "text"
-                            lastToolChoice = toolChoice
+                                // 標記本次回覆型態為 text
+                                lastReplyType = "text"
+                                lastToolChoice = toolChoice
+                            }
                         }
                     }
+                } catch is CancellationError {
+                    print("任務被取消")
+                    return nil
+                } catch {
+                    print("發生錯誤：\(error.localizedDescription)")
+                    if let urlError = error as? URLError {
+                        return "網路錯誤：\(urlError.localizedDescription)"
+                    }
+                    return "發生錯誤：\(error.localizedDescription)"
                 }
-            } catch is CancellationError {
-                print("任務被取消")
-                return nil
-            } catch {
-                print("發生錯誤：\(error.localizedDescription)")
-                if let urlError = error as? URLError {
-                    return "網路錯誤：\(urlError.localizedDescription)"
-                }
-                return "發生錯誤：\(error.localizedDescription)"
             }
-        }
 
-        print("對話結束，hasFunctionCall: \(hasFunctionCall), full: \(full)")
-        return full
+            print("對話結束，hasFunctionCall: \(hasFunctionCall), full: \(full)")
+            return full
+        }
+        
+        // 保存任務引用
+        currentTask = task
+        
+        // 等待任務完成
+        return await task.value
     }
 
     // ----------------------------- 產生標題（非串流） -----------------------------
@@ -1649,7 +1829,199 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    // 修改確認刪除任務的函數
+    // 執行更新任務函數
+    private func executeUpdateTask(arguments: String) async -> String {
+        currentFunction = "updateTask"
+        defer { currentFunction = nil }
+
+        // 檢查當前訊息是否已有待更新的任務
+        let currentMessageIndex = chatRooms[selectedRoomIndex].messages.count - 1
+        if chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks != nil {
+            return "已有待確認的任務更新，請等待用戶處理。"
+        }
+
+        // 解析參數
+        struct UpdateTaskArg: Codable {
+            let taskId: String
+            let title: String?
+            let note: String?
+            let category: String?
+            let startDate: String?
+            let endDate: String?
+            let isAllDay: String?
+            let isCompleted: String?
+            let color: String?
+        }
+        
+        struct UpdateTasksArgs: Codable {
+            let tasks: [UpdateTaskArg]
+        }
+
+        do {
+            guard let jsonData = arguments.data(using: .utf8) else {
+                print("無法將參數轉換為 JSON 數據")
+                return "無法解析任務參數"
+            }
+
+            let args = try JSONDecoder().decode(UpdateTasksArgs.self, from: jsonData)
+            print("成功解析參數，準備更新 \(args.tasks.count) 個任務")
+            
+            if args.tasks.isEmpty {
+                return "未提供任何要更新的任務"
+            }
+
+            // 獲取所有任務
+            let allTasks = todoViewModel.tasks
+            
+            // 儲存待更新的任務
+            var tasksToUpdate: [(original: TodoTask, updated: PendingTask)] = []
+            
+            for taskArg in args.tasks {
+                // 查找原任務
+                guard let originalTask = allTasks.first(where: { $0.id == taskArg.taskId }) else {
+                    return "找不到 ID 為 \(taskArg.taskId) 的任務"
+                }
+                
+                // 創建新的 PendingTask，保留未修改的值
+                let updatedTask = PendingTask(
+                    title: taskArg.title ?? originalTask.title,
+                    note: taskArg.note ?? originalTask.note,
+                    category: taskArg.category ?? originalTask.category,
+                    startDate: parseDate(taskArg.startDate) ?? originalTask.startDate,
+                    endDate: parseDate(taskArg.endDate) ?? originalTask.endDate,
+                    isAllDay: taskArg.isAllDay?.lowercased() == "true" ? true : 
+                             (taskArg.isAllDay?.lowercased() == "false" ? false : originalTask.isAllDay),
+                    isCompleted: taskArg.isCompleted?.lowercased() == "true" ? true : 
+                               (taskArg.isCompleted?.lowercased() == "false" ? false : originalTask.isCompleted),
+                    color: parseColor(taskArg.color) ?? originalTask.color
+                )
+                
+                tasksToUpdate.append((original: originalTask, updated: updatedTask))
+            }
+            
+            // 儲存待更新的任務到當前訊息
+            chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks = tasksToUpdate
+
+            return "已準備好 \(tasksToUpdate.count) 個任務更新，等待用戶確認中..."
+
+        } catch {
+            print("解析參數時發生錯誤：\(error)")
+            return "解析任務參數時發生錯誤：\(error.localizedDescription)"
+        }
+    }
+
+    // 解析日期字串的輔助函數
+    private func parseDate(_ dateString: String?) -> Date? {
+        guard let dateString = dateString else { return nil }
+        
+        let dateFormats = [
+            "yyyy-MM-dd'T'HH:mm:ssXXX",  // 帶時區和秒
+            "yyyy-MM-dd'T'HH:mm:ss",  // 帶秒，不帶時區
+            "yyyy-MM-dd'T'HH:mmXXX",  // 帶時區，不帶秒
+            "yyyy-MM-dd'T'HH:mm",  // 不帶時區和秒
+        ]
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = TimeZone.current
+
+        // 嘗試所有可能的格式
+        for format in dateFormats {
+            dateFormatter.dateFormat = format
+            if let date = dateFormatter.date(from: dateString) {
+                return date
+            }
+        }
+
+        // 如果包含時區信息，嘗試移除時區後再解析
+        if dateString.contains("+") || dateString.contains("-") {
+            let components = dateString.components(separatedBy: CharacterSet(charactersIn: "+-"))
+            if let basicString = components.first {
+                return parseDate(basicString)
+            }
+        }
+
+        print("無法解析日期：\(dateString)")
+        return nil
+    }
+
+    // 解析顏色字串的輔助函數
+    private func parseColor(_ colorString: String?) -> Color? {
+        guard let colorStr = colorString else { return nil }
+
+        let components = colorStr.split(separator: ",").compactMap {
+            Double($0.trimmingCharacters(in: .whitespaces))
+        }
+        guard components.count == 4 else { return nil }
+
+        return Color(red: components[0], green: components[1], blue: components[2]).opacity(components[3])
+    }
+
+    // 確認並更新任務
+    func confirmAndUpdateTask(for messageId: UUID) async {
+        guard
+            let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }),
+            let updateDataList = chatRooms[selectedRoomIndex].messages[messageIndex].pendingUpdateTasks,
+            !chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed
+        else {
+            return
+        }
+
+        // 標記為處理中
+        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = true
+
+        var successCount = 0
+        var failureCount = 0
+        
+        // 逐一處理每個任務更新
+        for updateData in updateDataList {
+            do {
+                // 創建更新後的 TodoTask
+                var updatedTask = updateData.original
+                updatedTask.title = updateData.updated.title
+                updatedTask.note = updateData.updated.note
+                updatedTask.color = updateData.updated.color
+                updatedTask.category = updateData.updated.category
+                updatedTask.isAllDay = updateData.updated.isAllDay
+                updatedTask.isCompleted = updateData.updated.isCompleted
+                updatedTask.startDate = updateData.updated.startDate
+                updatedTask.endDate = updateData.updated.endDate
+
+                // 檢查並創建類別統計（如果類別已更改）
+                if updateData.original.category != updatedTask.category {
+                    await checkAndCreateStatisticsForCategory(updatedTask.category)
+                }
+
+                // 保存更新的任務
+                await todoViewModel.updateTask(updatedTask)
+                successCount += 1
+            } catch {
+                print("Error updating task: \(error)")
+                failureCount += 1
+            }
+        }
+
+        // 更新成功/失敗計數
+        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = successCount
+        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = failureCount
+
+        // 完成處理並標記為已確認
+        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = false
+        chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed = true
+    }
+
+    // 拒絕更新任務
+    func rejectUpdateTask(for messageId: UUID) {
+        guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId })
+        else { return }
+
+        // 標記訊息為已確認，並設置失敗狀態
+        chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed = true
+        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = 0
+        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = 1
+    }
+
+    // 確認刪除任務的函數
     func confirmAndDeleteTask(for messageId: UUID) async {
         guard
             let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }),
@@ -1685,7 +2057,7 @@ final class ChatViewModel: ObservableObject {
         chatRooms[selectedRoomIndex].messages[messageIndex].isDeleteConfirmed = true
     }
 
-    // 添加拒絕刪除任務的函數
+    // 拒絕刪除任務的函數
     func rejectDeleteTask(for messageId: UUID) {
         guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId })
         else { return }
@@ -1697,6 +2069,26 @@ final class ChatViewModel: ObservableObject {
             chatRooms[selectedRoomIndex].messages[messageIndex].pendingDeleteTasks?.count ?? 0
     }
 
+    // 添加到 cases 中
+    private func handleToolCall(functionName: String, arguments: String) async -> String {
+        switch functionName {
+        case "getTask":
+            return await executeGetTask()
+        case "getTime":
+            return executeGetTime()
+        case "saveTask":
+            return await executeSaveTask(arguments: arguments)
+        case "deleteTask":
+            return await executeDeleteTask(arguments: arguments)
+        case "updateTask":
+            return await executeUpdateTask(arguments: arguments)
+        case "end_conversation":
+            return executeEndConversation()
+        default:
+            return "未知函數：\(functionName)"
+        }
+    }
+
     init() {
         loadChatRoomsFromLocal()
         if !chatRooms.isEmpty {
@@ -1705,5 +2097,16 @@ final class ChatViewModel: ObservableObject {
         Task {
             await loadStudySettingsFromFirestore()
         }
+    }
+
+    // 取消當前任務
+    func cancelCurrentTask() {
+        currentTask?.cancel()
+        currentTask = nil
+        isLoading = false
+        currentFunction = nil
+        functionCalls = []
+        currentFunctionCall = nil
+        currentArguments = ""
     }
 }
