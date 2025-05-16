@@ -56,30 +56,41 @@ struct TodoAddView: View {
     }
     
     var body: some View {
-        ZStack {
-            // 半透明背景
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    dismissWithAnimation()
+        // 主要表單容器
+        mainContentView
+            .background(backgroundColor)
+            .cornerRadius(25, corners: [.topLeft, .topRight])
+            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: -5)
+            .offset(y: offset)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: offset)
+            .edgesIgnoringSafeArea(.bottom)
+            .gesture(
+                DragGesture()
+                    .onChanged { gesture in
+                        let newOffset = max(0, gesture.translation.height)
+                        offset = newOffset
+                    }
+                    .onEnded { gesture in
+                        if gesture.translation.height > 100 {
+                            dismissWithAnimation()
+                        } else {
+                            offset = 0
+                        }
+                    }
+            )
+            .transition(.move(edge: .bottom))
+            .onAppear {
+                // 在視圖出現時初始化表單
+                viewModel.initNewTaskForm(selectedDate: selectedDate)
+                repeatOption = viewModel.newTaskRepeatType
+                viewModel.errorMessage = nil
+                viewModel.isLoading = false
+                
+                // 動畫展示
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    offset = 0
                 }
-                .opacity(isDismissing ? 0 : 1)
-            
-            // 主要表單容器
-            mainContentView
-        }
-        .onAppear {
-            // 在視圖出現時初始化表單
-            viewModel.initNewTaskForm(selectedDate: selectedDate)
-            repeatOption = viewModel.newTaskRepeatType
-            viewModel.errorMessage = nil
-            viewModel.isLoading = false
-            
-            // 動畫展示
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                offset = 0
             }
-        }
     }
     
     // 表單容器
@@ -143,27 +154,6 @@ struct TodoAddView: View {
                 }
             }
         }
-        .background(backgroundColor)
-        .cornerRadius(25, corners: [.topLeft, .topRight])
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: -5)
-        .offset(y: offset)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: offset)
-        .edgesIgnoringSafeArea(.bottom)
-        .gesture(
-            DragGesture()
-                .onChanged { gesture in
-                    let newOffset = max(0, gesture.translation.height)
-                    offset = newOffset
-                }
-                .onEnded { gesture in
-                    if gesture.translation.height > 100 {
-                        dismissWithAnimation()
-                    } else {
-                        offset = 0
-                    }
-                }
-        )
-        .transition(.move(edge: .bottom))
     }
     
     // 標題區域
@@ -361,25 +351,14 @@ struct TodoAddView: View {
     
     // 關閉視圖帶動畫
     private func dismissWithAnimation() {
-        isDismissing = true
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isDismissing = true
             offset = UIScreen.main.bounds.height
-        }
-        
-        // 觸發資料重新載入，確保其他視圖能看到新增的任務
-        Task {
-            do {
-                try await viewModel.loadTasks()
-            } catch {
-                print("Error reloading tasks: \(error)")
-            }
         }
         
         // 延遲關閉以等待動畫完成
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isPresented = false
-            }
+            isPresented = false
         }
     }
     
@@ -421,45 +400,62 @@ struct TodoAddView: View {
             return
         }
         
-        // 確保離線操作時 UI 不會卡住
-        viewModel.isLoading = true
+        // 開始關閉動畫
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isDismissing = true
+            offset = UIScreen.main.bounds.height
+        }
         
-        Task {
-            do {
-                // 將重複選項資料傳遞給 viewModel
-                viewModel.newTaskRepeatType = repeatOption
-                
-                // 獲取當前使用者 ID
-                let userId = Auth.auth().currentUser?.uid ?? "default"
-                
-                // 創建任務，確保包含用戶 ID
-                let task = TodoTask(
-                    title: viewModel.newTaskTitle,
-                    note: viewModel.newTaskNote,
-                    color: viewModel.newTaskColor,
-                    focusTime: viewModel.newTaskFocusTime,
-                    category: viewModel.newTaskCategory,
-                    isAllDay: viewModel.newTaskIsAllDay,
-                    isCompleted: false,
-                    repeatType: viewModel.newTaskRepeatType,
-                    startDate: viewModel.newTaskStartDate,
-                    endDate: viewModel.newTaskEndDate,
-                    userId: userId
-                )
-                
-                // 使用 addTask 而非 saveNewTask 以確保處理好 userId
-                await viewModel.addTask(task)
-                
-                // 檢查並為新類別創建統計記錄
-                await checkAndCreateStatisticsForCategory(viewModel.newTaskCategory)
-                
-                // 任務保存成功後關閉視圖
-                dismissWithAnimation()
-            } catch {
-                // 顯示錯誤訊息
-                viewModel.errorMessage = error.localizedDescription
-                viewModel.isLoading = false
-                print("Error saving task: \(error.localizedDescription)")
+        // 延遲執行保存操作，等待關閉動畫完成
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            // 確保離線操作時 UI 不會卡住
+            viewModel.isLoading = true
+            
+            Task {
+                do {
+                    // 將重複選項資料傳遞給 viewModel
+                    viewModel.newTaskRepeatType = repeatOption
+                    
+                    // 獲取當前使用者 ID
+                    let userId = Auth.auth().currentUser?.uid ?? "default"
+                    
+                    // 創建任務，確保包含用戶 ID
+                    let task = TodoTask(
+                        title: viewModel.newTaskTitle,
+                        note: viewModel.newTaskNote,
+                        color: viewModel.newTaskColor,
+                        focusTime: viewModel.newTaskFocusTime,
+                        category: viewModel.newTaskCategory,
+                        isAllDay: viewModel.newTaskIsAllDay,
+                        isCompleted: false,
+                        repeatType: viewModel.newTaskRepeatType,
+                        startDate: viewModel.newTaskStartDate,
+                        endDate: viewModel.newTaskEndDate,
+                        userId: userId
+                    )
+                    
+                    // 使用 addTask 而非 saveNewTask 以確保處理好 userId
+                    await viewModel.addTask(task)
+                    
+                    // 檢查並為新類別創建統計記錄
+                    await checkAndCreateStatisticsForCategory(viewModel.newTaskCategory)
+                    
+                    // 延遲關閉視圖
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isPresented = false
+                    }
+                } catch {
+                    // 顯示錯誤訊息
+                    viewModel.errorMessage = error.localizedDescription
+                    viewModel.isLoading = false
+                    print("Error saving task: \(error.localizedDescription)")
+                    
+                    // 如果保存失敗，恢復視圖
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isDismissing = false
+                        offset = 0
+                    }
+                }
             }
         }
     }

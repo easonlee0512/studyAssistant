@@ -416,7 +416,7 @@ class TimerManager: ObservableObject {
                             updatedTask.focusTime += focusTimeInMinutes
                             
                             // 保存更新後的任務
-                            await todoViewModel.updateTask(updatedTask)
+                            try await todoViewModel.updateTask(updatedTask)
                             print("成功更新任務專注時間：\(focusTimeInMinutes) 分鐘")
                         } else {
                             print("無法找到 ID 為 \(taskId) 的任務")

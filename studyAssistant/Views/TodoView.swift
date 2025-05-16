@@ -27,9 +27,6 @@ struct TodoView: View {
     @State private var showingEditTask = false
     @State private var taskToEdit: TodoTask? = nil
     
-    // 用於倒數計時顯示
-    @State private var userGoal: String = ""
-    
     // Figma中使用的顏色
     let backgroundColor = Color.hex(hex: "F3D4B7")
     let bottomBarColor = Color.hex(hex: "FEECD8")
@@ -43,8 +40,18 @@ struct TodoView: View {
         return components.day ?? 0
     }
     
+    // 使用 UserDefaults 來存儲用戶標語
+    private let userDefaults = UserDefaults.standard
+    private let userGoalKey = "cached_user_goal"
+    
+    @State private var isInitialized = false
+    @State private var lastLoadTime: Date? = nil
+    @State private var lastUserProfileLoadTime: Date? = nil
+    @State private var cachedUserGoal: String = ""
+    
     init() {
-        // 在初始化時不做特殊處理，所有設定都會在 onAppear 和通過通知處理
+        // 從 UserDefaults 加載緩存的標語
+        _cachedUserGoal = State(initialValue: UserDefaults.standard.string(forKey: userGoalKey) ?? "")
     }
     
     var body: some View {
@@ -66,8 +73,8 @@ struct TodoView: View {
                     VStack(spacing: 16) {
                         // 顯示用戶目標或默認倒數天數
                         VStack(alignment: .leading, spacing: 5) {
-                            if !userGoal.isEmpty {
-                                Text(userGoal)
+                            if !cachedUserGoal.isEmpty {
+                                Text(cachedUserGoal)
                                     .font(.system(size: 30, weight: .bold))
                             } else {
                                 // 顯示距離目標日期的倒數，使用 targetDate 的日期名稱
@@ -115,16 +122,24 @@ struct TodoView: View {
                     ScrollView {
                         VStack(spacing: 15) {
                             ForEach(filteredTasks(for: selectedDate)) { task in
-                                TaskRowNewView(task: task) { updatedTask in
+                                TodoItemView(task: task, isExample: false, onUpdate: { updatedTask in
                                     Task {
-                                        await viewModel.updateTask(updatedTask)
+                                        do {
+                                            // 不需要等待更新完成，直接返回讓 UI 保持響應
+                                            Task {
+                                                try await viewModel.toggleTaskCompletion(updatedTask)
+                                            }
+                                        } catch {
+                                            showError = true
+                                            errorMessage = error.localizedDescription
+                                        }
                                     }
-                                } onTaskSelected: { selectedTask in
+                                }, onTaskSelected: { selectedTask in
                                     taskToEdit = selectedTask
-                                    withAnimation (.easeInOut(duration: 0.15)){
+                                    withAnimation(.easeInOut(duration: 0.15)) {
                                         showingEditTask = true
                                     }
-                                }
+                                })
                             }
                             
                             if filteredTasks(for: selectedDate).isEmpty {
@@ -142,13 +157,24 @@ struct TodoView: View {
                 .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
                 
                 // 添加任務視圖
-                Group {
-                    if showingAddTask {
+                if showingAddTask {
+                    ZStack {
+                        // 遮罩層
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                            .transition(.opacity)
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showingAddTask = false
+                                }
+                            }
+                        
+                        // 新增任務視圖
                         TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
                             .environmentObject(staticViewModel)
                             .transition(.move(edge: .bottom))
-                            .zIndex(1)
                     }
+                    .zIndex(1)
                 }
                 
                 // 任務詳情視圖
@@ -167,12 +193,25 @@ struct TodoView: View {
                 // 編輯任務視圖
                 Group {
                     if showingEditTask && taskToEdit != nil {
-                        TodoEditView(
-                            viewModel: viewModel,
-                            isPresented: $showingEditTask,
-                            task: taskToEdit!
-                        )
-                        .transition(.move(edge: .bottom))
+                        ZStack {
+                            // 遮罩層
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
+                                .transition(.opacity)
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        showingEditTask = false
+                                    }
+                                }
+                            
+                            // 編輯任務視圖
+                            TodoEditView(
+                                viewModel: viewModel,
+                                isPresented: $showingEditTask,
+                                task: taskToEdit!
+                            )
+                            .transition(.move(edge: .bottom))
+                        }
                         .zIndex(1)
                     }
                 }
@@ -180,28 +219,62 @@ struct TodoView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
-            loadUserProfile()
+            // 每次視圖出現時檢查並更新標語
+            let currentQuote = settingsViewModel.userProfile.motivationalQuote
+            if !currentQuote.isEmpty {
+                cachedUserGoal = currentQuote
+                // 保存到 UserDefaults
+                userDefaults.set(currentQuote, forKey: userGoalKey)
+            } else if !cachedUserGoal.isEmpty {
+                // 如果當前設定為空但有緩存，使用緩存的值
+                settingsViewModel.userProfile.motivationalQuote = cachedUserGoal
+            }
+            
+            if !isInitialized {
+                isInitialized = true
+            }
         }
         .task {
-            await loadTasks()
+            // 監聽用戶設定變化
+            NotificationCenter.default.addObserver(
+                forName: .userProfileDidChange,
+                object: nil,
+                queue: .main
+            ) { [self] _ in
+                let newQuote = settingsViewModel.userProfile.motivationalQuote
+                if !newQuote.isEmpty {
+                    cachedUserGoal = newQuote
+                    // 保存到 UserDefaults
+                    userDefaults.set(newQuote, forKey: userGoalKey)
+                }
+            }
             
+            // 只在必要時載入任務數據
+            let currentTime = Date()
+            let needsReload = lastLoadTime == nil || 
+                             currentTime.timeIntervalSince(lastLoadTime!) > 300 // 5分鐘刷新一次
+            
+            if needsReload {
+                await loadTasks(showLoadingIndicator: lastLoadTime == nil)
+                lastLoadTime = Date()
+            }
+            
+            // 設置通知監聽器
             NotificationCenter.default.addObserver(
                 forName: .todoDataDidChange,
                 object: nil,
                 queue: .main
             ) { _ in
                 Task {
-                    await loadTasks()
+                    await loadTasks(showLoadingIndicator: false)
+                    lastLoadTime = Date()
                 }
             }
-            
-            NotificationCenter.default.addObserver(
-                forName: .userProfileDidChange,
-                object: nil,
-                queue: .main
-            ) { _ in
-                print("收到使用者設定更新通知")
-                self.loadUserProfile()
+        }
+        .onChange(of: selectedDate) { newDate in
+            // 當選擇的日期改變時，重新載入任務
+            Task {
+                await loadTasks(showLoadingIndicator: false)
             }
         }
         .onDisappear {
@@ -228,17 +301,14 @@ struct TodoView: View {
     }
     
     private func filteredTasks(for date: Date) -> [TodoTask] {
-        let todayTasks = viewModel.tasksForDate(date)
-        let completedTasks = todayTasks.filter { $0.isCompleted }
-        let uncompletedTasks = todayTasks.filter { !$0.isCompleted }
-        
-        // 先顯示未完成的任務，再顯示已完成的任務
-        return uncompletedTasks + completedTasks
+        viewModel.sortedTasks(by: date)
     }
     
-    private func loadTasks() async {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            isLoading = true
+    private func loadTasks(showLoadingIndicator: Bool = true) async {
+        if showLoadingIndicator {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isLoading = true
+            }
         }
         
         do {
@@ -248,13 +318,28 @@ struct TodoView: View {
             print("Error loading tasks: \(error)")
         }
         
-        withAnimation(.easeInOut(duration: 0.2)) {
+        if showLoadingIndicator {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isLoading = false
+            }
+        } else {
             isLoading = false
         }
     }
     
-    // 載入使用者資料，獲取鼓勵語句
-    private func loadUserProfile() {
+    // 修改 loadUserProfile 方法
+    private func loadUserProfile(force: Bool = false) {
+        // 檢查是否需要重新載入
+        let currentTime = Date()
+        let needsReload = force || 
+                         lastUserProfileLoadTime == nil || 
+                         currentTime.timeIntervalSince(lastUserProfileLoadTime!) > 300 // 5分鐘刷新一次
+        
+        guard needsReload else {
+            return
+        }
+        
+
         print("載入使用者資料：\(settingsViewModel.userProfile.motivationalQuote)")
         
         // 強制從資料庫重新載入最新設定
@@ -265,13 +350,16 @@ struct TodoView: View {
                 // 在主線程更新 UI
                 DispatchQueue.main.async {
                     if !self.settingsViewModel.userProfile.motivationalQuote.isEmpty {
-                        self.userGoal = self.settingsViewModel.userProfile.motivationalQuote
-                        print("成功更新鼓勵語句：\(self.userGoal)")
+                        self.cachedUserGoal = self.settingsViewModel.userProfile.motivationalQuote
+                        print("成功更新鼓勵語句：\(self.cachedUserGoal)")
                     } else {
-                        // 如果鼓勵語句為空，則清空 userGoal，使其顯示倒數天數
-                        self.userGoal = ""
+                        // 如果鼓勵語句為空，則清空 cachedUserGoal，使其顯示倒數天數
+                        self.cachedUserGoal = ""
                         print("鼓勵語句為空，將顯示距離目標日期剩餘 \(self.daysRemaining) 天")
                     }
+                    
+                    // 更新最後載入時間
+                    self.lastUserProfileLoadTime = currentTime
                 }
             } catch {
                 print("載入使用者設定失敗：\(error)")
@@ -281,11 +369,22 @@ struct TodoView: View {
 }
 
 // 新的任務行視圖 - 使用新的样式
-struct TaskRowNewView: View {
-    @State var task: TodoTask
-    var isExample: Bool = false
-    var onUpdate: ((TodoTask) -> Void)? = nil
-    var onTaskSelected: ((TodoTask) -> Void)? = nil
+struct TodoItemView: View {
+    let task: TodoTask
+    let isExample: Bool
+    let onUpdate: ((TodoTask) -> Void)?
+    let onTaskSelected: ((TodoTask) -> Void)?
+    @State private var localIsCompleted: Bool
+    @State private var showError = false
+    @State private var errorMessage = ""
+    
+    init(task: TodoTask, isExample: Bool, onUpdate: ((TodoTask) -> Void)? = nil, onTaskSelected: ((TodoTask) -> Void)? = nil) {
+        self.task = task
+        self.isExample = isExample
+        self.onUpdate = onUpdate
+        self.onTaskSelected = onTaskSelected
+        self._localIsCompleted = State(initialValue: task.isCompleted)
+    }
     
     var body: some View {
         HStack(spacing: 14) {
@@ -301,27 +400,31 @@ struct TaskRowNewView: View {
                 // 任務標題
                 Text(task.title)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.black)
-                    .strikethrough(task.isCompleted)
+                    .foregroundColor(localIsCompleted ? .gray : .black)
+                    .strikethrough(localIsCompleted)
                 
                 // 備註文字
                 Text(task.note)
                     .font(.system(size: 15))
-                    .foregroundColor(.black.opacity(0.6))
+                    .foregroundColor(localIsCompleted ? .gray.opacity(0.6) : .black.opacity(0.6))
+                    .strikethrough(localIsCompleted)
                     .lineLimit(1)
                 
-                // 時間顯示 - 改為純文字形式
+                // 時間顯示
                 Text(task.formattedTime)
                     .font(.system(size: 14))
-                    .foregroundColor(.black.opacity(0.7))
+                    .foregroundColor(localIsCompleted ? .gray.opacity(0.7) : .black.opacity(0.7))
             }
             
             Spacer()
             
-            // 右側完成按鈕 - 改為方形且與背景色一致，添加淺黑色粗邊框
+            // 右側完成按鈕
             if !isExample {
                 Button(action: {
-                    task.isCompleted.toggle()
+                    // 立即更新本地狀態
+                    localIsCompleted.toggle()
+                    
+                    // 觸發更新
                     if let onUpdate = onUpdate {
                         onUpdate(task)
                     }
@@ -330,9 +433,13 @@ struct TaskRowNewView: View {
                         .fill(Color.hex(hex: "FEECD8"))
                         .frame(width: 30, height: 30)
                         .overlay(
-                            Image(systemName: task.isCompleted ? "checkmark" : "")
-                                .font(.system(size: 22, weight: .black))
-                                .foregroundColor(Color.black.opacity(0.8))
+                            Group {
+                                if localIsCompleted {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 22, weight: .black))
+                                        .foregroundColor(Color.black.opacity(0.8))
+                                }
+                            }
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 5)
@@ -350,16 +457,21 @@ struct TaskRowNewView: View {
             }
         }
         .padding(.vertical, 7)
-        .frame(height: 96)       // 添加固定高度
+        .frame(height: 96)
         .padding(.horizontal, 14)
         .background(Color.hex(hex: "FEECD8"))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.09), radius: 10, x: 3, y: 3)
-        .contentShape(Rectangle()) // 確保整個區域可點擊
+        .contentShape(Rectangle())
         .onTapGesture {
             if !isExample && onTaskSelected != nil {
                 onTaskSelected?(task)
             }
+        }
+        .alert("更新失敗", isPresented: $showError) {
+            Button("確定", role: .cancel) { }
+        } message: {
+            Text(errorMessage)
         }
     }
 }
@@ -451,9 +563,12 @@ struct WeekContent: View {
                 let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
                 
                 VStack(spacing: 5) {
-                    Text(days[index])
+                    Text(days[index]) // 星期幾
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(isSelected ? .black : Color.hex(hex: "222222"))
+                        .padding(.top, 0)
+                    
+                    // 日期數字
                     Text("\(calendar.component(.day, from: date))")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.black)

@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import Firebase
+import FirebaseAuth
+import FirebaseFirestore
 
 @MainActor
 class UserSettingsViewModel: ObservableObject {
@@ -12,6 +14,10 @@ class UserSettingsViewModel: ObservableObject {
     @Published var appSettings: AppSettings
     @Published var syncStatus: SyncStatus = .notSynced
     @Published var errorMessage: String?
+    @Published var isLoading = false
+    
+    private var authStateListener: AuthStateDidChangeListenerHandle?
+    private var profileListener: ListenerRegistration?
     
     // MARK: - Initialization
     
@@ -26,6 +32,15 @@ class UserSettingsViewModel: ObservableObject {
         Task {
             await loadData()
         }
+        
+        setupAuthListener()
+        setupProfileListener()
+    }
+    
+    deinit {
+        // 移除監聽器
+        authStateListener.map { Auth.auth().removeStateDidChangeListener($0) }
+        profileListener?.remove()
     }
     
     // MARK: - Data Loading
@@ -106,5 +121,54 @@ class UserSettingsViewModel: ObservableObject {
         NotificationCenter.default.post(name: .userDidLogout, object: nil)
         
         print("用戶設定資料已完全清理")
+    }
+    
+    // MARK: - Auth Listener
+    
+    private func setupAuthListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] (auth: Auth, user: User?) in
+            Task { @MainActor in
+                if user != nil {
+                    try? await self?.loadData()
+                    self?.setupProfileListener()  // 用戶登入時設置監聽器
+                } else {
+                    self?.userProfile = UserProfile.defaultProfile()
+                    self?.profileListener?.remove()  // 用戶登出時移除監聽器
+                }
+            }
+        }
+    }
+    
+    // MARK: - Profile Listener
+    
+    private func setupProfileListener() {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        
+        // 移除舊的監聽器
+        profileListener?.remove()
+        
+        // 設置新的監聽器
+        let firebaseService = self.dataService as? FirebaseService
+        profileListener = firebaseService?.db.collection("profiles")
+            .document(userId)
+            .addSnapshotListener { [weak self] (snapshot: DocumentSnapshot?, error: Error?) in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("Error listening for profile updates: \(error)")
+                    return
+                }
+                
+                guard let snapshot = snapshot, snapshot.exists else { return }
+                
+                // 解析新的設定數據
+                if let profile = UserProfile(documentId: snapshot.documentID, data: snapshot.data() ?? [:]) {
+                    Task { @MainActor in
+                        self.userProfile = profile
+                        // 發送設定更新通知
+                        NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
+                    }
+                }
+            }
     }
 } 

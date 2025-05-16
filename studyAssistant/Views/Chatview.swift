@@ -74,10 +74,21 @@ struct ChatDemoDynamicView: View {
                 viewModel.selectedRoomIndex = viewModel.chatRooms.count - 1
             }
         }
+        .onDisappear {
+            // 離開視圖時取消生成
+            if isGenerating {
+                cancelGeneration()
+            }
+        }
         .onChange(of: viewModel.selectedRoomIndex) { _ in
             // 切換聊天室時重設編輯狀態
             isEditingTitle = false
             editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
+            
+            // 切換聊天室時取消生成
+            if isGenerating {
+                cancelGeneration()
+            }
         }
         .sheet(isPresented: $showSettings) {
             ChatSettingView()
@@ -89,6 +100,10 @@ struct ChatDemoDynamicView: View {
     private var header: some View {
         HStack {
             Button {
+                // 打開側邊欄時取消生成
+                if isGenerating {
+                    cancelGeneration()
+                }
                 withAnimation { showSidebar.toggle() }
             } label: {
                 Image(systemName: "line.3.horizontal")
@@ -152,6 +167,10 @@ struct ChatDemoDynamicView: View {
             .padding(.trailing, 8)
 
             Button(action: {
+                // 創建新聊天室時取消生成
+                if isGenerating {
+                    cancelGeneration()
+                }
                 isEditingTitle = false  // 創建新聊天室時取消編輯狀態
                 viewModel.createNewChatRoom()
             }) {
@@ -687,21 +706,25 @@ struct ChatDemoDynamicView: View {
     // 顯示單個待刪除任務的視圖
     private func taskDeleteItemView(task: TodoTask) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("標題：\(task.title)")
+            Text("標題: " + task.title)
                 .font(.system(size: taskTitleSize, weight: .medium))
             if !task.note.isEmpty {
-                Text("備註：\(task.note)")
+                Text("備註: " + task.note)
                     .font(.system(size: taskContentSize))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("類別：\(task.category)")
+            Text("類別: " + task.category)
                 .font(.system(size: taskContentSize))
-            Text("開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("開始時間: " + formatDate(task.startDate, isAllDay: task.isAllDay))
                 .font(.system(size: taskContentSize))
-            Text("結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("結束時間: " + formatDate(task.endDate, isAllDay: task.isAllDay))
                 .font(.system(size: taskContentSize))
-            Text("全天：\(task.isAllDay ? "是" : "否")")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("全天: " + (task.isAllDay ? "是" : "否"))
                 .font(.system(size: taskContentSize))
-            Text("已完成：\(task.isCompleted ? "是" : "否")")
+            Text("已完成: " + (task.isCompleted ? "是" : "否"))
                 .font(.system(size: taskContentSize))
         }
         .padding()
@@ -715,12 +738,12 @@ struct ChatDemoDynamicView: View {
         .contextMenu {
             Button(action: {
                 let taskDetail = """
-                標題：\(task.title)
-                \(!task.note.isEmpty ? "備註：\(task.note)\n" : "")類別：\(task.category)
-                開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
-                結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
-                全天：\(task.isAllDay ? "是" : "否")
-                已完成：\(task.isCompleted ? "是" : "否")
+                標題: \(task.title)
+                \(!task.note.isEmpty ? "備註: \(task.note)\n" : "")類別: \(task.category)
+                開始時間: \(formatDate(task.startDate, isAllDay: task.isAllDay))
+                結束時間: \(formatDate(task.endDate, isAllDay: task.isAllDay))
+                全天: \(task.isAllDay ? "是" : "否")
+                已完成: \(task.isCompleted ? "是" : "否")
                 """
                 UIPasteboard.general.string = taskDetail
             }) {
@@ -747,23 +770,24 @@ struct ChatDemoDynamicView: View {
                         .foregroundColor(.gray)
                         .padding(.bottom, 2)
                         
-                    Text("標題：\(updateData.original.title)")
+                    Text("標題: " + updateData.original.title)
                         .font(.system(size: taskTitleSize, weight: .medium))
-                    Text("備註：\(updateData.original.note)")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("備註: " + updateData.original.note)
                         .font(.system(size: taskContentSize))
-                    Text("類別：\(updateData.original.category)")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("類別: " + updateData.original.category)
                         .font(.system(size: taskContentSize))
-                    Text(
-                        "開始時間：\(formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))"
-                    )
-                    .font(.system(size: taskContentSize))
-                    Text(
-                        "結束時間：\(formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))"
-                    )
-                    .font(.system(size: taskContentSize))
-                    Text("全天：\(updateData.original.isAllDay ? "是" : "否")")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("開始時間: " + formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))
                         .font(.system(size: taskContentSize))
-                    Text("已完成：\(updateData.original.isCompleted ? "是" : "否")")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("結束時間: " + formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))
+                        .font(.system(size: taskContentSize))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("全天: " + (updateData.original.isAllDay ? "是" : "否"))
+                        .font(.system(size: taskContentSize))
+                    Text("已完成: " + (updateData.original.isCompleted ? "是" : "否"))
                         .font(.system(size: taskContentSize))
                 }
                 .padding()
@@ -773,8 +797,8 @@ struct ChatDemoDynamicView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                 )
-                .frame(maxWidth: .infinity)  // 新增：可被擠壓
-                .layoutPriority(1)           // 新增
+                .frame(maxWidth: .infinity)
+                .layoutPriority(1)
                 
                 // 更新後的任務數據
                 VStack(alignment: .leading, spacing: 5) {
@@ -783,29 +807,30 @@ struct ChatDemoDynamicView: View {
                         .foregroundColor(.blue)
                         .padding(.bottom, 2)
                         
-                    Text("標題：\(updateData.updated.title)")
+                    Text("標題: " + updateData.updated.title)
                         .font(.system(size: taskTitleSize, weight: .medium))
                         .foregroundColor(updateData.original.title != updateData.updated.title ? .blue : .primary)
-                    Text("備註：\(updateData.updated.note)")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("備註: " + updateData.updated.note)
                         .font(.system(size: taskContentSize))
                         .foregroundColor(updateData.original.note != updateData.updated.note ? .blue : .primary)
-                    Text("類別：\(updateData.updated.category)")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("類別: " + updateData.updated.category)
                         .font(.system(size: taskContentSize))
                         .foregroundColor(updateData.original.category != updateData.updated.category ? .blue : .primary)
-                    Text(
-                        "開始時間：\(formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))"
-                    )
-                    .font(.system(size: taskContentSize))
-                    .foregroundColor(updateData.original.startDate != updateData.updated.startDate ? .blue : .primary)
-                    Text(
-                        "結束時間：\(formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))"
-                    )
-                    .font(.system(size: taskContentSize))
-                    .foregroundColor(updateData.original.endDate != updateData.updated.endDate ? .blue : .primary)
-                    Text("全天：\(updateData.updated.isAllDay ? "是" : "否")")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("開始時間: " + formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.startDate != updateData.updated.startDate ? .blue : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("結束時間: " + formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))
+                        .font(.system(size: taskContentSize))
+                        .foregroundColor(updateData.original.endDate != updateData.updated.endDate ? .blue : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("全天: " + (updateData.updated.isAllDay ? "是" : "否"))
                         .font(.system(size: taskContentSize))
                         .foregroundColor(updateData.original.isAllDay != updateData.updated.isAllDay ? .blue : .primary)
-                    Text("已完成：\(updateData.updated.isCompleted ? "是" : "否")")
+                    Text("已完成: " + (updateData.updated.isCompleted ? "是" : "否"))
                         .font(.system(size: taskContentSize))
                         .foregroundColor(updateData.original.isCompleted != updateData.updated.isCompleted ? .blue : .primary)
                 }
@@ -816,31 +841,31 @@ struct ChatDemoDynamicView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                 )
-                .frame(maxWidth: .infinity)  // 新增：可被擠壓
-                .layoutPriority(1)           // 新增
+                .frame(maxWidth: .infinity)
+                .layoutPriority(1)
             }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // 改：從 0.95 → 0.9，留更多緩衝
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.9)
             .textSelection(.enabled)
             .contextMenu {
                 Button(action: {
                     let taskDetail = """
                     【原始】
-                    標題：\(updateData.original.title)
-                    備註：\(updateData.original.note)
-                    類別：\(updateData.original.category)
-                    開始時間：\(formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))
-                    結束時間：\(formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))
-                    全天：\(updateData.original.isAllDay ? "是" : "否")
-                    已完成：\(updateData.original.isCompleted ? "是" : "否")
+                    標題: \(updateData.original.title)
+                    備註: \(updateData.original.note)
+                    類別: \(updateData.original.category)
+                    開始時間: \(formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))
+                    結束時間: \(formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))
+                    全天: \(updateData.original.isAllDay ? "是" : "否")
+                    已完成: \(updateData.original.isCompleted ? "是" : "否")
                     
                     【更新後】
-                    標題：\(updateData.updated.title)
-                    備註：\(updateData.updated.note)
-                    類別：\(updateData.updated.category)
-                    開始時間：\(formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))
-                    結束時間：\(formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))
-                    全天：\(updateData.updated.isAllDay ? "是" : "否")
-                    已完成：\(updateData.updated.isCompleted ? "是" : "否")
+                    標題: \(updateData.updated.title)
+                    備註: \(updateData.updated.note)
+                    類別: \(updateData.updated.category)
+                    開始時間: \(formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))
+                    結束時間: \(formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))
+                    全天: \(updateData.updated.isAllDay ? "是" : "否")
+                    已完成: \(updateData.updated.isCompleted ? "是" : "否")
                     """
                     UIPasteboard.general.string = taskDetail
                 }) {
@@ -853,23 +878,24 @@ struct ChatDemoDynamicView: View {
     // 顯示單個待新增任務的視圖
     private func taskAddItemView(task: PendingTask) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("標題：\(task.title)")
+            Text("標題: " + task.title)
                 .font(.system(size: taskTitleSize, weight: .medium))
-            Text("備註：\(task.note)")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("備註: " + task.note)
                 .font(.system(size: taskContentSize))
-            Text("類別：\(task.category)")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("類別: " + task.category)
                 .font(.system(size: taskContentSize))
-            Text(
-                "開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))"
-            )
-            .font(.system(size: taskContentSize))
-            Text(
-                "結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))"
-            )
-            .font(.system(size: taskContentSize))
-            Text("全天：\(task.isAllDay ? "是" : "否")")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("開始時間: " + formatDate(task.startDate, isAllDay: task.isAllDay))
                 .font(.system(size: taskContentSize))
-            Text("已完成：\(task.isCompleted ? "是" : "否")")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("結束時間: " + formatDate(task.endDate, isAllDay: task.isAllDay))
+                .font(.system(size: taskContentSize))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("全天: " + (task.isAllDay ? "是" : "否"))
+                .font(.system(size: taskContentSize))
+            Text("已完成: " + (task.isCompleted ? "是" : "否"))
                 .font(.system(size: taskContentSize))
         }
         .padding()
@@ -883,13 +909,13 @@ struct ChatDemoDynamicView: View {
         .contextMenu {
             Button(action: {
                 let taskDetail = """
-                標題：\(task.title)
-                備註：\(task.note)
-                類別：\(task.category)
-                開始時間：\(formatDate(task.startDate, isAllDay: task.isAllDay))
-                結束時間：\(formatDate(task.endDate, isAllDay: task.isAllDay))
-                全天：\(task.isAllDay ? "是" : "否")
-                已完成：\(task.isCompleted ? "是" : "否")
+                標題: \(task.title)
+                備註: \(task.note)
+                類別: \(task.category)
+                開始時間: \(formatDate(task.startDate, isAllDay: task.isAllDay))
+                結束時間: \(formatDate(task.endDate, isAllDay: task.isAllDay))
+                全天: \(task.isAllDay ? "是" : "否")
+                已完成: \(task.isCompleted ? "是" : "否")
                 """
                 UIPasteboard.general.string = taskDetail
             }) {

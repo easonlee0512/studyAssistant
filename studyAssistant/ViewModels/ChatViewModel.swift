@@ -2055,7 +2055,7 @@ final class ChatViewModel: ObservableObject {
                 }
 
                 // 保存更新的任務
-                await todoViewModel.updateTask(updatedTask)
+                try await todoViewModel.updateTask(updatedTask)
                 successCount += 1
             } catch {
                 print("Error updating task: \(error)")

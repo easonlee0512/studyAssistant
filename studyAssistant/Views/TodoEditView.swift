@@ -67,24 +67,14 @@ struct TodoEditView: View {
     }
     
     var body: some View {
-        ZStack {
-            // 半透明背景
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    dismissWithAnimation()
+        // 主要表單容器
+        mainContentView
+            .onAppear {
+                // 動畫展示
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    offset = 0
                 }
-                .opacity(isDismissing ? 0 : 1)
-            
-            // 主要表單容器
-            mainContentView
-        }
-        .onAppear {
-            // 動畫展示
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                offset = 0
             }
-        }
     }
     
     // 表單容器
@@ -433,7 +423,7 @@ struct TodoEditView: View {
                 updatedTask.endDate = endDate
                 
                 // 使用 updateTask 方法更新任務
-                await viewModel.updateTask(updatedTask)
+                try await viewModel.updateTask(updatedTask)
                 
                 // 任務保存成功後關閉視圖
                 dismissWithAnimation()

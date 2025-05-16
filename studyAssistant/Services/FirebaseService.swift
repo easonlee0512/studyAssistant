@@ -11,7 +11,7 @@ import SwiftUI
 
 class FirebaseService: DataServiceProtocol {
     static let shared = FirebaseService()
-    private let db = Firestore.firestore()
+    let db = Firestore.firestore()
     private var lastSync: Date?
     private var currentSyncStatus: SyncStatus = .notSynced
     
@@ -98,21 +98,37 @@ class FirebaseService: DataServiceProtocol {
                                    .collection("userTasks")
                                    .document(task.id)
                 
-                // 儲存任務資料
-                batch.setData(updatedTask.toFirestore, forDocument: taskRef)
-                
-                // 如果是重複性任務，建立子任務 (限制子任務數量以避免過長處理時間)
-                if task.repeatType != .none {
-                    let subTasksRef = taskRef.collection("instances")
-                    let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5)
+                // 如果只是更新完成狀態，則只更新相關欄位
+                if let existingData = try? await taskRef.getDocument().data(),
+                   let existingTask = TodoTask(documentId: task.id, data: existingData),
+                   existingTask.isCompleted != task.isCompleted &&
+                   existingTask.title == task.title &&
+                   existingTask.note == task.note &&
+                   existingTask.startDate == task.startDate &&
+                   existingTask.endDate == task.endDate {
                     
-                    for date in nextOccurrences {
-                        let instanceRef = subTasksRef.document()
-                        batch.setData([
-                            "date": Timestamp(date: date),
-                            "isCompleted": false,
-                            "parentTaskId": task.id
-                        ], forDocument: instanceRef)
+                    // 只更新完成狀態和更新時間
+                    batch.updateData([
+                        "isCompleted": task.isCompleted,
+                        "updatedAt": Timestamp(date: Date())
+                    ], forDocument: taskRef)
+                } else {
+                    // 完整更新
+                    batch.setData(updatedTask.toFirestore, forDocument: taskRef)
+                    
+                    // 如果是重複性任務，建立子任務
+                    if task.repeatType != .none {
+                        let subTasksRef = taskRef.collection("instances")
+                        let nextOccurrences = self.calculateNextOccurrences(for: task, limit: 5)
+                        
+                        for date in nextOccurrences {
+                            let instanceRef = subTasksRef.document()
+                            batch.setData([
+                                "date": Timestamp(date: date),
+                                "isCompleted": false,
+                                "parentTaskId": task.id
+                            ], forDocument: instanceRef)
+                        }
                     }
                 }
                 
@@ -274,9 +290,22 @@ class FirebaseService: DataServiceProtocol {
     }
     
     // MARK: - 數據遷移
+    // 添加一個標記來記錄是否已經遷移過
+    private static var hasMigrationAttempted = false
+    
     func migrateTasksToUserCollection() async throws {
+        // 如果已經嘗試過遷移，則直接返回
+        if FirebaseService.hasMigrationAttempted {
+            return
+        }
+        
+        FirebaseService.hasMigrationAttempted = true
         let userId = getCurrentUserId()
+        
+        // 只在開發模式下輸出日誌
+        #if DEBUG
         print("開始遷移任務數據到用戶集合，用戶ID：\(userId)")
+        #endif
         
         // 獲取所有屬於當前用戶ID的舊任務
         let oldTasksSnapshot = try await db.collection(Collection.tasks.rawValue)
@@ -284,11 +313,17 @@ class FirebaseService: DataServiceProtocol {
             .getDocuments()
         
         if oldTasksSnapshot.documents.isEmpty {
+            // 只在開發模式下輸出日誌
+            #if DEBUG
             print("沒有找到需要遷移的任務")
+            #endif
             return
         }
         
+        // 只在開發模式下輸出日誌
+        #if DEBUG
         print("找到 \(oldTasksSnapshot.documents.count) 個需要遷移的任務")
+        #endif
         
         // 創建批量操作
         let batch = db.batch()
@@ -331,7 +366,11 @@ class FirebaseService: DataServiceProtocol {
         
         // 提交批量操作
         try await batch.commit()
+        
+        // 只在開發模式下輸出日誌
+        #if DEBUG
         print("任務遷移完成")
+        #endif
     }
 }
  

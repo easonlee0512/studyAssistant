@@ -42,6 +42,25 @@ class TodoViewModel: ObservableObject {
     // 重複選項
     let repeatOptions = ["不重複", "每天", "每週", "每月"]
     
+    // 添加一個標記來記錄是否已經嘗試過遷移
+    private var hasMigrationAttempted = false
+    
+    // 添加一個變數來記錄上次載入時間
+    private var lastTasksLoadTime: Date? = nil
+    // 添加一個變數來設定快取時間（秒）
+    private let cacheTimeInterval: TimeInterval = 60 // 1分鐘快取
+    
+    // 添加一個變數來保存監聽器
+    private var tasksListener: ListenerRegistration?
+    
+    // 添加一個佇列來處理待更新的任務
+    private var pendingUpdates: [String: TodoTask] = [:]
+    private var updateTimer: Timer?
+    
+    // 添加一個佇列來處理待更新的任務
+    private var completionUpdateQueue: [String: (task: TodoTask, retryCount: Int)] = [:]
+    private var isProcessingQueue = false
+    
     init() {
         Task {
             do {
@@ -56,6 +75,9 @@ class TodoViewModel: ObservableObject {
         
         // 監聽 Auth 狀態
         setupAuthListener()
+        
+        // 設置 Firestore 實時監聽
+        setupFirestoreListener()
     }
     
     deinit {
@@ -66,6 +88,9 @@ class TodoViewModel: ObservableObject {
         if let authStateListener = authStateListener {
             Auth.auth().removeStateDidChangeListener(authStateListener)
         }
+        
+        // 移除 Firestore 監聽
+        tasksListener?.remove()
     }
     
     // 設置通知監聽
@@ -92,15 +117,64 @@ class TodoViewModel: ObservableObject {
                 if user != nil {
                     // 使用者登入，重新載入資料
                     try? await self?.loadTasks()
+                    // 設置 Firestore 監聽
+                    self?.setupFirestoreListener()
                 } else {
                     // 使用者登出，清空資料
                     self?.tasks = []
+                    // 移除 Firestore 監聽
+                    self?.tasksListener?.remove()
                 }
                 
                 // 發送使用者驗證狀態改變通知
                 NotificationCenter.default.post(name: .userAuthDidChange, object: nil)
             }
         }
+    }
+    
+    // 設置 Firestore 實時監聽
+    private func setupFirestoreListener() {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        
+        // 移除舊的監聽器
+        tasksListener?.remove()
+        
+        // 設置新的監聽器
+        tasksListener = firebaseService.db.collection("tasks")
+            .document(userId)
+            .collection("userTasks")
+            .addSnapshotListener { [weak self] (snapshot: QuerySnapshot?, error: Error?) in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("Error listening for task updates: \(error)")
+                    return
+                }
+                
+                guard let snapshot = snapshot else { return }
+                
+                // 檢查是否有變化
+                let changes = snapshot.documentChanges
+                if !changes.isEmpty {
+                    print("檢測到任務更新，共 \(changes.count) 個變化")
+                    
+                    // 直接更新本地任務列表，而不是重新載入
+                    var updatedTasks: [TodoTask] = []
+                    
+                    for document in snapshot.documents {
+                        if let task = TodoTask(documentId: document.documentID, data: document.data()) {
+                            updatedTasks.append(task)
+                        }
+                    }
+                    
+                    // 在主線程更新 UI
+                    Task { @MainActor in
+                        self.tasks = updatedTasks
+                        // 發送資料變更通知
+                        NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
+                    }
+                }
+            }
     }
     
     // 處理資料變更通知
@@ -225,18 +299,39 @@ class TodoViewModel: ObservableObject {
             return
         }
         
+        // 檢查是否需要重新載入
+        let now = Date()
+        if let lastLoad = lastTasksLoadTime, 
+           now.timeIntervalSince(lastLoad) < cacheTimeInterval,
+           !tasks.isEmpty {
+            // 如果在快取時間內且已有資料，直接返回
+            print("使用快取的任務數據，距離上次載入: \(now.timeIntervalSince(lastLoad))秒")
+            return
+        }
+        
         isLoading = true
         defer { isLoading = false }
         
-        // 首先嘗試進行數據遷移
-        do {
-            try await firebaseService.migrateTasksToUserCollection()
-        } catch {
-            print("任務遷移錯誤（可能已經遷移完成）: \(error.localizedDescription)")
+        // 只在第一次載入時嘗試進行數據遷移
+        if !hasMigrationAttempted {
+            do {
+                try await firebaseService.migrateTasksToUserCollection()
+                hasMigrationAttempted = true
+            } catch {
+                print("任務遷移錯誤（可能已經遷移完成）: \(error.localizedDescription)")
+                hasMigrationAttempted = true
+            }
         }
         
         // 載入任務
         tasks = try await firebaseService.fetchTodoTasks()
+        lastTasksLoadTime = now
+        print("從Firebase重新載入任務數據")
+        
+        // 設置監聽器（如果還沒有設置）
+        if tasksListener == nil {
+            setupFirestoreListener()
+        }
     }
     
     // 刪除任務
@@ -310,12 +405,79 @@ class TodoViewModel: ObservableObject {
         isLoading = false
     }
     
-    func updateTask(_ task: TodoTask) async {
+    func toggleTaskCompletion(_ task: TodoTask) async {
+        // 1. 立即更新本地狀態
+        var updatedTask = task
+        updatedTask.isCompleted.toggle()
+        
+        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+            tasks[index] = updatedTask
+        }
+        
+        // 2. 將更新加入佇列
+        completionUpdateQueue[task.id] = (updatedTask, 0)
+        
+        // 3. 如果沒有正在處理的更新，開始處理佇列
+        if !isProcessingQueue {
+            Task {
+                await processCompletionQueue()
+            }
+        }
+    }
+    
+    private func processCompletionQueue() async {
+        guard !isProcessingQueue else { return }
+        isProcessingQueue = true
+        
+        while !completionUpdateQueue.isEmpty {
+            // 取得並移除第一個待更新的任務
+            guard let (taskId, (task, retryCount)) = completionUpdateQueue.first else { break }
+            completionUpdateQueue.removeValue(forKey: taskId)
+            
+            do {
+                // 嘗試保存到 Firebase
+                try await firebaseService.saveTodoTask(task)
+                
+                // 發送局部更新通知
+                NotificationCenter.default.post(
+                    name: .todoTaskDidUpdate,
+                    object: nil,
+                    userInfo: ["taskId": taskId, "isCompleted": task.isCompleted]
+                )
+            } catch {
+                print("Error updating task completion: \(error)")
+                
+                // 如果失敗且重試次數未超過限制，重新加入佇列
+                if retryCount < 3 {
+                    completionUpdateQueue[taskId] = (task, retryCount + 1)
+                } else {
+                    // 超過重試次數，恢復本地狀態
+                    if let index = tasks.firstIndex(where: { $0.id == taskId }) {
+                        var originalTask = task
+                        originalTask.isCompleted.toggle()
+                        tasks[index] = originalTask
+                    }
+                    
+                    // 通知用戶更新失敗
+                    errorMessage = "更新任務狀態失敗，請稍後再試"
+                }
+            }
+            
+            // 短暫延遲，避免過於頻繁的請求
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
+        }
+        
+        isProcessingQueue = false
+    }
+    
+    func updateTask(_ task: TodoTask) async throws {
         // 確保已經登入
         guard let currentUserId = Auth.auth().currentUser?.uid else {
-            print("Error: User not logged in")
-            return
+            throw ValidationError.notLoggedIn
         }
+        
+        // 保存原始任務狀態，用於錯誤恢復
+        let originalTask = task
         
         do {
             // 確保任務有使用者 ID
@@ -324,24 +486,24 @@ class TodoViewModel: ObservableObject {
                 updatedTask.userId = currentUserId
             }
             
+            // 在背景執行保存操作
             try await firebaseService.saveTodoTask(updatedTask)
-            do {
-                try await loadTasks()
-                
-                // 發送資料變更通知
-                postDataChangeNotification()
-            } catch {
-                print("Error loading tasks: \(error)")
+            
+            // 更新本地任務列表
+            if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+                tasks[index] = updatedTask
             }
+            
+            // 發送資料變更通知
+            NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
         } catch {
             print("Error updating task: \(error)")
+            // 如果更新失敗，恢復原始狀態
+            if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+                tasks[index] = originalTask
+            }
+            throw error
         }
-    }
-    
-    func toggleTaskCompletion(_ task: TodoTask) async {
-        var updatedTask = task
-        updatedTask.isCompleted.toggle()
-        await updateTask(updatedTask)
     }
     
     // MARK: - 任務過濾
@@ -388,5 +550,10 @@ enum ValidationError: LocalizedError {
             return "您沒有權限刪除此任務"
         }
     }
+}
+
+// 添加新的通知名稱
+extension Notification.Name {
+    static let todoTaskDidUpdate = Notification.Name("todoTaskDidUpdate")
 }
 
