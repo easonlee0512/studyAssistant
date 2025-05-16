@@ -72,7 +72,6 @@ struct TabBarNew: View {
                 TabButtonNew(icon: "home_icon", isSelected: selectedTab == 0) {
                     selectedTab = 0
                 }
-                .opacity(0.7)  // 只讓 home_icon 變淡
                 
                 Spacer()
                 

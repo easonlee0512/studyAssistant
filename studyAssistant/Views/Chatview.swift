@@ -163,8 +163,8 @@ struct ChatDemoDynamicView: View {
             .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
         }
         .padding(.horizontal)
-        .padding(.top, 7)
-        .padding(.bottom, 7)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     // MARK: Message List
@@ -1039,7 +1039,7 @@ struct ChatDemoDynamicView: View {
         GeometryReader { _ in
             HStack(spacing: 0) {
                 VStack(alignment: .leading) {
-                    Spacer().frame(height: 40)
+                    Spacer().frame(height: 3)
                     Text("聊天室列表")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(textColor)
