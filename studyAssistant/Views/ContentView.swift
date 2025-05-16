@@ -69,31 +69,32 @@ struct TabBarNew: View {
             HStack {
                 Spacer()
                 
-                TabButtonNew(icon: "checklist", isSelected: selectedTab == 0) {
+                TabButtonNew(icon: "home_icon", isSelected: selectedTab == 0) {
                     selectedTab = 0
                 }
+                .opacity(0.7)  // 只讓 home_icon 變淡
                 
                 Spacer()
                 
-                TabButtonNew(icon: "calendar", isSelected: selectedTab == 1) {
+                TabButtonNew(icon: "calendar_icon", isSelected: selectedTab == 1) {
                     selectedTab = 1
                 }
                 
                 Spacer()
                 
-                TabButtonNew(icon: "message.fill", isSelected: selectedTab == 2) {
+                TabButtonNew(icon: "chat_icon", isSelected: selectedTab == 2) {
                     selectedTab = 2
                 }
                 
                 Spacer()
                 
-                TabButtonNew(icon: "timer", isSelected: selectedTab == 3) {
+                TabButtonNew(icon: "timer_icon", isSelected: selectedTab == 3) {
                     selectedTab = 3
                 }
                 
                 Spacer()
                 
-                TabButtonNew(icon: "gearshape", isSelected: selectedTab == 4) {
+                TabButtonNew(icon: "settings_icon", isSelected: selectedTab == 4) {
                     selectedTab = 4
                 }
                 
@@ -120,7 +121,7 @@ struct TabButtonNew: View {
     
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
+            Image(icon)  // 改為使用 Assets 中的圖片
                 .resizable()
                 .scaledToFit()
                 .frame(width: 30, height: 30) // 增加圖標尺寸

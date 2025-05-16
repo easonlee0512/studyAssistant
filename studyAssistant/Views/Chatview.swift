@@ -8,9 +8,9 @@ struct ChatDemoDynamicView: View {
     private let midBubbleColor = Color.hex(hex: "FEECD8")  // 淺橙底色（輸入框）
     private let lightBubbleColor = Color.hex(hex: "FEECD8")  // 淺橙底色（對話框）
     private let textColor = Color.black.opacity(0.8)  // 深色文字
-    private let sidebarColor = Color.hex(hex: "F3D4B7").opacity(0.7)  // 側邊欄顏色，與"開始"按鈕相似
+    private let sidebarColor = Color.hex(hex: "F3D4B8")  // 側邊欄顏色，改為與對話框相同的顏色
     private let titleColor = Color.hex(hex: "E27945")  // 聊天室名稱顏色
-    
+
     // 任務卡片字體大小
     private let taskTitleSize: CGFloat = 16  // 任務標題字體大小
     private let taskContentSize: CGFloat = 14  // 任務內容字體大小
@@ -46,11 +46,26 @@ struct ChatDemoDynamicView: View {
                 }
             VStack(spacing: 0) {
                 header
+                Rectangle()  // 添加分隔線
+                    .frame(height: 0.2)  // 線條粗細
+                    .foregroundColor(.black.opacity(0.2))  // 線條顏色
                 messageList
                 inputBar
             }
-            .offset(x: showSidebar ? 250 : 0)
+            .offset(x: showSidebar ? 250 : 0) // 側邊欄的偏移量
+            
             if showSidebar { sidebarOverlay }
+            
+            if showSidebar {  // 側邊欄的遮罩
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation {
+                            showSidebar = false
+                        }
+                    }
+            }
+            
         }
         .onAppear {
             viewModel.staticViewModel = staticViewModel
@@ -99,8 +114,8 @@ struct ChatDemoDynamicView: View {
                 .padding(.horizontal, 10)
                 .background(Color.hex(hex: "F3D4B8").opacity(0.7))
                 .cornerRadius(8)
-                .padding(.leading, 23)  // 增加左側間距，向右移動更多
-                .padding(.trailing, -23)  // 相應調整右側間距
+                .padding(.leading, 22)  // 從 23 減少到 22
+                .padding(.trailing, -22)  // 從 -23 增加到 -22
                 .onAppear {
                     // 顯示輸入框時自動獲取焦點
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -108,13 +123,15 @@ struct ChatDemoDynamicView: View {
                     }
                 }
             } else {
-                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(titleColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.leading, 23)  // 增加左側間距，向右移動更多
-                    .padding(.trailing, -23)  // 相應調整右側間距
+            Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ? 
+                 viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." : 
+                 viewModel.chatRooms[viewModel.selectedRoomIndex].name)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(titleColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                    .padding(.leading, 22)  // 從 23 減少到 22
+                    .padding(.trailing, -22)  // 從 -23 增加到 -22
                     .onTapGesture {
                         editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
                         isEditingTitle = true
@@ -146,8 +163,8 @@ struct ChatDemoDynamicView: View {
             .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
         }
         .padding(.horizontal)
-        .padding(.top, 40)
-        .padding(.bottom, 20)
+        .padding(.top, 7)
+        .padding(.bottom, 7)
     }
 
     // MARK: Message List
@@ -156,12 +173,29 @@ struct ChatDemoDynamicView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ForEach(viewModel.chatRooms[viewModel.selectedRoomIndex].messages) { msg in
-                        if msg.isMe { userBubble(msg.text) } else { aiBubble(msg.text) }
+                        if msg.isMe {
+                            userBubble(msg.text)
+                        } else {
+                            aiBubble(msg.text)
+                                .id("msg_\(msg.id)")  // 為每個消息添加唯一ID
+                        }
                     }
                 }
                 .padding(.top, 10)
                 .padding(.bottom, 20)
                 .id("messageBottom")  // 添加一個 ID 用於滾動
+            }
+            .onChange(of: expandedTaskMessages) { newValue in
+                // 找到最後一個展開/收起的消息
+                if let lastChangedMessageId = viewModel.chatRooms[viewModel.selectedRoomIndex].messages
+                    .last(where: { msg in
+                        !msg.isMe && (msg.pendingTasks != nil || msg.pendingDeleteTasks != nil || msg.pendingUpdateTask != nil)
+                    })?.id {
+                    // 使用消息ID進行滾動
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo("msg_\(lastChangedMessageId)", anchor: .center)
+                    }
+                }
             }
             .simultaneousGesture(
                 DragGesture().onChanged { _ in
@@ -275,10 +309,10 @@ struct ChatDemoDynamicView: View {
                                 if let functionName = viewModel.chatRooms[
                                     viewModel.selectedRoomIndex
                                 ].messages[messageIndex].currentExecutingFunction
-                                {
-                                    Text("正在執行：\(functionName)")
-                                        .foregroundColor(textColor.opacity(0.7))
-                                        .font(.system(size: 16))
+                            {
+                                Text("正在執行：\(functionName)")
+                                    .foregroundColor(textColor.opacity(0.7))
+                                    .font(.system(size: 16))
                                         .id(UUID()) // 確保文字也會更新
                                 }
                             }
@@ -307,12 +341,12 @@ struct ChatDemoDynamicView: View {
                                 if isExpanded && tasks.count > 3 {
                                     ScrollView {
                                         LazyVStack(alignment: .leading, spacing: 10) {
-                                            ForEach(displayTasks) { task in
+                                ForEach(displayTasks) { task in
                                                 taskAddItemView(task: task)
                                             }
                                         }
                                     }
-                                    .frame(maxHeight: 2000)  // 增加最大高度至4000像素
+                                    .frame(maxHeight: min(CGFloat(tasks.count) * 180, 600))  // 每個任務預估高度180，最大600
                                 } else {
                                     ForEach(displayTasks) { task in
                                         taskAddItemView(task: task)
@@ -331,9 +365,7 @@ struct ChatDemoDynamicView: View {
                                     }) {
                                         HStack {
                                             Text(isExpanded ? "收起" : "展開全部 (\(tasks.count) 個任務)")
-                                            Image(
-                                                systemName: isExpanded
-                                                    ? "chevron.up" : "chevron.down")
+                                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                         }
                                         .foregroundColor(.blue)
                                         .opacity(0.8)
@@ -420,12 +452,12 @@ struct ChatDemoDynamicView: View {
                                 if isExpanded && tasksToDelete.count > 3 {
                                     ScrollView {
                                         LazyVStack(alignment: .leading, spacing: 10) {
-                                            ForEach(displayTasks) { task in
+                                ForEach(displayTasks) { task in
                                                 taskDeleteItemView(task: task)
                                             }
                                         }
                                     }
-                                    .frame(maxHeight: 2000)  // 增加最大高度至2000像素
+                                    .frame(maxHeight: min(CGFloat(tasksToDelete.count) * 180, 600))  // 每個任務預估高度180，最大600
                                 } else {
                                     ForEach(displayTasks) { task in
                                         taskDeleteItemView(task: task)
@@ -444,9 +476,7 @@ struct ChatDemoDynamicView: View {
                                     }) {
                                         HStack {
                                             Text(isExpanded ? "收起" : "展開全部 (\(tasksToDelete.count) 個任務)")
-                                            Image(
-                                                systemName: isExpanded
-                                                    ? "chevron.up" : "chevron.down")
+                                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                         }
                                         .foregroundColor(.blue)
                                         .opacity(0.8)
@@ -540,7 +570,7 @@ struct ChatDemoDynamicView: View {
                                                 }
                                             }
                                         }
-                                        .frame(maxHeight: 2000)  // 限制最大高度
+                                        .frame(maxHeight: min(CGFloat(updateDataList.count) * 250, 800))  // 修改更新任務的高度限制，因為有兩個卡片
                                     } else {
                                         ForEach(0..<displayTasks.count, id: \.self) { index in
                                             taskUpdateItemView(updateData: displayTasks[index], 
@@ -561,9 +591,7 @@ struct ChatDemoDynamicView: View {
                                         }) {
                                             HStack {
                                                 Text(isExpanded ? "收起" : "展開全部 (\(updateDataList.count) 個任務)")
-                                                Image(
-                                                    systemName: isExpanded
-                                                        ? "chevron.up" : "chevron.down")
+                                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                             }
                                             .foregroundColor(.blue)
                                             .opacity(0.8)
@@ -745,6 +773,8 @@ struct ChatDemoDynamicView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                 )
+                .frame(maxWidth: .infinity)  // 新增：可被擠壓
+                .layoutPriority(1)           // 新增
                 
                 // 更新後的任務數據
                 VStack(alignment: .leading, spacing: 5) {
@@ -786,7 +816,10 @@ struct ChatDemoDynamicView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                 )
+                .frame(maxWidth: .infinity)  // 新增：可被擠壓
+                .layoutPriority(1)           // 新增
             }
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // 改：從 0.95 → 0.9，留更多緩衝
             .textSelection(.enabled)
             .contextMenu {
                 Button(action: {
@@ -973,27 +1006,31 @@ struct ChatDemoDynamicView: View {
                     // 取消按鈕
                     Button(action: cancelGeneration) {
                         Image(systemName: "stop.circle")
-                            .font(.system(size: 22))
-                            .foregroundColor(.gray.opacity(0.8))
-                            .padding()
+                            .font(.system(size: 28))
+                            .foregroundColor(.black.opacity(0.5))
+                            .frame(width: 44, height: 44)  // 固定框架大小
                     }
                 } else {
                     // 發送按鈕
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrowshape.up")
-                            .font(.system(size: 22))
-                            .foregroundColor(textColor)
-                            .padding()
-                    }
-                    .disabled(inputText.isEmpty)
+                Button(action: sendMessage) {
+                    Image(systemName: "arrowshape.up")
+                            .font(.system(size: 28))  // 統一大小
+                        .foregroundColor(textColor)
+                            .frame(width: 44, height: 44)  // 固定框架大小
+                }
+                .disabled(inputText.isEmpty)
                 }
             }
             .padding(.horizontal)
             .padding(.bottom, 76)
             .padding(.top, 8)
-            .background( // 🔧 把背景與陰影包在一起，陰影只會畫在這塊背景矩形
+            .background( // 🔧 把背景與邊框包在一起
+                ZStack(alignment: .top) {
                 backgroundColor
-                    .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: -2) // ⬅︎ 只有這裡加陰影
+                    Rectangle()
+                        .frame(height: 0.2) // 線條粗細
+                        .foregroundColor(.black.opacity(0.2))
+                }
             )
     }
 
@@ -1093,7 +1130,7 @@ struct ChatDemoDynamicView: View {
         }
 
         isGenerating = true  // 設置生成狀態為 true
-        
+
         Task {
             _ = await viewModel.sendMessageToGPT(
                 messages: viewModel.chatRooms[viewModel.selectedRoomIndex].messages

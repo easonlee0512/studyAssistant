@@ -12,6 +12,7 @@ extension Notification.Name {
     static let todoDataDidChange = Notification.Name("todoDataDidChange")
     static let userAuthDidChange = Notification.Name("userAuthDidChange")
     static let userProfileDidChange = Notification.Name("userProfileDidChange")
+    static let taskDeleted = Notification.Name("taskDeleted")
     
     // 可以在這裡添加其他通知名稱
 } 

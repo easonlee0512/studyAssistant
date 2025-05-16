@@ -16,11 +16,14 @@ class StaticViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
+    @Published var tokenUsage = TokenUsageStats()
+    
     private let db = Firestore.firestore()
     
     // 初始化並設置監聽器
     init() {
         setupAuthListener()
+        setupNotificationObserver()
     }
     
     // 設置驗證狀態監聽
@@ -30,10 +33,53 @@ class StaticViewModel: ObservableObject {
                 // 使用者登入，載入數據
                 Task {
                     await self?.fetchStatistics()
+                    await self?.fetchTokenUsageStats()
                 }
             } else {
                 // 使用者登出，清空數據
                 self?.statistics = []
+                self?.tokenUsage = TokenUsageStats()
+            }
+        }
+    }
+    
+    // 設置通知監聽
+    private func setupNotificationObserver() {
+        // 監聽任務刪除通知
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTaskDeleted),
+            name: .taskDeleted,
+            object: nil
+        )
+    }
+    
+    // 處理任務刪除通知
+    @objc private func handleTaskDeleted(_ notification: Notification) {
+        guard let category = notification.userInfo?["category"] as? String else { return }
+        
+        // 忽略未分類或空類別
+        if category.isEmpty || category == "未分類" { return }
+        
+        Task {
+            // 檢查該類別是否還有其它任務
+            let todoViewModel = TodoViewModel()
+            let remainingTasks = todoViewModel.tasksForCategory(category)
+            
+            if remainingTasks.isEmpty {
+                // 如果沒有剩餘任務，刪除該統計類別
+                if let statistic = statistics.first(where: { $0.category == category }),
+                   let statisticId = statistic.id {
+                    await deleteStatistic(statisticId)
+                }
+            } else {
+                // 更新該類別的任務計數
+                let completedTasksCount = remainingTasks.filter { $0.isCompleted }.count
+                await updateCategoryTaskStats(
+                    category: category,
+                    completedCount: completedTasksCount,
+                    totalCount: remainingTasks.count
+                )
             }
         }
     }
@@ -93,6 +139,9 @@ class StaticViewModel: ObservableObject {
             
             self.statistics = newStatistics
             self.isLoading = false
+            
+            // 新增：獲取Token使用量
+            await fetchTokenUsageStats()
         } catch {
             self.errorMessage = "載入統計數據失敗: \(error.localizedDescription)"
             self.isLoading = false
@@ -247,6 +296,118 @@ class StaticViewModel: ObservableObject {
     // 計算類別數量
     func categoryCount() -> Int {
         return Set(statistics.map { $0.category }).count
+    }
+    
+    // 刪除統計類別
+    func deleteStatistic(_ statisticId: String) async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // 從 Firestore 刪除統計數據
+            try await db.collection("userStatistics")
+                .document(userId)
+                .collection("statistics")
+                .document(statisticId)
+                .delete()
+            
+            // 從本地陣列中移除該統計
+            if let index = statistics.firstIndex(where: { $0.id == statisticId }) {
+                statistics.remove(at: index)
+            }
+            
+            isLoading = false
+            print("成功刪除統計類別 ID: \(statisticId)")
+        } catch {
+            errorMessage = "刪除統計類別失敗: \(error.localizedDescription)"
+            isLoading = false
+            print("刪除統計類別錯誤: \(error)")
+        }
+    }
+    
+    // 獲取Token使用量
+    func fetchTokenUsageStats() async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            return
+        }
+        
+        isLoading = true
+        
+        do {
+            let docRef = db.collection("userStatistics").document(userId)
+            let document = try await docRef.getDocument()
+            
+            if document.exists, let data = document.data() {
+                var modelUsage: [String: ModelTokenUsage] = [:]
+                
+                // 獲取模型使用量
+                if let usageData = data["modelUsage"] as? [String: Any] {
+                    for (model, usage) in usageData {
+                        if let usageDict = usage as? [String: Any] {
+                            let totalTokens = usageDict["total"] as? Int ?? 0
+                            let promptTokens = usageDict["prompt"] as? Int
+                            let completionTokens = usageDict["completion"] as? Int
+                            
+                            modelUsage[model] = ModelTokenUsage(
+                                total: totalTokens,
+                                prompt: promptTokens,
+                                completion: completionTokens
+                            )
+                        } else if let totalTokens = usage as? Int {
+                            // 處理舊數據格式，僅有總數沒有詳細分類
+                            modelUsage[model] = ModelTokenUsage(total: totalTokens)
+                        }
+                    }
+                }
+                
+                // 構建完整的使用量統計
+                let newTokenUsage = TokenUsageStats(
+                    totalTokens: data["totalTokens"] as? Int ?? 0,
+                    modelUsage: modelUsage,
+                    lastUpdated: (data["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
+                )
+                
+                await MainActor.run {
+                    self.tokenUsage = newTokenUsage
+                }
+            }
+            
+            isLoading = false
+        } catch {
+            errorMessage = "載入Token使用量失敗: \(error.localizedDescription)"
+            isLoading = false
+            print("Error fetching token usage: \(error)")
+        }
+    }
+}
+
+// 模型token使用量結構
+struct ModelTokenUsage {
+    var total: Int
+    var prompt: Int?
+    var completion: Int?
+    
+    init(total: Int, prompt: Int? = nil, completion: Int? = nil) {
+        self.total = total
+        self.prompt = prompt
+        self.completion = completion
+    }
+}
+
+// 定義Token使用量結構
+struct TokenUsageStats {
+    var totalTokens: Int
+    var modelUsage: [String: ModelTokenUsage]
+    var lastUpdated: Date
+    
+    init(totalTokens: Int = 0, modelUsage: [String: ModelTokenUsage] = [:], lastUpdated: Date = Date()) {
+        self.totalTokens = totalTokens
+        self.modelUsage = modelUsage
+        self.lastUpdated = lastUpdated
     }
 }
 

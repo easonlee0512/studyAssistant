@@ -35,6 +35,10 @@ struct StatisticsView: View {
     @Environment(\.dismiss) var dismiss
     var todos: [Date: [(task: String, isCompleted: Bool)]]
     
+    init(todos: [Date: [(task: String, isCompleted: Bool)]] = [:]) {
+        self.todos = todos
+    }
+    
     @State private var timeRange: TimeRange = .day
     @State private var timerRecords: [TimerRecord] = []
     @State private var todayTasks: [(task: String, isCompleted: Bool)] = []
@@ -44,6 +48,13 @@ struct StatisticsView: View {
     @State private var latestEndTime: Date?
     @State private var hourlyDistribution: [Int: Int] = [:] // 小時:總秒數
     @State private var isSyncing: Bool = false
+    
+    // 新增：用於格式化最後更新時間的計算屬性
+    private var lastUpdateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd HH:mm"
+        return formatter
+    }()
     
     // 時間範圍選擇
     enum TimeRange: String, CaseIterable, Identifiable {
@@ -137,6 +148,8 @@ struct StatisticsView: View {
                 updateDateDisplay()
             } else {
                 try? await staticViewModel.fetchStatistics()
+                // 明確加載token使用量統計
+                await staticViewModel.fetchTokenUsageStats()
             }
         }
     }
@@ -570,6 +583,123 @@ struct StatisticsView: View {
                                 Text("\(hours)小時\(mins)分鐘")
                                     .font(.title3)
                                     .bold()
+                            }
+                            .padding()
+                            .background(Color.hex(hex: "F5F5F5"))
+                            .cornerRadius(12)
+                            .padding(.horizontal, 5)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 15)
+            .padding(.horizontal, 15)
+            .background(Color.white)
+            .cornerRadius(12)
+            .padding(.horizontal, 5)
+            
+            // 新增：Token使用量區塊
+            VStack(alignment: .leading, spacing: 15) {
+                Text("API Token 使用量")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundColor(.black)
+                
+                // 總使用量
+                HStack {
+                    VStack(spacing: 15) {
+                        Text("總計使用量：")
+                            .font(.title3)
+                            .foregroundColor(.black)
+                        
+                        Text("\(staticViewModel.tokenUsage.totalTokens) tokens")
+                            .font(.system(size: 25, weight: .bold))
+                            .foregroundColor(Color.hex(hex: "333333"))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical)
+                    .background(Color.hex(hex: "F5F5F5"))
+                    .cornerRadius(12)
+                    
+                    VStack(spacing: 15) {
+                        Text("最後更新：")
+                            .font(.title3)
+                            .foregroundColor(.black)
+                        
+                        Text(lastUpdateTimeFormatter.string(from: staticViewModel.tokenUsage.lastUpdated))
+                            .font(.system(size: 25, weight: .bold))
+                            .foregroundColor(Color.hex(hex: "333333"))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical)
+                    .background(Color.hex(hex: "F5F5F5"))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal, 5)
+                
+                // 各模型使用量
+                VStack(spacing: 15) {
+                    if staticViewModel.tokenUsage.modelUsage.isEmpty {
+                        Text("暫無模型使用數據")
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, minHeight: 100)
+                            .background(Color.hex(hex: "F5F5F5"))
+                            .cornerRadius(12)
+                            .padding(.horizontal, 5)
+                    } else {
+                        ForEach(Array(staticViewModel.tokenUsage.modelUsage.keys.sorted()), id: \.self) { model in
+                            let modelUsage = staticViewModel.tokenUsage.modelUsage[model]!
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(model)
+                                            .font(.headline)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(modelUsage.total) tokens")
+                                        .font(.title3)
+                                        .bold()
+                                }
+                                
+                                // 顯示詳細的提示詞和回應tokens
+                                HStack(spacing: 10) {
+                                    if let promptTokens = modelUsage.prompt {
+                                        HStack {
+                                            Text("提示詞:")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            
+                                            Text("\(promptTokens) tokens")
+                                                .font(.caption)
+                                                .bold()
+                                        }
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(Color.hex(hex: "E5F1FF"))
+                                        .cornerRadius(8)
+                                    }
+                                    
+                                    if let completionTokens = modelUsage.completion {
+                                        HStack {
+                                            Text("回應:")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            
+                                            Text("\(completionTokens) tokens")
+                                                .font(.caption)
+                                                .bold()
+                                        }
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(Color.hex(hex: "F5E5FF"))
+                                        .cornerRadius(8)
+                                    }
+                                    
+                                    Spacer()
+                                }
                             }
                             .padding()
                             .background(Color.hex(hex: "F5F5F5"))

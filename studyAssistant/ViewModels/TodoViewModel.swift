@@ -10,7 +10,6 @@ import FirebaseAuth
 import FirebaseFirestore
 import Foundation // 確保可以訪問 NotificationConstants
 
-
 @MainActor
 class TodoViewModel: ObservableObject {
     @Published private(set) var tasks: [TodoTask] = []
@@ -264,6 +263,13 @@ class TodoViewModel: ObservableObject {
             
             // 發送資料變更通知
             postDataChangeNotification()
+            
+            // 發送任務刪除通知（包含類別資訊）
+            NotificationCenter.default.post(
+                name: .taskDeleted,
+                object: nil,
+                userInfo: ["category": task.category, "taskId": task.id]
+            )
         } catch {
             throw error
         }
