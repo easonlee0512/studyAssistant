@@ -713,7 +713,7 @@ final class ChatViewModel: ObservableObject {
                 for task in tasks {
                     taskString += "-------\n"
                     taskString += "id:\(task.id) "
-                    taskString += "\(task.title) "
+                    taskString += "title:\(task.title) "
                     taskString += "isCompleted:\(task.isCompleted) "
                     if !task.note.isEmpty {
                         taskString += "note:\(task.note) "
@@ -1029,6 +1029,8 @@ final class ChatViewModel: ObservableObject {
     @Published var totalTokensUsed: Int = 0
     private var lastRequestTokens: (prompt: Int, completion: Int, total: Int) = (0, 0, 0)
 
+    @Published var keyboardHeight: CGFloat = 0  // 追蹤鍵盤高度
+
     // ----------------------------- 串流 GPT -----------------------------
     /// 對 GPT 串流，邊收到邊透過 onToken 回呼；結束後回傳完整內容
     func sendMessageToGPT(
@@ -1071,7 +1073,7 @@ final class ChatViewModel: ObservableObject {
                 \(formatStudySettings())
 
                 可用工具：
-                    getTask()      ：取得使用者現有任務與目前時間
+                getTask()      ：取得使用者現有任務與目前時間
                 getTime()      ：取得目前時間
                 saveTask({...}): 儲存新任務，所有欄位皆必填  
                 end_conversation()：結束對話
@@ -1738,7 +1740,7 @@ final class ChatViewModel: ObservableObject {
 
         for day in settings.selectedDays.sorted() {
             let dayString = String(day)
-            result += "每次讀書時間：\(Int(settings.studyDuration))分鐘\n"
+            
             if let startHour = settings.dailyStartHours[dayString],
                 let startMinute = settings.dailyStartMinutes[dayString],
                 let endHour = settings.dailyEndHours[dayString],
@@ -1761,6 +1763,7 @@ final class ChatViewModel: ObservableObject {
                     "\(weekday)：\(String(format: "%02d:%02d", startHour, startMinute)) - \(String(format: "%02d:%02d", endHour, endMinute))\n"
             }
         }
+        result += "每次讀書時間：\(Int(settings.studyDuration))分鐘\n"
 
         return result
     }

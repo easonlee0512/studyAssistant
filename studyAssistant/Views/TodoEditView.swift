@@ -34,6 +34,9 @@ struct TodoEditView: View {
     @State private var showDeleteConfirmation = false  // 用於顯示刪除確認對話框
     @State private var isDeletingTask = false  // 用於追蹤刪除狀態
     
+    // 新增屬性以考慮底部 TabBar 的高度
+    let tabBarHeight: CGFloat
+    
     // 重複選項
     let repeatOptions: [RepeatType] = [
         .none,
@@ -50,10 +53,27 @@ struct TodoEditView: View {
     let categoryColor = Color(red: 178/255, green: 41/255, blue: 34/255, opacity: 0.4)
     let mainBackgroundColor = Color(red: 243/255, green: 212/255, blue: 183/255) // #F3D4B7
     
-    init(viewModel: TodoViewModel, isPresented: Binding<Bool>, task: TodoTask) {
+    // 計算滾動視圖的最大高度，考慮 TabBar 和其他元素
+    private var scrollViewMaxHeight: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        let formHeaderHeight: CGFloat = 120 // 頭部標題和拖動指示器的大致高度
+        let bottomMargin: CGFloat = 20 // 底部安全距離
+        
+        // 計算兩種高度並取較小值：
+        // 1. 屏幕高度的 75%
+        // 2. 剩餘可用空間（屏幕高度 - 頭部 - TabBar - 底部邊距）
+        let percentHeight = screenHeight * 0.75
+        let availableHeight = screenHeight - formHeaderHeight - tabBarHeight - bottomMargin
+        
+        // 確保最小高度至少有足夠空間顯示幾個表單項
+        return max(300, min(percentHeight, availableHeight))
+    }
+    
+    init(viewModel: TodoViewModel, isPresented: Binding<Bool>, task: TodoTask, tabBarHeight: CGFloat = 50) {
         self.viewModel = viewModel
         self._isPresented = isPresented
         self.task = task
+        self.tabBarHeight = tabBarHeight
         
         // 預填充任務數據
         self._title = State(initialValue: task.title)
@@ -69,10 +89,39 @@ struct TodoEditView: View {
     var body: some View {
         // 主要表單容器
         mainContentView
+            .background(backgroundColor)
+            .cornerRadius(25, corners: [.topLeft, .topRight])
+            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: -5)
+            .offset(y: offset)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: offset)
+            .edgesIgnoringSafeArea(.bottom)
+            .ignoresSafeArea(.keyboard) // 忽略鍵盤
+            .gesture(
+                DragGesture()
+                    .onChanged { gesture in
+                        let newOffset = max(0, gesture.translation.height)
+                        offset = newOffset
+                        // 當開始滑動時就關閉鍵盤
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                     to: nil, from: nil, for: nil)
+                    }
+                    .onEnded { gesture in
+                        if gesture.translation.height > 100 {
+                            dismissWithAnimation()
+                        } else {
+                            // 恢復到 TabBar 對齊的位置
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                offset = tabBarHeight
+                            }
+                        }
+                    }
+            )
+            .transition(.move(edge: .bottom))
             .onAppear {
-                // 動畫展示
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                    offset = 0
+                // 動畫展示 - 考慮 TabBar 的高度
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    // 設置為 TabBar 的高度，保證位置與傳入的 tabBarHeight 一致
+                    offset = tabBarHeight
                 }
             }
     }
@@ -126,7 +175,7 @@ struct TodoEditView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 20)
             }
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.7)
+            .frame(maxHeight: scrollViewMaxHeight)
             
             // 正在保存的指示器
             if isLoading {
@@ -138,27 +187,6 @@ struct TodoEditView: View {
                 }
             }
         }
-        .background(backgroundColor)
-        .cornerRadius(25, corners: [.topLeft, .topRight])
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: -5)
-        .offset(y: offset)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: offset)
-        .edgesIgnoringSafeArea(.bottom)
-        .gesture(
-            DragGesture()
-                .onChanged { gesture in
-                    let newOffset = max(0, gesture.translation.height)
-                    offset = newOffset
-                }
-                .onEnded { gesture in
-                    if gesture.translation.height > 100 {
-                        dismissWithAnimation()
-                    } else {
-                        offset = 0
-                    }
-                }
-        )
-        .transition(.move(edge: .bottom))
     }
     
     // 標題區域
@@ -234,6 +262,9 @@ struct TodoEditView: View {
                 
                 Toggle("", isOn: $isAllDay)
                     .labelsHidden()
+                    .padding(.trailing, 8)  // 右移 8 點
+                    .frame(width: 51, height: 31)  // 固定開關大小
+                    .contentShape(Rectangle())  // 增加點擊區域但保持圖片大小
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
@@ -333,6 +364,9 @@ struct TodoEditView: View {
                 }
                 .pickerStyle(.menu)
                 .accentColor(.black)
+                .padding(.trailing, 8)  // 右移 8 點
+                .frame(width: 100, height: 44)  // 固定選單按鈕大小
+                .contentShape(Rectangle())  // 增加點擊區域但保持圖片大小
                 .onChange(of: repeatOption) { newValue in
                     updateEndDateBasedOnRepeatOption(newValue)
                 }

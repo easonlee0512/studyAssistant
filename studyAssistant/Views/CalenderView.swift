@@ -10,19 +10,31 @@ import FirebaseAuth
 struct CalendarView: View {
     // MARK: 狀態變量
     @EnvironmentObject var viewModel: TodoViewModel
+    @EnvironmentObject var staticViewModel: StaticViewModel
     @State private var selectedDate = Date()  // 當前選中的日期
     @State private var currentDate = Date()   // 顯示的當前月份
     @State private var showingAddTask = false // 控制添加任務視圖顯示
     @State private var showingTodoDetail = false // 控制待辦詳情視圖顯示
-    @GestureState private var dragOffset: CGFloat = 0 // 用於偵測滑動
-    @State private var pageOffset: CGFloat = 0 // 用於動畫偏移
+    @State private var offsetX: CGFloat = 0   // 統一位移控制
+    @State private var isDragging = false
+    @State private var selectedDateId: String? = nil  // 用於追踪選中的日期
     
     // 背景和底部导航颜色
-    let backgroundColor = Color.hex(hex: "F3D4B7")
+    let backgroundColor = Color.hex(hex: "F3D4B8")
     let bottomBarColor = Color.hex(hex: "FEECD8")
     
+    // TabBar的高度 - 根據 TabBarNew 計算：圖標(40) + 頂部間距(25) + 底部間距(10) + 垂直內邊距(8) + 安全區域(20)
+    private let tabBarHeight: CGFloat = 83
+    
+    // 取得顯示 TodoAddView 的位置 - 確保它被放置在 TabBar 的上方
+    private var todoAddViewPosition: CGFloat {
+        // 使用 tabBarHeight 來設置視圖的位置，讓它顯示在 TabBar 上方
+        // 注意：這裡故意使用比 TodoView 小的偏移值，以讓日曆視圖中的 TodoAddView 顯示得更低一些
+        return tabBarHeight + 5// 減少偏移量，使視圖更接近 TabBar
+    }
+    
     var body: some View {
-        ZStack {
+        GeometryReader { geometry in
             VStack(spacing: 0) {
                 // 標題列
                 HStack {
@@ -37,112 +49,176 @@ struct CalendarView: View {
                     Button(action: {
                         showingAddTask = true
                     }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.hex(hex: "E28A5F"))
-                                .frame(width: 30, height: 30)
-
-                            Text("+")
-                                .font(.system(size: 30))
-                                .foregroundColor(Color.hex(hex: "F7DEC6"))
-                                .offset(y: -2)
-                        }
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(Color.hex(hex: "E28A5F"))
                     }
                     .padding(.trailing, 15)
                     .frame(width: 45)
                 }
-                .padding(.top, 7)
-                .padding(.bottom,0)
+                .padding(.top, 110)
+                .padding(.bottom, 35)  // 從 25 改為 35，增加底部間距
+                .frame(height: 80)
+                .background(backgroundColor)
 
-                // 只顯示當前月份的日曆，但支持左右滑動
-                GeometryReader { geometry in
-                    let width = geometry.size.width
-                    
-                    // 水平滑動容器
+                // 日曆部分
+                GeometryReader { calendarGeometry in
+                    let calendarHeight = calendarGeometry.size.height
                     HStack(spacing: 0) {
-                        // 左邊的月份（用於滑動但不顯示）
-                        Color.clear
-                            .frame(width: width)
+                        // 左邊月份（上個月）
+                        CalendarMonthWithWeekdaysView(
+                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: -1, to: currentDate) ?? currentDate),
+                            monthDate: Calendar.current.date(byAdding: .month, value: -1, to: currentDate) ?? currentDate,
+                            geometry: calendarGeometry,
+                            selectDate: selectDate,
+                            viewModel: viewModel,
+                            isDragging: isDragging
+                        )
+                        .frame(width: calendarGeometry.size.width)
                         
                         // 當前月份
                         CalendarMonthWithWeekdaysView(
                             calendarData: calendarData(for: currentDate),
                             monthDate: currentDate,
-                            geometry: geometry,
+                            geometry: calendarGeometry,
                             selectDate: selectDate,
-                            viewModel: viewModel
+                            viewModel: viewModel,
+                            isDragging: isDragging
                         )
-                        .frame(width: width)
+                        .frame(width: calendarGeometry.size.width)
                         
-                        // 右邊的月份（用於滑動但不顯示）
-                        Color.clear
-                            .frame(width: width)
+                        // 右邊月份（下個月）
+                        CalendarMonthWithWeekdaysView(
+                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: 1, to: currentDate) ?? currentDate),
+                            monthDate: Calendar.current.date(byAdding: .month, value: 1, to: currentDate) ?? currentDate,
+                            geometry: calendarGeometry,
+                            selectDate: selectDate,
+                            viewModel: viewModel,
+                            isDragging: isDragging
+                        )
+                        .frame(width: calendarGeometry.size.width)
                     }
-                    .frame(width: width * 3, alignment: .center)
-                    .offset(x: -width + dragOffset + pageOffset)
-                    .gesture(
-                        DragGesture()
-                            .updating($dragOffset) { value, state, _ in
-                                state = value.translation.width
+                    .frame(height: calendarHeight)
+                    .offset(x: -calendarGeometry.size.width + offsetX)
+                    .drawingGroup()  // 添加 GPU 加速
+                    .clipped()
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .local)  // 將最小滑動距離從 3 降至 1
+                            .onChanged { value in
+                                if !isDragging {
+                                    withAnimation(.easeInOut(duration: 0.1)) {
+                                        isDragging = true
+                                    }
+                                }
+                                offsetX = value.translation.width
                             }
                             .onEnded { value in
-                                let threshold: CGFloat = width / 3
-                                if value.translation.width < -threshold {
-                                    // 向左滑，下一個月
-                                    withAnimation(.spring()) {
-                                        pageOffset = -width
+                                let width = calendarGeometry.size.width
+                                let threshold = width / 8  // 將閾值從 width/5 降至 width/8
+                                let velocity = value.predictedEndTranslation.width - value.translation.width
+                                let shouldChange = abs(value.translation.width) > threshold || abs(velocity) > 100  // 降低速度閾值從 200 到 100
+                                
+                                var targetOffset: CGFloat = 0
+                                var newDate: Date? = nil
+                                
+                                if value.translation.width < 0 && shouldChange {
+                                    targetOffset = -width
+                                    newDate = Calendar.current.date(byAdding: .month, value: 1, to: currentDate)
+                                } else if value.translation.width > 0 && shouldChange {
+                                    targetOffset = width
+                                    newDate = Calendar.current.date(byAdding: .month, value: -1, to: currentDate)
+                                }
+                                
+                                // 加快動畫速度
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    offsetX = targetOffset
+                                }
+                                
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    isDragging = false
+                                }
+                                
+                                // 加快切換速度
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    if let d = newDate {
+                                        currentDate = d
+                                        let generator = UIImpactFeedbackGenerator(style: .light)
+                                        generator.impactOccurred()
                                     }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                        if let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentDate) {
-                                            currentDate = nextMonth
-                                        }
-                                        withAnimation(.spring(response: 0.001)) {
-                                            pageOffset = 0
-                                        }
-                                    }
-                                } else if value.translation.width > threshold {
-                                    // 向右滑，上個月
-                                    withAnimation(.spring()) {
-                                        pageOffset = width
-                                    }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                        if let prevMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentDate) {
-                                            currentDate = prevMonth
-                                        }
-                                        withAnimation(.spring(response: 0.001)) {
-                                            pageOffset = 0
-                                        }
-                                    }
-                                } else {
-                                    // 沒有超過閾值，彈回原位
-                                    withAnimation(.spring()) {
-                                        pageOffset = 0
-                                    }
+                                    offsetX = 0
                                 }
                             }
                     )
                 }
-                .padding(.horizontal,1)
+                .padding(.top, 20)  // 從 15 改為 20，增加頂部間距
+                .padding(.horizontal, 1)
             }
-            .background(backgroundColor.ignoresSafeArea())
+            .background(backgroundColor)
+            .ignoresSafeArea()
+            .padding(.top, -7)
             
             // 使用 ZStack 覆蓋方式顯示新增任務視圖
             if showingAddTask {
-                TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                ZStack {
+                    // 遮罩層
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                showingAddTask = false
+                            }
+                        }
+                    
+                    // 新增任務視圖 - 傳遞 TabBar 高度
+                    TodoAddView(
+                        viewModel: viewModel, 
+                        isPresented: $showingAddTask, 
+                        selectedDate: selectedDate,
+                        tabBarHeight: todoAddViewPosition
+                    )
+                        .environmentObject(staticViewModel)
+                        .transition(.move(edge: .bottom))
+                }
+                .gesture(
+                    DragGesture()
+                        .onChanged { _ in
+                            // 當開始滑動時就關閉鍵盤
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                         to: nil, from: nil, for: nil)
+                        }
+                )
+                .zIndex(1)
+                .ignoresSafeArea(.keyboard) // 忽略鍵盤
+                .edgesIgnoringSafeArea(.bottom)
             }
             
             // 使用ZStack覆蓋方式顯示詳情視圖
             if showingTodoDetail {
-                TodoDetailView(
-                    viewModel: viewModel,
-                    date: selectedDate,
-                    isPresented: $showingTodoDetail
-                )
+                ZStack {
+                    // 添加半透明背景，點擊時關閉詳情視圖
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showingTodoDetail = false
+                            }
+                        }
+                    
+                    TodoDetailView(
+                        viewModel: viewModel,
+                        date: selectedDate,
+                        isPresented: $showingTodoDetail
+                    )
+                    .padding(.top, 100) // 向下移動詳情視圖
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.3), value: showingTodoDetail)
             }
         }
+        .background(backgroundColor)
+        .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.3), value: showingAddTask)
         .animation(.easeInOut(duration: 0.3), value: showingTodoDetail)
         .task {
@@ -302,30 +378,30 @@ struct CalendarView: View {
 #Preview {
     CalendarView()
         .environmentObject(TodoViewModel())
+        .environmentObject(StaticViewModel())
 }
 
-// 新增一個 CalendarMonthWithWeekdaysView，包住星期標題和格子
+// 修改 CalendarMonthWithWeekdaysView 讓高度自動填滿
 struct CalendarMonthWithWeekdaysView: View {
     let calendarData: [[String]]
     let monthDate: Date
     let geometry: GeometryProxy
     let selectDate: (Int, Int) -> Void
     let viewModel: TodoViewModel
+    let isDragging: Bool
     let weekDays = ["日", "一", "二", "三", "四", "五", "六"]
-    
     var body: some View {
         VStack(spacing: 0) {
             // 星期標題
             HStack(spacing: 0) {
                 ForEach(weekDays, id: \.self) { day in
                     Text(day)
-                        .font(.system(size: 15))
+                        .font(.system(size: 13))
                         .frame(width: geometry.size.width / 7)
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 5)
                 }
             }
-            .frame(height: 30)
-            
+            .frame(height: 25)
             // 日期格子
             CalendarMonthView(
                 calendarData: calendarData,
@@ -333,13 +409,16 @@ struct CalendarMonthWithWeekdaysView: View {
                 isCurrentMonth: true,
                 geometry: geometry,
                 selectDate: selectDate,
-                viewModel: viewModel
+                viewModel: viewModel,
+                isDragging: isDragging
             )
+            .frame(maxHeight: .infinity)
         }
+        .frame(height: geometry.size.height)
     }
 }
 
-// 修改 CalendarMonthView 支援橫跨多天的任務橫條
+// 修改 CalendarMonthView 讓格子自動平均分配
 struct CalendarMonthView: View {
     let calendarData: [[String]]
     let monthDate: Date
@@ -347,9 +426,11 @@ struct CalendarMonthView: View {
     let geometry: GeometryProxy
     let selectDate: (Int, Int) -> Void
     let viewModel: TodoViewModel
-    
+    let isDragging: Bool
+    @State private var selectedDateId: String? = nil
+    private let calendar = Calendar.current
     var body: some View {
-        let cellHeight = geometry.size.height / 7  // 改小格子高度
+        let cellHeight = (geometry.size.height - 25) / 6
         VStack(spacing: 0) {
             ForEach(0..<6) { row in
                 HStack(spacing: 0) {
@@ -359,80 +440,76 @@ struct CalendarMonthView: View {
                         let tasksForThisDay = cellDate.map { date in
                             viewModel.tasksForDate(date)
                         } ?? []
-                        let dateLabelHeight: CGFloat = 20   // 預留給日期數字的高度
+                        let dateLabelHeight: CGFloat = 20
+                        let isToday = cellDate.map { calendar.isDateInToday($0) } ?? false
+                        let isCurrentMonth = !((row == 0 && Int(dateText) ?? 0 > 7) || 
+                                            (row >= 4 && Int(dateText) ?? 0 < 15))
+                        let isSelected = selectedDateId == "\(row)-\(column)"
                         ZStack {
-                            // 背景
                             Rectangle()
                                 .fill(Color.clear)
                                 .frame(width: geometry.size.width / 7, height: cellHeight)
-                            
-                            // 任務區域
-                            VStack(spacing: 0) {
-                                Spacer()
-                                    .frame(height: dateLabelHeight)
-                                
-                                // 任務橫條區域
-                                VStack(spacing: 2) {
-                                    Spacer()
-                                        .frame(height: 1)  // 加入頂部間距
+                            VStack(spacing: 3) {
+                                // 日期數字和今日圓圈
+                                ZStack {
+                                    if isToday {
+                                        Circle()
+                                            .fill(Color.hex(hex: "E28A5F"))
+                                            .frame(width: 22, height: 22)
+                                    }
                                     
-                                    ForEach(Array(tasksForThisDay.prefix(4)), id: \ .id) { task in
-                                        let isStart = cellDate != nil && Calendar.current.isDate(cellDate!, inSameDayAs: task.startDate)
-                                        let isEnd = cellDate != nil && Calendar.current.isDate(cellDate!, inSameDayAs: task.endDate)
-                                        let isLeftEdge = column == 0
-                                        let isRightEdge = column == 6
-                                        let showLeftRadius = isLeftEdge
-                                        let showRightRadius = isRightEdge
+                                    Text(dateText)
+                                        .font(.system(size: 13, weight: isToday ? .medium : .regular))
+                                        .foregroundColor(isToday ? .white : (isCurrentMonth ? .black : .gray.opacity(0.6)))
+                                }
+                                .frame(height: dateLabelHeight)
+                                
+                                // 任務列表
+                                VStack(spacing: 2) {
+                                    ForEach(Array(tasksForThisDay.prefix(4)), id: \.id) { task in
                                         TaskBarView(
                                             color: task.color,
-                                            showLeftRadius: showLeftRadius,
-                                            showRightRadius: showRightRadius,
-                                            isSingle: false,
-                                            width: geometry.size.width / 7
+                                            showLeftRadius: true,
+                                            showRightRadius: true,
+                                            isSingle: true,
+                                            width: geometry.size.width / 7 - 6
                                         ) {
                                             Text(task.title)
-                                                .font(.system(size: 11, weight: .medium))
+                                                .font(.system(size: 9, weight: .medium))
                                                 .foregroundColor(.white)
                                                 .lineLimit(1)
                                         }
+                                        .frame(maxWidth: geometry.size.width / 7 - 6)
+                                        .clipped()
+                                        .transition(.opacity.combined(with: .scale))
+                                        .animation(.spring(response: 0.3), value: task.id)
                                     }
-                                    
                                     if tasksForThisDay.count > 4 {
                                         Text("+\(tasksForThisDay.count - 4)")
-                                            .font(.system(size: 8))
+                                            .font(.system(size: 7))
                                             .foregroundColor(.gray)
-                                            .padding(.bottom, 2)
+                                            .padding(.bottom, -8)
                                     }
+                                    Spacer()
                                 }
-                                .frame(maxHeight: cellHeight - dateLabelHeight,
-                                               alignment: .top)//向上對其
-                                
-                                Spacer(minLength: 0)
-                            }
-                            
-                            // 日期數字（永遠在最上層）
-                            VStack {
-                                Text(dateText)
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.black)
-                                    .frame(height: dateLabelHeight, alignment: .top)
-                                    .padding(.leading, 2)
-                                    .padding(.top, 2)
-                                
-                                Spacer()
+                                .padding(.horizontal, 2)
                             }
                         }
                         .frame(width: geometry.size.width / 7, height: cellHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {
+                            selectedDateId = "\(row)-\(column)"
                             selectDate(row, column)
                         }
                     }
                 }
             }
         }
-        .frame(width: geometry.size.width)
+        .frame(width: geometry.size.width, height: geometry.size.height - 25)
+        .drawingGroup()  // 添加 GPU 加速
+        .animation(nil, value: isDragging)
     }
+    
     // 計算這格的 Date，根據 monthDate
     func getCellDate(row: Int, column: Int) -> Date? {
         let dateText = calendarData[row][column]
@@ -481,7 +558,8 @@ struct TaskBarView<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 2)  // 減少左邊間距（原本是 3）
         }
-        .frame(width: width)  // 保持外部容器原始寬度
+        .frame(width: width)
+        .drawingGroup()  // 添加 GPU 加速
     }
 }
 

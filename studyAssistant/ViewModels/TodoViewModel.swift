@@ -31,6 +31,8 @@ class TodoViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
+    @Published var keyboardHeight: CGFloat = 0  // 追蹤鍵盤高度
+    
     // 預定義的顏色選項
     let colorOptions: [Color] = [
         Color(red: 0.7, green: 0.16, blue: 0.13).opacity(0.4),

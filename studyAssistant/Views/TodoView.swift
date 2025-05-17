@@ -27,6 +27,15 @@ struct TodoView: View {
     @State private var showingEditTask = false
     @State private var taskToEdit: TodoTask? = nil
     
+    // TabBar的高度 - 根據 TabBarNew 計算：圖標(40) + 頂部間距(25) + 底部間距(10) + 垂直內邊距(8) + 安全區域(20)
+    private let tabBarHeight: CGFloat = 83
+    
+    // 取得顯示 TodoAddView 的位置 - 確保它被放置在 TabBar 的上方
+    private var todoAddViewPosition: CGFloat {
+        // 使用 tabBarHeight 來設置視圖的位置，讓它顯示在 TabBar 上方
+        return tabBarHeight - 20  // 減去一些偏移以產生好看的重疊效果
+    }
+    
     // Figma中使用的顏色
     let backgroundColor = Color.hex(hex: "F3D4B7")
     let bottomBarColor = Color.hex(hex: "FEECD8")
@@ -169,8 +178,13 @@ struct TodoView: View {
                                 }
                             }
                         
-                        // 新增任務視圖
-                        TodoAddView(viewModel: viewModel, isPresented: $showingAddTask, selectedDate: selectedDate)
+                        // 新增任務視圖 - 傳遞正確的 TabBar 高度
+                        TodoAddView(
+                            viewModel: viewModel, 
+                            isPresented: $showingAddTask, 
+                            selectedDate: selectedDate,
+                            tabBarHeight: todoAddViewPosition
+                        )
                             .environmentObject(staticViewModel)
                             .transition(.move(edge: .bottom))
                     }
@@ -208,7 +222,8 @@ struct TodoView: View {
                             TodoEditView(
                                 viewModel: viewModel,
                                 isPresented: $showingEditTask,
-                                task: taskToEdit!
+                                task: taskToEdit!,
+                                tabBarHeight: todoAddViewPosition
                             )
                             .transition(.move(edge: .bottom))
                         }

@@ -35,7 +35,7 @@ struct ChatDemoDynamicView: View {
         ZStack {
             backgroundColor.ignoresSafeArea()
                 .onTapGesture {
-                    // 點擊背景時取消編輯狀態
+                    // 點擊背景時取消編輯狀態並收起鍵盤
                     if isEditingTitle {
                         if !editingTitleText.isEmpty {
                             viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
@@ -43,7 +43,11 @@ struct ChatDemoDynamicView: View {
                         isEditingTitle = false
                         isTitleFocused = false
                     }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                 to: nil, from: nil, for: nil)
                 }
+            
             VStack(spacing: 0) {
                 header
                 Rectangle()  // 添加分隔線
@@ -63,11 +67,36 @@ struct ChatDemoDynamicView: View {
                         withAnimation {
                             showSidebar = false
                         }
+                        // 收起鍵盤
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                     to: nil, from: nil, for: nil)
                     }
             }
-            
         }
         .onAppear {
+            // 添加鍵盤通知觀察者
+            NotificationCenter.default.addObserver(
+                forName: UIResponder.keyboardWillShowNotification,
+                object: nil,
+                queue: .main
+            ) { notification in
+                if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        self.viewModel.keyboardHeight = keyboardFrame.height
+                    }
+                }
+            }
+            
+            NotificationCenter.default.addObserver(
+                forName: UIResponder.keyboardWillHideNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    self.viewModel.keyboardHeight = 0
+                }
+            }
+            
             viewModel.staticViewModel = staticViewModel
             // 每次進入聊天室頁面時自動選擇最新聊天室
             if !viewModel.chatRooms.isEmpty {
@@ -79,6 +108,8 @@ struct ChatDemoDynamicView: View {
             if isGenerating {
                 cancelGeneration()
             }
+            // 移除鍵盤通知觀察者
+            NotificationCenter.default.removeObserver(self)
         }
         .onChange(of: viewModel.selectedRoomIndex) { _ in
             // 切換聊天室時重設編輯狀態
@@ -94,22 +125,32 @@ struct ChatDemoDynamicView: View {
             ChatSettingView()
                 .environmentObject(viewModel)
         }
+        .background(
+            Color.hex(hex: "FEECD8")
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
+        )
+        .ignoresSafeArea(.all, edges: .bottom)
     }
 
     // MARK: Header
     private var header: some View {
         HStack {
             Button {
-                // 打開側邊欄時取消生成
+                // 打開側邊欄時取消生成並收起鍵盤
                 if isGenerating {
                     cancelGeneration()
                 }
+                // 收起鍵盤
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
                 withAnimation { showSidebar.toggle() }
             } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color.hex(hex: "E27844"))
             }
+            .frame(width: 44, height: 44)  // 改回原本的大小
+            
             Spacer()
             
             // 可編輯的標題
@@ -158,19 +199,26 @@ struct ChatDemoDynamicView: View {
             // 設定圖示
             Button(action: { 
                 isEditingTitle = false  // 打開設定時取消編輯狀態
+                // 收起鍵盤
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
                 showSettings = true 
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color.hex(hex: "E27844"))
             }
+            .frame(width: 44, height: 44)  // 改回原本的大小
             .padding(.trailing, 8)
 
             Button(action: {
-                // 創建新聊天室時取消生成
+                // 創建新聊天室時取消生成並收起鍵盤
                 if isGenerating {
                     cancelGeneration()
                 }
+                // 收起鍵盤
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
                 isEditingTitle = false  // 創建新聊天室時取消編輯狀態
                 viewModel.createNewChatRoom()
             }) {
@@ -178,6 +226,7 @@ struct ChatDemoDynamicView: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color.hex(hex: "E27844"))
             }
+            .frame(width: 44, height: 44)  // 改回原本的大小
             .disabled(!viewModel.canCreateNewChatRoom)
             .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
         }
@@ -1018,6 +1067,7 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Input Bar
     private var inputBar: some View {
+        VStack(spacing: 0) {
             HStack {
                 TextField("輸入訊息...", text: $inputText)
                     .font(.system(size: 18))
@@ -1034,30 +1084,36 @@ struct ChatDemoDynamicView: View {
                         Image(systemName: "stop.circle")
                             .font(.system(size: 28))
                             .foregroundColor(.black.opacity(0.5))
-                            .frame(width: 44, height: 44)  // 固定框架大小
                     }
+                    .frame(width: 44, height: 44)  // 改回原本的大小
                 } else {
                     // 發送按鈕
-                Button(action: sendMessage) {
-                    Image(systemName: "arrowshape.up")
-                            .font(.system(size: 28))  // 統一大小
-                        .foregroundColor(textColor)
-                            .frame(width: 44, height: 44)  // 固定框架大小
-                }
-                .disabled(inputText.isEmpty)
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrowshape.up")
+                            .font(.system(size: 28))
+                            .foregroundColor(textColor)
+                    }
+                    .frame(width: 44, height: 44)  // 改回原本的大小
+                    .disabled(inputText.isEmpty)
                 }
             }
             .padding(.horizontal)
-            .padding(.bottom, 76)
+            .padding(.bottom, 12)
             .padding(.top, 8)
-            .background( // 🔧 把背景與邊框包在一起
+            .background( // 背景與邊框包在一起
                 ZStack(alignment: .top) {
-                backgroundColor
+                    backgroundColor
                     Rectangle()
                         .frame(height: 0.2) // 線條粗細
                         .foregroundColor(.black.opacity(0.2))
                 }
             )
+            
+            // 添加鍵盤空間
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: viewModel.keyboardHeight)
+        }
     }
 
     // MARK: Sidebar

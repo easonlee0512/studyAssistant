@@ -16,42 +16,39 @@ struct ContentView: View {
             Color.hex(hex: "F3D4B7")
                 .ignoresSafeArea()
             
-            // 内容视图
-            ZStack {
-                // 根据选择的标签显示不同页面
-                if selectedTab == 0 {
-                    // 待辦事項頁面
-                    TodoView()
-                        .environmentObject(viewModel)
-                }
-                else if selectedTab == 1 {
-                    // 日曆頁面
-                    CalendarView()
-                        .environmentObject(viewModel)
-                }
-                else if selectedTab == 2 {
-                    // AI助手頁面
-                    ChatDemoDynamicView()
-                }
-                else if selectedTab == 3 {
-                    // 計時頁面
-                    TimerView()
-                        .environmentObject(viewModel)
-                }
-                else if selectedTab == 4 {
-                    // 設定頁面
-                    SettingsView(todos: todos)
-                        .environmentObject(authState)
-                }
-            }
-            
-            // 底部导航栏
             VStack(spacing: 0) {
-                Spacer()
+                // 內容區域
+                ZStack {
+                    if selectedTab == 0 {
+                        TodoView()
+                            .environmentObject(viewModel)
+                    }
+                    else if selectedTab == 1 {
+                        CalendarView()
+                            .environmentObject(viewModel)
+                    }
+                    else if selectedTab == 2 {
+                        ChatDemoDynamicView()
+                    }
+                    else if selectedTab == 3 {
+                        TimerView()
+                            .environmentObject(viewModel)
+                    }
+                    else if selectedTab == 4 {
+                        SettingsView(todos: todos)
+                            .environmentObject(authState)
+                    }
+                }
+                .frame(maxHeight: .infinity) // 讓內容自動填滿
+                
+                // 底部导航栏
                 TabBarNew(selectedTab: $selectedTab)
-                    .padding(.bottom, -20)
+                    .background(
+                        Color.hex(hex: "FEECD8")
+                            .ignoresSafeArea(edges: .bottom)
+                    )
             }
-            .ignoresSafeArea()
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .onAppear {
             // 確保 TimerManager 可以訪問 TodoViewModel
@@ -99,15 +96,12 @@ struct TabBarNew: View {
                 
                 Spacer()
             }
-            .padding(.vertical, 15)
-            
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: 45)
+            .padding(.vertical, 4)
         }
         .background(
             Color.hex(hex: "FEECD8")
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
+                .ignoresSafeArea(edges: .bottom)
         )
     }
 }
@@ -120,14 +114,20 @@ struct TabButtonNew: View {
     
     var body: some View {
         Button(action: action) {
-            Image(icon)  // 改為使用 Assets 中的圖片
-                .resizable()
-                .scaledToFit()
-                .frame(width: 30, height: 30) // 增加圖標尺寸
-                .foregroundColor(isSelected ? .black : .black.opacity(0.5))
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: 37)  // 增加頂部間距，讓圖標往下移
+                Image(icon)  // 改為使用 Assets 中的圖片
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 32, height: 32)
+                    .foregroundColor(isSelected ? .black : .black.opacity(0.5))
+                Spacer()
+                    .frame(height: 20)  // 增加底部間距，保持平衡
+            }
         }
-        .frame(width: 44, height: 44) // 確保點擊區域足夠大
-        .contentShape(Rectangle()) // 確保整個區域可點擊
+        .frame(width: 40, height: 40)
+        .contentShape(Rectangle())
     }
 }
 
