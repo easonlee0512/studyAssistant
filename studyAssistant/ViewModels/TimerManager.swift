@@ -366,13 +366,6 @@ class TimerManager: ObservableObject {
             // 更新時間組件
             updateTimeComponents()
             
-            // 更新倒數計時進度 - 使用線性比例計算，避免跳動
-            if initialTimeRemaining > 0 {
-                progress = max(0, min(1, timeRemaining / initialTimeRemaining))
-            } else {
-                progress = 0
-            }
-            
             // 檢查計時器是否應該停止
             if timeRemaining <= 0 {
                 // 創建計時記錄
@@ -506,12 +499,17 @@ class TimerManager: ObservableObject {
     
     // 同步專注時間到統計數據
     private func syncFocusTimeToStatistics(subject: String, focusTimeInSeconds: Int) {
+        print("開始同步專注時間到統計 - 科目: \(subject), 時間: \(focusTimeInSeconds)秒")
+        
         // 只有當專注時間超過30秒才同步到統計資料
-        guard focusTimeInSeconds >= 30 else { return }
+        guard focusTimeInSeconds >= 30 else {
+            print("專注時間不足30秒，不同步到統計")
+            return
+        }
         
         // 取得靜態數據的ViewModel
         guard let staticViewModel = getStaticViewModel() else {
-            print("無法獲取 StaticViewModel")
+            print("❌ 無法獲取 StaticViewModel - 這可能是統計不更新的原因")
             return
         }
         
@@ -520,11 +518,13 @@ class TimerManager: ObservableObject {
         
         // 如果專注時間少於1分鐘，直接返回
         if focusTimeInMinutes < 1 {
+            print("專注時間不足1分鐘，不同步到統計")
             return
         }
         
         // 獲取當前主題的類別（如果沒有就用「學習」）
         let category = getCurrentSubjectCategory() ?? "學習"
+        print("準備更新類別 '\(category)' 的專注時間: \(focusTimeInMinutes)分鐘")
         
         // 異步更新統計數據
         Task {
@@ -532,7 +532,7 @@ class TimerManager: ObservableObject {
                 category: category,
                 additionalTime: focusTimeInMinutes
             )
-            print("已同步專注時間到統計數據：\(subject) - \(focusTimeInMinutes)分鐘")
+            print("✅ 已成功同步專注時間到統計數據：\(category) - \(focusTimeInMinutes)分鐘")
         }
     }
     
@@ -562,15 +562,17 @@ class TimerManager: ObservableObject {
     
     // 獲取StaticViewModel實例
     private func getStaticViewModel() -> StaticViewModel? {
+        print("開始尋找 StaticViewModel")
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
             for window in windowScene.windows {
                 if let rootVC = window.rootViewController {
-                    // 檢查EnvironmentObjects
+                    print("檢查視圖控制器層級...")
                     return checkViewControllerForStaticViewModel(rootVC)
                 }
             }
         }
+        print("❌ 未找到 StaticViewModel")
         return nil
     }
     

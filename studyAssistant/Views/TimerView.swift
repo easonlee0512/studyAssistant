@@ -32,7 +32,6 @@ struct TimerCircle: View {
                 .frame(width: 260, height: 260)
 
             // 進度指示圓環 - 使用橙色漸變描邊 - 遵循圖片
-            // 避免顯示完整圓環的閃爍，對progress值進行修正
             Circle()
                 .trim(from: 0, to: progressToDisplay())
                 .stroke(
@@ -70,19 +69,14 @@ struct TimerCircle: View {
     
     // 提供一個更穩定的進度值，避免閃爍問題
     private func progressToDisplay() -> Double {
-        // 如果是在倒數計時模式且progress值異常（接近或等於1）
-        if timerManager.progress > 0.98 && !timerManager.isCountUp {
-            // 根據剩餘時間計算實際進度
+        if !timerManager.isCountUp {
+            // 倒數模式下，直接用 timeRemaining 計算進度
             let totalTimeRange = Double(timerManager.maxTime - timerManager.minTime) * 60
             let remainingTime = timerManager.timeRemaining
-            
-            // 使用剩餘時間計算進度值
             let calculatedProgress = (remainingTime - Double(timerManager.minTime * 60)) / totalTimeRange
-            
-            // 確保計算出的進度在有效範圍內 (0.0-1.0)
-            let normalizedProgress = max(0.0, min(1.0, calculatedProgress))
-            return normalizedProgress
+            return max(0.0, min(1.0, calculatedProgress))
         }
+        // 正向計時模式維持原本的邏輯
         return timerManager.progress
     }
 }
