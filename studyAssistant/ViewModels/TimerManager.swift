@@ -18,6 +18,7 @@ class TimerManager: ObservableObject {
     @Published var elapsedTime: TimeInterval = 0 // 正向計時已經過的時間
     @Published var progress: Double = 0.167 // 進度值，0.0-1.0之間，默認30分鐘(30/180)
     @Published var subject = "線性代數"
+    @Published var hasSynced: Bool = false // 用於控制圓環渲染時機
     
     // 時間組件
     @Published var hours: Int = 0
@@ -221,6 +222,8 @@ class TimerManager: ObservableObject {
             // 啟動計時器
             startTimer()
             isRunning = true
+            // 啟動時設置同步狀態為 true
+            self.hasSynced = true
         }
     }
     
@@ -252,8 +255,49 @@ class TimerManager: ObservableObject {
             }
         } else if pauseTime != nil {
             // 從暫停中恢復
-            totalPausedTime += now.timeIntervalSince(pauseTime!)
+            
+            // 檢查用戶是否在暫停時調整了時間
+            if !isCountUp {
+                // 計算調整前剩餘時間和當前設定時間的差值
+                let newRemainingTime = TimeInterval(hours * 3600 + minutes * 60 + seconds)
+                
+                // 輸出調試信息
+                print("暫停後恢復 - 新設置時間: \(newRemainingTime)秒, 原時間: \(timeRemaining)秒")
+                
+                // 無論時間是否變化，都使用新設置的時間重新開始計時
+                // 用戶調整了時間，重置計時器狀態
+                initialTimeRemaining = newRemainingTime
+                startTime = now
+                actualStartTime = now  // 更新實際開始時間
+                totalPausedTime = 0    // 重置暫停時間
+                
+                // 更新初始時間設定
+                initialHours = hours
+                initialMinutes = minutes
+                initialSeconds = seconds
+                
+                print("重置計時器 - 初始剩餘時間設為: \(initialTimeRemaining)秒")
+            } else {
+                // 正計時模式，正常恢復
+                totalPausedTime += now.timeIntervalSince(pauseTime!)
+            }
+            
             pauseTime = nil
+        } else {
+            // 用戶可能已經調整過時間後再次啟動計時器，更新開始時間和初始剩餘時間
+            startTime = now
+            actualStartTime = now
+            totalPausedTime = 0
+            
+            // 更新剩餘時間和初始時間設定
+            if !isCountUp {
+                initialTimeRemaining = timeRemaining
+            }
+            
+            // 記錄當前時間設定
+            initialHours = hours
+            initialMinutes = minutes
+            initialSeconds = seconds
         }
         
         // 啟動UI更新計時器
@@ -263,6 +307,27 @@ class TimerManager: ObservableObject {
     // 暫停計時器
     private func pauseTimer() {
         pauseTime = Date()
+        
+        // 在暫停時計算已經過的時間
+        if let startTime = startTime {
+            let now = Date()
+            let elapsedSinceStart = now.timeIntervalSince(startTime) - totalPausedTime
+            
+            // 保存已經過的時間，用於恢復時計算
+            if !isCountUp {
+                // 保存暫停前的時間信息
+                let oldTimeRemaining = timeRemaining
+                
+                // 更新顯示的時間組件，讓用戶可以在暫停時看到和調整正確的時間
+                timeRemaining = max(0, initialTimeRemaining - elapsedSinceStart)
+                updateTimeComponents()
+                
+                // 輸出調試信息
+                print("暫停 - 原剩餘時間: \(oldTimeRemaining)秒, 更新為: \(timeRemaining)秒")
+                print("暫停 - 時間組件更新為: \(hours):\(minutes):\(seconds)")
+            }
+        }
+        
         stopDisplayTimer()
     }
     
@@ -317,6 +382,9 @@ class TimerManager: ObservableObject {
                 progress = 0 // 倒數結束時進度歸零
             }
         }
+        
+        // 標記已同步完成
+        self.hasSynced = true
     }
     
     // 停止UI更新計時器
@@ -371,6 +439,9 @@ class TimerManager: ObservableObject {
             // 更新計時器時間和進度
             updateTimer()
         }
+        
+        // 重設同步狀態
+        self.hasSynced = false
     }
     
     // 保存計時器記錄並更新任務 focusTime
@@ -555,6 +626,9 @@ class TimerManager: ObservableObject {
             
             // 重新啟動UI更新計時器
             startDisplayTimer()
+            
+            // 設置同步標記為 true
+            self.hasSynced = true
         }
     }
     
@@ -563,6 +637,8 @@ class TimerManager: ObservableObject {
         // 進入背景時，停止UI更新計時器，但保持計時狀態
         if isRunning {
             stopDisplayTimer()
+            // 不重設同步標記，避免返回前景時閃爍
+            // self.hasSynced = false
         }
     }
     
@@ -611,6 +687,18 @@ class TimerManager: ObservableObject {
             // 如果沒有當前任務，使用默認主題
             self.subject = "學習"
             self.currentTaskId = nil
+        }
+    }
+    
+    // 暫停時手動調整時間
+    func adjustTimeComponentsWhenPaused() {
+        // 確保計時器已經暫停
+        if !isRunning && pauseTime != nil && !isCountUp {
+            // 使用當前設置的時間組件直接更新timeRemaining
+            updateTimer()
+            
+            // 輸出調試信息
+            print("手動調整時間 - 將時間更新為: \(hours):\(minutes):\(seconds) - 總秒數: \(timeRemaining)")
         }
     }
 }

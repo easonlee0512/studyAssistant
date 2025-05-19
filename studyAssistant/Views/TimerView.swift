@@ -32,8 +32,9 @@ struct TimerCircle: View {
                 .frame(width: 260, height: 260)
 
             // 進度指示圓環 - 使用橙色漸變描邊 - 遵循圖片
+            // 避免顯示完整圓環的閃爍，對progress值進行修正
             Circle()
-                .trim(from: 0, to: timerManager.progress)
+                .trim(from: 0, to: progressToDisplay())
                 .stroke(
                     LinearGradient(
                         gradient: Gradient(colors: [
@@ -63,8 +64,26 @@ struct TimerCircle: View {
             }
             
             // 進度圓點 - 白色小圓點在進度條末端 (可拖動)
-            DraggablePoint(isDragging: $isDragging)
+            DraggablePoint(isDragging: $isDragging, progressValue: progressToDisplay())
         }
+    }
+    
+    // 提供一個更穩定的進度值，避免閃爍問題
+    private func progressToDisplay() -> Double {
+        // 如果是在倒數計時模式且progress值異常（接近或等於1）
+        if timerManager.progress > 0.98 && !timerManager.isCountUp {
+            // 根據剩餘時間計算實際進度
+            let totalTimeRange = Double(timerManager.maxTime - timerManager.minTime) * 60
+            let remainingTime = timerManager.timeRemaining
+            
+            // 使用剩餘時間計算進度值
+            let calculatedProgress = (remainingTime - Double(timerManager.minTime * 60)) / totalTimeRange
+            
+            // 確保計算出的進度在有效範圍內 (0.0-1.0)
+            let normalizedProgress = max(0.0, min(1.0, calculatedProgress))
+            return normalizedProgress
+        }
+        return timerManager.progress
     }
 }
 
@@ -72,6 +91,7 @@ struct TimerCircle: View {
 struct DraggablePoint: View {
     @EnvironmentObject var timerManager: TimerManager
     @Binding var isDragging: Bool
+    var progressValue: Double // 接收外部傳入的進度值，而不是直接使用timerManager.progress
     
     var body: some View {
         Circle()
@@ -84,8 +104,8 @@ struct DraggablePoint: View {
                     .stroke(Color.hex(hex: "E87D45"), lineWidth: 3)
             )
             .offset(
-                x: 130 * cos(2 * .pi * timerManager.progress - .pi/2),
-                y: 130 * sin(2 * .pi * timerManager.progress - .pi/2)
+                x: 130 * cos(2 * .pi * progressValue - .pi/2),
+                y: 130 * sin(2 * .pi * progressValue - .pi/2)
             )
             .gesture(
                 !timerManager.isCountUp && !timerManager.isRunning ?
@@ -131,9 +151,17 @@ struct TimerDisplay: View {
                 // 統一使用HStack顯示時間，確保計時前後格式一致
                 HStack(spacing: 1) {
                     // 小時部分
-                    if timerManager.isRunning || timerManager.isCountUp {
-                        // 運行時或正計時模式顯示固定數字
-                        Text(String(format: "%02d", timerManager.isCountUp ? Int(timerManager.elapsedTime) / 3600 : timerManager.hours))
+                    if timerManager.isCountUp {
+                        // 正計時模式顯示固定數字
+                        Text(String(format: "%02d", Int(timerManager.elapsedTime) / 3600))
+                            .font(.custom("PingFang TC", size: 35))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .frame(width: 60)
+                            .transition(.opacity)
+                    } else if timerManager.isRunning {
+                        // 倒數計時運行中顯示固定數字
+                        Text(String(format: "%02d", timerManager.hours))
                             .font(.custom("PingFang TC", size: 35))
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
@@ -156,9 +184,17 @@ struct TimerDisplay: View {
                         .foregroundColor(.black)
                     
                     // 分鐘部分
-                    if timerManager.isRunning || timerManager.isCountUp {
-                        // 運行時或正計時模式顯示固定數字
-                        Text(String(format: "%02d", timerManager.isCountUp ? (Int(timerManager.elapsedTime) / 60) % 60 : timerManager.minutes))
+                    if timerManager.isCountUp {
+                        // 正計時模式顯示固定數字
+                        Text(String(format: "%02d", (Int(timerManager.elapsedTime) / 60) % 60))
+                            .font(.custom("PingFang TC", size: 35))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .frame(width: 60)
+                            .transition(.opacity)
+                    } else if timerManager.isRunning {
+                        // 倒數計時運行中顯示固定數字
+                        Text(String(format: "%02d", timerManager.minutes))
                             .font(.custom("PingFang TC", size: 35))
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
@@ -181,9 +217,17 @@ struct TimerDisplay: View {
                         .foregroundColor(.black)
                     
                     // 秒數部分
-                    if timerManager.isRunning || timerManager.isCountUp {
-                        // 運行時或正計時模式顯示固定數字
-                        Text(String(format: "%02d", timerManager.isCountUp ? Int(timerManager.elapsedTime) % 60 : timerManager.seconds))
+                    if timerManager.isCountUp {
+                        // 正計時模式顯示固定數字
+                        Text(String(format: "%02d", Int(timerManager.elapsedTime) % 60))
+                            .font(.custom("PingFang TC", size: 35))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .frame(width: 60)
+                            .transition(.opacity)
+                    } else if timerManager.isRunning {
+                        // 倒數計時運行中顯示固定數字
+                        Text(String(format: "%02d", timerManager.seconds))
                             .font(.custom("PingFang TC", size: 35))
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
@@ -213,9 +257,19 @@ struct TimerDisplay: View {
                         timerManager.seconds = 0
                     }
                     timerManager.updateTimer()
+                    // 處理暫停時手動調整
+                    timerManager.adjustTimeComponentsWhenPaused()
                 }
-                .onChange(of: timerManager.minutes) { _ in timerManager.updateTimer() }
-                .onChange(of: timerManager.seconds) { _ in timerManager.updateTimer() }
+                .onChange(of: timerManager.minutes) { _ in 
+                    timerManager.updateTimer()
+                    // 處理暫停時手動調整
+                    timerManager.adjustTimeComponentsWhenPaused()
+                }
+                .onChange(of: timerManager.seconds) { _ in 
+                    timerManager.updateTimer()
+                    // 處理暫停時手動調整
+                    timerManager.adjustTimeComponentsWhenPaused()
+                }
                 
                 Text(timerManager.subject)
                     .font(.custom("PingFang TC", size: 16))
@@ -317,6 +371,7 @@ struct TimerView: View {
                 
                 // Timer circle group - 根據新圖片修改
                 ZStack {
+                    // 始終顯示圓環，不再使用條件判斷
                     TimerCircle(isDragging: $isDragging)
                     TimerDisplay()
                 }
