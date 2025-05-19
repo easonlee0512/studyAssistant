@@ -124,19 +124,6 @@
 		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		9BC153532D78771A00FCA465 /* studyAssistantTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = studyAssistantTests;
-			sourceTree = "<group>";
-		};
-		9BC1535D2D78771A00FCA465 /* studyAssistantUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = studyAssistantUITests;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFrameworksBuildPhase section */
 		9BC1533D2D78771600FCA465 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -241,8 +228,6 @@
 			isa = PBXGroup;
 			children = (
 				E82A79C42DB13265007ED175 /* studyAssistant */,
-				9BC153532D78771A00FCA465 /* studyAssistantTests */,
-				9BC1535D2D78771A00FCA465 /* studyAssistantUITests */,
 				E82F5CFE2D8B76C80016DF22 /* Frameworks */,
 				9BC153412D78771600FCA465 /* Products */,
 			);
@@ -347,9 +332,6 @@
 			dependencies = (
 				9BC153522D78771A00FCA465 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				9BC153532D78771A00FCA465 /* studyAssistantTests */,
-			);
 			name = studyAssistantTests;
 			packageProductDependencies = (
 				9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */,
@@ -372,9 +354,6 @@
 			);
 			dependencies = (
 				9BC1535C2D78771A00FCA465 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				9BC1535D2D78771A00FCA465 /* studyAssistantUITests */,
 			);
 			name = studyAssistantUITests;
 			packageProductDependencies = (
@@ -677,7 +656,7 @@
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -714,7 +693,7 @@
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

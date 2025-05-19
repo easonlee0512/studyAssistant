@@ -34,11 +34,8 @@ struct TimerCircle: View {
                 .frame(width: 260, height: 260)
                 .blur(radius: 0.5) // 輕微模糊效果
 
-<<<<<<< HEAD
             // 進度指示圓環 - 使用橙色漸變描邊 - 遵循圖片
-=======
-            // 進度指示圓環 - 使用橙色漸變描邊但降低透明度
->>>>>>> origin/main
+
             Circle()
                 .trim(from: 0, to: progressToDisplay())
                 .stroke(
