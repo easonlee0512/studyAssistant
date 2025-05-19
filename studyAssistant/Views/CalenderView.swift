@@ -45,6 +45,7 @@ struct CalendarView: View {
                         .kerning(0.5)
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .animation(nil, value: currentDate)
 
                     Button(action: {
                         showingAddTask = true
@@ -57,100 +58,19 @@ struct CalendarView: View {
                     .frame(width: 45)
                 }
                 .padding(.top, 110)
-                .padding(.bottom, 35)  // 從 25 改為 35，增加底部間距
+                .padding(.bottom, 35)
                 .frame(height: 80)
                 .background(backgroundColor)
 
-                // 日曆部分
-                GeometryReader { calendarGeometry in
-                    let calendarHeight = calendarGeometry.size.height
-                    HStack(spacing: 0) {
-                        // 左邊月份（上個月）
-                        CalendarMonthWithWeekdaysView(
-                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: -1, to: currentDate) ?? currentDate),
-                            monthDate: Calendar.current.date(byAdding: .month, value: -1, to: currentDate) ?? currentDate,
-                            geometry: calendarGeometry,
-                            selectDate: selectDate,
-                            viewModel: viewModel,
-                            isDragging: isDragging
-                        )
-                        .frame(width: calendarGeometry.size.width)
-                        
-                        // 當前月份
-                        CalendarMonthWithWeekdaysView(
-                            calendarData: calendarData(for: currentDate),
-                            monthDate: currentDate,
-                            geometry: calendarGeometry,
-                            selectDate: selectDate,
-                            viewModel: viewModel,
-                            isDragging: isDragging
-                        )
-                        .frame(width: calendarGeometry.size.width)
-                        
-                        // 右邊月份（下個月）
-                        CalendarMonthWithWeekdaysView(
-                            calendarData: calendarData(for: Calendar.current.date(byAdding: .month, value: 1, to: currentDate) ?? currentDate),
-                            monthDate: Calendar.current.date(byAdding: .month, value: 1, to: currentDate) ?? currentDate,
-                            geometry: calendarGeometry,
-                            selectDate: selectDate,
-                            viewModel: viewModel,
-                            isDragging: isDragging
-                        )
-                        .frame(width: calendarGeometry.size.width)
-                    }
-                    .frame(height: calendarHeight)
-                    .offset(x: -calendarGeometry.size.width + offsetX)
-                    .drawingGroup()  // 添加 GPU 加速
-                    .clipped()
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .local)  // 將最小滑動距離從 3 降至 1
-                            .onChanged { value in
-                                if !isDragging {
-                                    withAnimation(.easeInOut(duration: 0.1)) {
-                                        isDragging = true
-                                    }
-                                }
-                                offsetX = value.translation.width
-                            }
-                            .onEnded { value in
-                                let width = calendarGeometry.size.width
-                                let threshold = width / 8  // 將閾值從 width/5 降至 width/8
-                                let velocity = value.predictedEndTranslation.width - value.translation.width
-                                let shouldChange = abs(value.translation.width) > threshold || abs(velocity) > 100  // 降低速度閾值從 200 到 100
-                                
-                                var targetOffset: CGFloat = 0
-                                var newDate: Date? = nil
-                                
-                                if value.translation.width < 0 && shouldChange {
-                                    targetOffset = -width
-                                    newDate = Calendar.current.date(byAdding: .month, value: 1, to: currentDate)
-                                } else if value.translation.width > 0 && shouldChange {
-                                    targetOffset = width
-                                    newDate = Calendar.current.date(byAdding: .month, value: -1, to: currentDate)
-                                }
-                                
-                                // 加快動畫速度
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    offsetX = targetOffset
-                                }
-                                
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    isDragging = false
-                                }
-                                
-                                // 加快切換速度
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    if let d = newDate {
-                                        currentDate = d
-                                        let generator = UIImpactFeedbackGenerator(style: .light)
-                                        generator.impactOccurred()
-                                    }
-                                    offsetX = 0
-                                }
-                            }
-                    )
-                }
-                .padding(.top, 20)  // 從 15 改為 20，增加頂部間距
+                // 使用新的 MonthPagerView
+                MonthPagerView(
+                    currentDate: $currentDate,
+                    viewModel: viewModel,
+                    selectedDate: $selectedDate,
+                    showingTodoDetail: $showingTodoDetail
+                )
+                .frame(maxHeight: .infinity)
+                .padding(.top, 20)
                 .padding(.horizontal, 1)
             }
             .background(backgroundColor)
@@ -438,7 +358,10 @@ struct CalendarMonthView: View {
                         let dateText = calendarData[row][column]
                         let cellDate = getCellDate(row: row, column: column)
                         let tasksForThisDay = cellDate.map { date in
-                            viewModel.tasksForDate(date)
+                            viewModel.tasksForDate(date).sorted { task1, task2 in
+                                // 按照開始時間排序
+                                return task1.startDate < task2.startDate
+                            }
                         } ?? []
                         let dateLabelHeight: CGFloat = 20
                         let isToday = cellDate.map { calendar.isDateInToday($0) } ?? false
@@ -449,8 +372,10 @@ struct CalendarMonthView: View {
                             Rectangle()
                                 .fill(Color.clear)
                                 .frame(width: geometry.size.width / 7, height: cellHeight)
-                            VStack(spacing: 3) {
-                                // 日期數字和今日圓圈
+                            
+                            // 使用更穩定的佈局結構
+                            VStack(spacing: 0) {
+                                // 日期數字和今日圓圈 - 固定高度
                                 ZStack {
                                     if isToday {
                                         Circle()
@@ -463,36 +388,47 @@ struct CalendarMonthView: View {
                                         .foregroundColor(isToday ? .white : (isCurrentMonth ? .black : .gray.opacity(0.6)))
                                 }
                                 .frame(height: dateLabelHeight)
+                                .padding(.top, 2)
                                 
-                                // 任務列表
-                                VStack(spacing: 2) {
-                                    ForEach(Array(tasksForThisDay.prefix(4)), id: \.id) { task in
-                                        TaskBarView(
-                                            color: task.color,
-                                            showLeftRadius: true,
-                                            showRightRadius: true,
-                                            isSingle: true,
-                                            width: geometry.size.width / 7 - 6
-                                        ) {
-                                            Text(task.title)
-                                                .font(.system(size: 9, weight: .medium))
-                                                .foregroundColor(.white)
-                                                .lineLimit(1)
+                                Spacer()
+                                    .frame(height: 4) // 在日期和任務之間添加 4 點的間距
+                                
+                                // 任務列表區域 - 固定高度，使用 ZStack 確保 "+N" 不會擠壓任務
+                                ZStack(alignment: .bottom) {
+                                    // 任務列表
+                                    VStack(spacing: 2) {
+                                        ForEach(Array(tasksForThisDay.prefix(4)), id: \.id) { task in
+                                            TaskBarView(
+                                                color: task.color,
+                                                showLeftRadius: true,
+                                                showRightRadius: true,
+                                                isSingle: true,
+                                                width: geometry.size.width / 7 - 6
+                                            ) {
+                                                Text(task.title)
+                                                    .font(.system(size: 9, weight: .medium))
+                                                    .foregroundColor(.white)
+                                                    .lineLimit(1)
+                                            }
+                                            .frame(maxWidth: geometry.size.width / 7 - 6)
+                                            .transition(.opacity.combined(with: .scale))
+                                            .animation(.spring(response: 0.3), value: task.id)
                                         }
-                                        .frame(maxWidth: geometry.size.width / 7 - 6)
-                                        .clipped()
-                                        .transition(.opacity.combined(with: .scale))
-                                        .animation(.spring(response: 0.3), value: task.id)
+                                        
+                                        Spacer(minLength: 0)
                                     }
+                                    .padding(.horizontal, 2)
+                                    
+                                    // 如果任務數量超過4個，顯示 "+N"，固定在底部
                                     if tasksForThisDay.count > 4 {
                                         Text("+\(tasksForThisDay.count - 4)")
                                             .font(.system(size: 7))
                                             .foregroundColor(.gray)
-                                            .padding(.bottom, -8)
+                                            .frame(maxWidth: .infinity, alignment: .center)
+                                            .padding(.bottom, 2)
                                     }
-                                    Spacer()
                                 }
-                                .padding(.horizontal, 2)
+                                .frame(height: cellHeight - dateLabelHeight - 4) // 確保固定高度
                             }
                         }
                         .frame(width: geometry.size.width / 7, height: cellHeight)
@@ -552,14 +488,16 @@ struct TaskBarView<Content: View>: View {
                 .fill(color)
                 .modifier(TaskBarCornerModifier(showLeftRadius: showLeftRadius, showRightRadius: showRightRadius, isSingle: isSingle, radius: 4))
                 .frame(width: width - 4, height: 16)  // 減少寬度
-                .shadow(color: .black.opacity(0.09), radius: 3, x: 3, y: 3)
+                .shadow(color: .black.opacity(0.2), radius: 4, x: 1, y: 1)
+                .zIndex(0) // 確保陰影在底層
+            
             content()
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 2)  // 減少左邊間距（原本是 3）
+                .zIndex(1) // 確保內容在上層
         }
         .frame(width: width)
-        .drawingGroup()  // 添加 GPU 加速
     }
 }
 
@@ -600,3 +538,207 @@ struct RoundedCorners: Shape {
 //         Calendar.current.startOfDay(for: self)
 //     }
 // }
+
+// 新增 MonthPagerView 結構
+struct MonthPagerView: View {
+    @Binding var currentDate: Date
+    @ObservedObject var viewModel: TodoViewModel
+    @Binding var selectedDate: Date
+    @Binding var showingTodoDetail: Bool
+    @State private var pageIndex = 4  // 中間頁面 = 當前月份
+    @State private var monthDates: [Date] = []  // 改為 @State 變量
+    @State private var isAnimating = false  // 追踪動畫狀態
+    private let calendar = Calendar.current
+    private let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+    
+    // 預先準備 9 個月（-4 ~ +4）
+    private var allMonthDates: [Date] {
+        let today = calendar.startOfDay(for: Date())
+        let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
+        return (-4...4).map {
+            calendar.date(byAdding: .month, value: $0, to: currentMonth)!
+        }
+    }
+    
+    // 獲取一個日期所在月份的索引
+    private func getMonthIndex(for date: Date) -> Int? {
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: date))!
+        
+        for (index, monthDate) in allMonthDates.enumerated() {
+            if calendar.isDate(monthDate, equalTo: startOfMonth, toGranularity: .month) {
+                return index
+            }
+        }
+        return nil
+    }
+    
+    init(currentDate: Binding<Date>, viewModel: TodoViewModel, selectedDate: Binding<Date>, showingTodoDetail: Binding<Bool>) {
+        self._currentDate = currentDate
+        self.viewModel = viewModel
+        self._selectedDate = selectedDate
+        self._showingTodoDetail = showingTodoDetail
+        
+        // 初始化月份數組
+        let today = Calendar.current.startOfDay(for: currentDate.wrappedValue)
+        let currentMonth = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: today))!
+        let initialDates = (-4...4).map {
+            Calendar.current.date(byAdding: .month, value: $0, to: currentMonth)!
+        }
+        _monthDates = State(initialValue: initialDates)
+        
+        // 預先準備震動生成器
+        feedbackGenerator.prepare()
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            TabView(selection: $pageIndex) {
+                ForEach(monthDates.indices, id: \.self) { idx in
+                    CalendarMonthWithWeekdaysView(
+                        calendarData: calendarData(for: monthDates[idx]),
+                        monthDate: monthDates[idx],
+                        geometry: geometry,
+                        selectDate: { row, column in
+                            if let date = getDateFromRowColumn(row: row, column: column, monthDate: monthDates[idx]) {
+                                selectedDate = date
+                                showingTodoDetail = true
+                            }
+                        },
+                        viewModel: viewModel,
+                        isDragging: isAnimating
+                    )
+                    .tag(idx)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: pageIndex) { newIdx in
+                // 當頁面索引變化時，更新當前月份
+                let oldDate = currentDate
+                
+                withAnimation(.easeOut(duration: 0.2)) {
+                    currentDate = monthDates[newIdx]
+                }
+                
+                // 只有在月份真正改變時才觸發震動
+                if !calendar.isDate(oldDate, equalTo: currentDate, toGranularity: .month) {
+                    feedbackGenerator.impactOccurred(intensity: 0.5)
+                }
+                
+                // 當滑動到邊緣時重新生成月份
+                if newIdx <= 1 || newIdx >= monthDates.count - 2 {
+                    // 延遲重新生成，等待動畫完成
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        let newDates = (-4...4).map {
+                            calendar.date(byAdding: .month, value: $0, to: currentDate)!
+                        }
+                        withAnimation(nil) {
+                            monthDates = newDates
+                            pageIndex = 4  // 重置到中間位置
+                        }
+                    }
+                }
+            }
+            .onChange(of: selectedDate) { newDate in
+                // 當選擇的日期變化時，檢查是否需要切換月份
+                if !calendar.isDate(currentDate, equalTo: newDate, toGranularity: .month) {
+                    if let newIndex = getMonthIndex(for: newDate) {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            pageIndex = newIndex
+                            currentDate = monthDates[newIndex]
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                // 初始載入時確保頁面索引與當前月份匹配
+                if let initialIndex = getMonthIndex(for: currentDate) {
+                    pageIndex = initialIndex
+                }
+            }
+            .gesture(
+                DragGesture()
+                    .onChanged { _ in
+                        isAnimating = true
+                        feedbackGenerator.prepare()
+                    }
+                    .onEnded { _ in
+                        // 延遲重置動畫狀態
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            isAnimating = false
+                        }
+                    }
+            )
+        }
+    }
+    
+    // 計算指定月份的日曆數據
+    private func calendarData(for date: Date) -> [[String]] {
+        var result: [[String]] = Array(repeating: Array(repeating: "", count: 7), count: 6)
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: date)
+        let firstDayOfMonth = calendar.date(from: components)!
+        let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth) - 1
+        let range = calendar.range(of: .day, in: .month, for: firstDayOfMonth)!
+        let daysInMonth = range.count
+        
+        // 上個月天數
+        let prevMonth = calendar.date(byAdding: .month, value: -1, to: date)!
+        let prevRange = calendar.range(of: .day, in: .month, for: prevMonth)!
+        let daysInPrevMonth = prevRange.count
+        
+        // 填充上個月的日期
+        for i in 0..<firstWeekday {
+            result[0][i] = "\(daysInPrevMonth - firstWeekday + i + 1)"
+        }
+        
+        // 填充當月的日期
+        var day = 1
+        var row = 0
+        var col = firstWeekday
+        while day <= daysInMonth {
+            result[row][col] = "\(day)"
+            day += 1
+            col += 1
+            if col == 7 {
+                col = 0
+                row += 1
+            }
+        }
+        
+        // 填充下個月的日期
+        var nextMonthDay = 1
+        while row < 6 {
+            while col < 7 {
+                result[row][col] = "\(nextMonthDay)"
+                nextMonthDay += 1
+                col += 1
+            }
+            col = 0
+            row += 1
+        }
+        return result
+    }
+    
+    // 從行列獲取日期
+    private func getDateFromRowColumn(row: Int, column: Int, monthDate: Date) -> Date? {
+        let calendar = Calendar.current
+        let dayValue = Int(calendarData(for: monthDate)[row][column]) ?? 1
+        var dateComponents = calendar.dateComponents([.year, .month], from: monthDate)
+        
+        // 如果是上個月的日期
+        if row == 0 && column < calendar.component(.weekday, from: monthDate) - 1 {
+            if let prevMonth = calendar.date(byAdding: .month, value: -1, to: monthDate) {
+                dateComponents = calendar.dateComponents([.year, .month], from: prevMonth)
+            }
+        }
+        // 如果是下個月的日期
+        else if dayValue <= 14 && row >= 4 {
+            if let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthDate) {
+                dateComponents = calendar.dateComponents([.year, .month], from: nextMonth)
+            }
+        }
+        
+        dateComponents.day = dayValue
+        return calendar.date(from: dateComponents)
+    }
+}

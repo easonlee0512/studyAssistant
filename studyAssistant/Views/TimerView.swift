@@ -16,30 +16,32 @@ struct TimerCircle: View {
             Circle()
                 .fill(Color.hex(hex: "F2D7CB"))
                 .frame(width: 280, height: 280)
+                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
             
             // 白色內圓
             Circle()
                 .fill(Color.hex(hex: "F5ECE3")) // 比原本的 #FDF8F3 更深，更接近圖中效果
                 .frame(width: 240, height: 240)
+                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
             
-            // 灰色進度背景環
+            // 灰色進度背景環 - 使用較低透明度和較小線寬
             Circle()
                 .trim(from: 0, to: 1)
                 .stroke(
-                    Color.hex(hex: "F2D7CB"),
+                    Color.hex(hex: "F2D7CB").opacity(0.7),
                     style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .frame(width: 260, height: 260)
+                .blur(radius: 0.5) // 輕微模糊效果
 
-            // 進度指示圓環 - 使用橙色漸變描邊 - 遵循圖片
-            // 避免顯示完整圓環的閃爍，對progress值進行修正
+            // 進度指示圓環 - 使用橙色漸變描邊但降低透明度
             Circle()
                 .trim(from: 0, to: progressToDisplay())
                 .stroke(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color.hex(hex: "E09772"),
-                            Color.hex(hex: "E87D45")
+                            Color.hex(hex: "E09772").opacity(1.0),
+                            Color.hex(hex: "E87D45").opacity(1.0)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -48,6 +50,7 @@ struct TimerCircle: View {
                 )
                 .frame(width: 260, height: 260)
                 .rotationEffect(.degrees(-90))
+                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
             
             // 時間標記
             ForEach(0..<12) { i in
@@ -98,11 +101,6 @@ struct DraggablePoint: View {
             .fill(Color.white)
             .frame(width: 28, height: 28)
             .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 2) // 更集中的陰影
-            .overlay(
-                // 橙色邊框
-                Circle()
-                    .stroke(Color.hex(hex: "E87D45"), lineWidth: 3)
-            )
             .offset(
                 x: 130 * cos(2 * .pi * progressValue - .pi/2),
                 y: 130 * sin(2 * .pi * progressValue - .pi/2)
@@ -137,7 +135,7 @@ struct DraggablePoint: View {
 // 提取時間顯示部分為獨立組件
 struct TimerDisplay: View {
     @EnvironmentObject var timerManager: TimerManager
-    
+
     var body: some View {
         ZStack {
             // 白色背景確保文字清晰
@@ -292,6 +290,7 @@ struct TimerControls: View {
                     // 外層陰影
                     RoundedRectangle(cornerRadius: 20)
                         .fill(Color.hex(hex: "E09772"))
+                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
 
                     VStack{
                         Text("重置")
@@ -309,7 +308,7 @@ struct TimerControls: View {
                     // 外層陰影
                     RoundedRectangle(cornerRadius: 20)
                         .fill(Color.hex(hex: "E09772"))
-                    
+                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
                     
                     Text(timerManager.isRunning ? "暫停" : "開始")
                         .font(.headline)
@@ -353,6 +352,7 @@ struct TimerView: View {
                             // 外層陰影
                             RoundedRectangle(cornerRadius: 20)
                                 .fill(Color.hex(hex: "E09772"))
+                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
                             
                             Text(timerManager.isCountUp ? "COUNT" : "COUNTDOWN")
                                 .font(.custom("Inder", size: 20))

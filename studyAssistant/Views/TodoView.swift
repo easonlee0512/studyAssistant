@@ -33,7 +33,7 @@ struct TodoView: View {
     // 取得顯示 TodoAddView 的位置 - 確保它被放置在 TabBar 的上方
     private var todoAddViewPosition: CGFloat {
         // 使用 tabBarHeight 來設置視圖的位置，讓它顯示在 TabBar 上方
-        return tabBarHeight - 20  // 減去一些偏移以產生好看的重疊效果
+        return tabBarHeight + 5  // 減去一些偏移以產生好看的重疊效果
     }
     
     // Figma中使用的顏色
@@ -65,23 +65,21 @@ struct TodoView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
+            GeometryReader { geometry in
+                ZStack(alignment: .top) {
                 // 背景色永遠存在
                 backgroundColor
                     .ignoresSafeArea()
                 
-                // 載入指示器
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(1.5)  // 放大載入圈圈
-                        .progressViewStyle(CircularProgressViewStyle())  // 使用圓形進度樣式
-                }
-                
-                // 主要內容
+                    // 主要內容 - 固定頂部，滾動底部
                 VStack(spacing: 0) {
-                    VStack(spacing: 16) {
+                        // 頂部固定區域
+                        VStack(spacing: 10) {
+                            // 頂部空間 - 確保固定間距
+                            Color.clear.frame(height: 8)
+                            
                         // 顯示用戶目標或默認倒數天數
-                        VStack(alignment: .leading, spacing: 5) {
+                            VStack(alignment: .leading, spacing: 3) {
                             if !cachedUserGoal.isEmpty {
                                 Text(cachedUserGoal)
                                     .font(.system(size: 30, weight: .bold))
@@ -97,17 +95,34 @@ struct TodoView: View {
                                 }
                             }
                             
-                            // 顯示當前日期
+                                // 顯示當前日期與返回今日按鈕
+                                HStack {
                             Text(formattedDate)
                                 .font(.system(size: 24, weight: .bold))
+                                    
+                                    Spacer()
+                                    
+                                    // 返回今日按鈕（只在不是今天時顯示）
+                                    if !Calendar.current.isDateInToday(selectedDate) {
+                                        Button(action: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                selectedDate = Date()
+                                            }
+                                        }) {
+                                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(Color.hex(hex: "E09772"))
+                                        }
+                                    }
+                                }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
-                        .padding(.top, 12)
                         
                         // 週曆視圖 - 使用新的WeekPagerView替換舊的WeekViewNew
                         WeekPagerView(selectedDate: $selectedDate)
                             .padding(.horizontal)
+                                .padding(.top, 4)
                         
                         // 待辦事項標題
                         HStack {
@@ -125,52 +140,48 @@ struct TodoView: View {
                             }
                         }
                         .padding(.horizontal)
-                    }
-                    
-                    // 任務列表
-                    ScrollView {
-                        VStack(spacing: 15) {
-                            ForEach(filteredTasks(for: selectedDate)) { task in
-                                TodoItemView(task: task, isExample: false, onUpdate: { updatedTask in
-                                    Task {
-                                        do {
-                                            // 不需要等待更新完成，直接返回讓 UI 保持響應
-                                            Task {
-                                                try await viewModel.toggleTaskCompletion(updatedTask)
-                                            }
-                                        } catch {
-                                            showError = true
-                                            errorMessage = error.localizedDescription
-                                        }
-                                    }
-                                }, onTaskSelected: { selectedTask in
-                                    taskToEdit = selectedTask
+                            .padding(.top, 5)
+                            .padding(.bottom, 0)
+                        }
+                        .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
+                        
+                        // 使用新的 DayPagerView 實現左右滑動
+                        DayPagerView(
+                            selectedDate: $selectedDate,
+                            viewModel: viewModel,
+                            onTaskSelected: { task in
+                                taskToEdit = task
                                     withAnimation(.easeInOut(duration: 0.15)) {
                                         showingEditTask = true
                                     }
-                                })
-                            }
-                            
-                            if filteredTasks(for: selectedDate).isEmpty {
-                                Text("目前沒有任務")
-                                    .foregroundColor(.gray)
-                                    .padding()
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .padding(.bottom, 15)
+                            },
+                            onError: { error in
+                                showError = true
+                                errorMessage = error.localizedDescription
+                            },
+                            isLoading: isLoading
+                        )
+                        .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
                     }
-                    .padding(.bottom, 0)
+                    
+                    // 載入指示器 - 絕對定位在中央
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .frame(width: 60, height: 60)
+                            .background(Color.white.opacity(0.2))
+                            .cornerRadius(10)
+                            .position(x: geometry.size.width / 2, y: geometry.size.height / 3)
+                    }
                 }
-                .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
                 
                 // 添加任務視圖
                 if showingAddTask {
                     ZStack {
                         // 遮罩層
                         Color.black.opacity(0.3)
-                            .ignoresSafeArea()
+                            .ignoresSafeArea(edges: .all)
                             .transition(.opacity)
                             .onTapGesture {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -188,7 +199,9 @@ struct TodoView: View {
                             .environmentObject(staticViewModel)
                             .transition(.move(edge: .bottom))
                     }
-                    .zIndex(1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .edgesIgnoringSafeArea(.all)
+                    .zIndex(2)
                 }
                 
                 // 任務詳情視圖
@@ -200,7 +213,7 @@ struct TodoView: View {
                             isPresented: $showingTodoDetail
                         )
                         .transition(.scale)
-                        .zIndex(1)
+                        .zIndex(2)
                     }
                 }
                 
@@ -210,7 +223,7 @@ struct TodoView: View {
                         ZStack {
                             // 遮罩層
                             Color.black.opacity(0.3)
-                                .ignoresSafeArea()
+                                .ignoresSafeArea(edges: .all)
                                 .transition(.opacity)
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -227,11 +240,14 @@ struct TodoView: View {
                             )
                             .transition(.move(edge: .bottom))
                         }
-                        .zIndex(1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .edgesIgnoringSafeArea(.all)
+                        .zIndex(2)
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
         }
         .onAppear {
             // 每次視圖出現時檢查並更新標語
@@ -313,10 +329,6 @@ struct TodoView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM月dd日"
         return formatter.string(from: settingsViewModel.userProfile.targetDate)
-    }
-    
-    private func filteredTasks(for date: Date) -> [TodoTask] {
-        viewModel.sortedTasks(by: date)
     }
     
     private func loadTasks(showLoadingIndicator: Bool = true) async {
@@ -418,11 +430,11 @@ struct TodoItemView: View {
                     .foregroundColor(localIsCompleted ? .gray : .black)
                     .strikethrough(localIsCompleted)
                 
-                // 備註文字
+                // 備註文字 - 修改為不要劃掉
                 Text(task.note)
                     .font(.system(size: 15))
                     .foregroundColor(localIsCompleted ? .gray.opacity(0.6) : .black.opacity(0.6))
-                    .strikethrough(localIsCompleted)
+                    .strikethrough(false) // 不管是否完成都不劃掉備註
                     .lineLimit(1)
                 
                 // 時間顯示
@@ -477,6 +489,8 @@ struct TodoItemView: View {
         .background(Color.hex(hex: "FEECD8"))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.09), radius: 10, x: 3, y: 3)
+        .padding(.horizontal, 3) // 添加水平間距，確保陰影不被裁剪
+        .padding(.vertical, 2) // 添加垂直間距，確保陰影不被裁剪
         .contentShape(Rectangle())
         .onTapGesture {
             if !isExample && onTaskSelected != nil {
@@ -508,13 +522,31 @@ struct WeekPagerView: View {
         }
     }
     
+    // 獲取一個日期所在週的索引
+    private func getWeekIndex(for date: Date) -> Int? {
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        for (index, weekStart) in weekStarts.enumerated() {
+            // 計算週的結束日期（週六）
+            let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart)!
+            
+            // 檢查日期是否在這一週內
+            if (startOfDay >= calendar.startOfDay(for: weekStart) && 
+                startOfDay <= calendar.startOfDay(for: weekEnd)) {
+                return index
+            }
+        }
+        return nil
+    }
+    
     var body: some View {
         GeometryReader { geometry in
-            let cellWidth = (geometry.size.width - 24) / 7 // 每個日期單元格的寬度
+            let availableWidth = geometry.size.width
+            let cellWidth = (availableWidth - 32) / 7 // 每個日期單元格的寬度，考慮間距
             
             ZStack(alignment: .center) {
                 // 背景框層 - 固定不動
-                HStack(alignment: .center, spacing: 4) {
+                HStack(spacing: 4) {
                     ForEach(0..<7) { index in
                         // 使用selectedDate計算當前是否選中
                         let isSelected = calendar.component(.weekday, from: selectedDate) - 1 == index
@@ -524,7 +556,7 @@ struct WeekPagerView: View {
                             .frame(width: cellWidth, height: 78)
                     }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 16) // 確保左右有足夠間距
                 
                 // 日期內容層 - 可滑動
                 TabView(selection: $pageIndex) {
@@ -539,7 +571,9 @@ struct WeekPagerView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .padding(.horizontal, 16) // 確保與背景框對齊
             }
+            .frame(width: availableWidth, height: 90) // 確保整個 ZStack 居中
             .background(Color.hex(hex: "FEECD8"))
             .cornerRadius(20)
             .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
@@ -548,9 +582,32 @@ struct WeekPagerView: View {
         // 當分頁變動時，更新選中日期
         .onChange(of: pageIndex) { newIdx in
             // 保持當前選中日期在新週的相同星期幾
+            let oldDate = selectedDate
             let currentWeekday = calendar.component(.weekday, from: selectedDate) - 1
             if let newDate = calendar.date(byAdding: .day, value: currentWeekday, to: weekStarts[newIdx]) {
                 selectedDate = newDate
+                
+                // 只有在日期真正改變時才觸發震動
+                if !calendar.isDate(oldDate, inSameDayAs: selectedDate) {
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                }
+            }
+        }
+        // 當選擇的日期改變時，更新頁面索引
+        .onChange(of: selectedDate) { newDate in
+            if let newIndex = getWeekIndex(for: newDate) {
+                if newIndex != pageIndex {
+                    withAnimation {
+                        pageIndex = newIndex
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // 初始載入時確保頁面索引與選擇的日期匹配
+            if let initialIndex = getWeekIndex(for: selectedDate) {
+                pageIndex = initialIndex
             }
         }
     }
@@ -572,7 +629,7 @@ struct WeekContent: View {
     }
     
     var body: some View {
-        HStack(alignment: .center, spacing: 4) {
+        HStack(spacing: 4) {
             ForEach(0..<7) { index in
                 let date = weekDates[index]
                 let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
@@ -591,11 +648,162 @@ struct WeekContent: View {
                 .frame(width: cellWidth, height: 78)
                 .contentShape(Rectangle()) // 確保整個區域可點擊
                 .onTapGesture {
+                    // 觸發震動反饋
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
                     selectedDate = date
                 }
             }
         }
-        .padding(.horizontal, 4)
+    }
+}
+
+// 日期分頁視圖 - 實現左右滑動切換日期
+struct DayPagerView: View {
+    @Binding var selectedDate: Date
+    @ObservedObject var viewModel: TodoViewModel
+    let onTaskSelected: (TodoTask) -> Void
+    let onError: (Error) -> Void
+    let isLoading: Bool
+    
+    @State private var pageIndex = 3  // 中間那頁 = 今天 (索引從 0 開始，所以是 3)
+    @State private var dayDates: [Date] = []
+    private let calendar = Calendar.current
+    
+    // 初始化時生成日期
+    init(selectedDate: Binding<Date>, viewModel: TodoViewModel, onTaskSelected: @escaping (TodoTask) -> Void, onError: @escaping (Error) -> Void, isLoading: Bool) {
+        self._selectedDate = selectedDate
+        self.viewModel = viewModel
+        self.onTaskSelected = onTaskSelected
+        self.onError = onError
+        self.isLoading = isLoading
+        
+        // 初始化日期範圍
+        let today = Calendar.current.startOfDay(for: Date())
+        let initialDates = (-3...3).map {
+            Calendar.current.date(byAdding: .day, value: $0, to: today)!
+        }
+        _dayDates = State(initialValue: initialDates)
+    }
+    
+    // 獲取一個日期所在的索引
+    private func getDayIndex(for date: Date) -> Int? {
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        for (index, dayDate) in dayDates.enumerated() {
+            if calendar.isDate(startOfDay, inSameDayAs: dayDate) {
+                return index
+            }
+        }
+        return nil
+    }
+    
+    // 重新生成日期範圍，將當前選中日期置於中間
+    private func regenerateDates() {
+        let centerDate = calendar.startOfDay(for: selectedDate)
+        dayDates = (-3...3).map {
+            calendar.date(byAdding: .day, value: $0, to: centerDate)!
+        }
+        pageIndex = 3  // 重置為中間索引
+    }
+    
+    var body: some View {
+        TabView(selection: $pageIndex) {
+            ForEach(dayDates.indices, id: \.self) { idx in
+                DayContent(
+                    date: dayDates[idx],
+                    viewModel: viewModel,
+                    onTaskSelected: onTaskSelected,
+                    onError: onError,
+                    isLoading: isLoading
+                )
+                .tag(idx)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .onChange(of: pageIndex) { newIdx in
+            // 當頁面索引變化時，更新選中的日期
+            let oldDate = selectedDate
+            selectedDate = dayDates[newIdx]
+            
+            // 只有在日期真正改變時才觸發震動
+            if !Calendar.current.isDate(oldDate, inSameDayAs: selectedDate) {
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+            }
+            
+            // 檢查是否需要重新生成日期範圍
+            if newIdx <= 1 || newIdx >= dayDates.count - 2 {
+                // 等待動畫完成後重新生成
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    regenerateDates()
+                }
+            }
+        }
+        .onChange(of: selectedDate) { newDate in
+            // 當選擇的日期變化時，檢查是否在當前範圍內
+            if let newIndex = getDayIndex(for: newDate) {
+                if newIndex != pageIndex {
+                    withAnimation {
+                        pageIndex = newIndex
+                    }
+                }
+            } else {
+                // 如果不在範圍內，重新生成日期範圍
+                regenerateDates()
+            }
+        }
+        .onAppear {
+            // 初始載入時確保頁面索引與選擇的日期匹配
+            if let initialIndex = getDayIndex(for: selectedDate) {
+                pageIndex = initialIndex
+            } else {
+                // 如果選中的日期不在範圍內，重新生成日期範圍
+                regenerateDates()
+            }
+        }
+    }
+}
+
+// 單日內容視圖
+struct DayContent: View {
+    let date: Date
+    @ObservedObject var viewModel: TodoViewModel
+    let onTaskSelected: (TodoTask) -> Void
+    let onError: (Error) -> Void
+    let isLoading: Bool
+    
+    var body: some View {
+        ScrollView {
+            LazyVStack() {
+                ForEach(viewModel.sortedTasksWithCompletionStatus(by: date)) { task in
+                    TodoItemView(task: task, isExample: false, onUpdate: { updatedTask in
+                        Task {
+                            do {
+                                // 不需要等待更新完成，直接返回讓 UI 保持響應
+                                Task {
+                                    try await viewModel.toggleTaskCompletion(updatedTask)
+                                }
+                            } catch {
+                                onError(error)
+                            }
+                        }
+                    }, onTaskSelected: onTaskSelected)
+                }
+                
+                if viewModel.sortedTasksWithCompletionStatus(by: date).isEmpty {
+                    Text("目前沒有任務")
+                        .foregroundColor(.gray)
+                        .padding()
+                }
+                
+                // 底部空間 - 確保有足夠的滾動空間
+                Color.clear.frame(height: 20)
+            }
+            .padding(.horizontal)
+            .padding(.top, 10)
+        }
     }
 }
 

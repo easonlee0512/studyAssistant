@@ -403,10 +403,11 @@ struct PendingTask: Identifiable, Codable {
 final class ChatViewModel: ObservableObject {
     private let proxyURL = URL(string: "https://gpt-proxy-api.studyassistant.workers.dev")!
     private let proxyToken = "my-secret-token"
-
+    private let chatRoomsKey = "local_chat_rooms"
+    
     @Published var staticViewModel: StaticViewModel?
     @Published var todoViewModel = TodoViewModel()
-
+    
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -417,8 +418,6 @@ final class ChatViewModel: ObservableObject {
     @Published var currentFunction: String?
     @Published var isLoading: Bool = false
     @Published var conversationEndedSignal = UUID()  // 用於發送對話結束的信號
-
-    private let chatRoomsKey = "local_chat_rooms"
 
     // Firestore 相關
     private let db = Firestore.firestore()
@@ -436,8 +435,14 @@ final class ChatViewModel: ObservableObject {
             messages: [
                 ChatMessage(text: "我是讀書助手，有什麼可以幫您安排的讀書計劃嗎？", isMe: false)
             ])
-    ]
-    {
+    ] {
+        willSet {
+            // 在值改變之前儲存
+            if let data = try? JSONEncoder().encode(chatRooms) {
+                UserDefaults.standard.set(data, forKey: chatRoomsKey)
+            }
+        }
+        
         didSet {
             // 限制最多 15 個聊天室，超過時自動刪除最舊的
             while chatRooms.count > 15 {
@@ -447,13 +452,18 @@ final class ChatViewModel: ObservableObject {
                     selectedRoomIndex -= 1
                 }
             }
-            // 限制每個聊天室最多 300 則訊息
+            
+            // 限制每個聊天室最多 300 則訊息，超過時自動刪除最舊的
             for i in chatRooms.indices {
                 if chatRooms[i].messages.count > 300 {
                     chatRooms[i].messages.removeFirst(chatRooms[i].messages.count - 300)
                 }
             }
-            saveChatRoomsToLocal()
+            
+            // 儲存更新後的資料
+            if let data = try? JSONEncoder().encode(chatRooms) {
+                UserDefaults.standard.set(data, forKey: chatRoomsKey)
+            }
         }
     }
     @Published var selectedRoomIndex: Int = 0  // 預設為 0，稍後在 init 設置為最新聊天室
@@ -1093,9 +1103,9 @@ final class ChatViewModel: ObservableObject {
                     - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
                     - 不要在設定的時間範圍外安排任務
                     - 不要與原有的任務時間重疊
-                    8. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
-                    9. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
-                    10. 安排任務時如果使用者要求安排很多任務，要遵從使用者的安排
+                8. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
+                9. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
+                10. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），要遵從使用者的安排，不要先安排幾個然後再問使用者是否要安排更多。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1107,7 +1117,7 @@ final class ChatViewModel: ObservableObject {
                 // 檢查任務是否被取消
                 if Task.isCancelled {
                     print("任務被使用者取消")
-                    return nil
+                    return "任務已取消"  // 改為返回字符串而不是 nil
                 }
 
             // 決定本次 tool_choice
@@ -1129,7 +1139,7 @@ final class ChatViewModel: ObservableObject {
             }
 
             let reqBody = OpenAIRequest(
-                model: "gpt-4.1-mini",
+                model: "gpt-4.1",
                 messages: allMessages,
                 temperature: 0.7,
                 stream: true,
@@ -1181,7 +1191,7 @@ final class ChatViewModel: ObservableObject {
                     // 檢查任務是否被取消
                         if Task.isCancelled {
                             print("在處理回應時任務被取消")
-                            return nil
+                            return "任務已取消"  // 改為返回字符串而不是 nil
                         }
 
                     guard line.hasPrefix("data: ") else {
@@ -1411,10 +1421,12 @@ final class ChatViewModel: ObservableObject {
                                 
                                 // 寫入Firebase
                                 Task {
-                                    await updateTokenUsageInFirebase(tokenCount: usage.total_tokens, 
-                                                                    promptTokens: usage.prompt_tokens,
-                                                                    completionTokens: usage.completion_tokens,
-                                                                    model: "gpt-4.1-mini")
+                                    await updateTokenUsageInFirebase(
+                                        tokenCount: usage.total_tokens,
+                                        promptTokens: usage.prompt_tokens,
+                                        completionTokens: usage.completion_tokens,
+                                        model: reqBody.model  // 使用請求體中的模型
+                                    )
                                 }
                             } else if let toolCalls = chunk.choices.first?.delta.tool_calls {
                                 // 處理每個工具調用
@@ -1631,23 +1643,39 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func loadChatRoomsFromLocal() {
-        if let data = UserDefaults.standard.data(forKey: chatRoomsKey) {
-            do {
-                let decoded = try JSONDecoder().decode([ChatRoom].self, from: data)
-                self.chatRooms = decoded
-            } catch {
-                print("載入本地聊天記錄失敗: \(error)")
+    private func saveChatRoomsToLocal() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self = self else {
+                    continuation.resume()
+                    return
+                }
+                
+                do {
+                    let data = try JSONEncoder().encode(self.chatRooms)
+                    UserDefaults.standard.set(data, forKey: self.chatRoomsKey)
+                } catch {
+                    print("儲存本地聊天記錄失敗: \(error)")
+                }
+                
+                continuation.resume()
             }
         }
     }
 
-    func saveChatRoomsToLocal() {
-        do {
-            let data = try JSONEncoder().encode(self.chatRooms)
-            UserDefaults.standard.set(data, forKey: chatRoomsKey)
-        } catch {
-            print("儲存本地聊天記錄失敗: \(error)")
+    func loadChatRoomsFromLocal() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            if let data = UserDefaults.standard.data(forKey: self.chatRoomsKey) {
+                do {
+                    let decoded = try JSONDecoder().decode([ChatRoom].self, from: data)
+                    DispatchQueue.main.async {
+                        self.chatRooms = decoded
+                    }
+                } catch {
+                    print("載入本地聊天記錄失敗: \(error)")
+                }
+            }
         }
     }
 
@@ -1775,6 +1803,7 @@ final class ChatViewModel: ObservableObject {
         operation: @escaping () async throws -> T
     ) async throws -> T {
         var attempts = 0
+        var lastError: Error?
         
         while attempts < maxAttempts {
             do {
@@ -1809,6 +1838,7 @@ final class ChatViewModel: ObservableObject {
                 
             } catch let urlError as URLError {
                 print("捕獲到 URLError: \(urlError.localizedDescription), code: \(urlError.code.rawValue)")
+                lastError = urlError
                 
                 // 檢查是否是因為伺服器負載過重的錯誤
                 if urlError.code == .networkConnectionLost || 
@@ -1830,6 +1860,7 @@ final class ChatViewModel: ObservableObject {
                 
             } catch {
                 print("捕獲到其他錯誤: \(error.localizedDescription)")
+                lastError = error
                 attempts += 1
                 if attempts >= maxAttempts {
                     print("已達到最大重試次數，最後一次錯誤: \(error.localizedDescription)")
@@ -1840,7 +1871,7 @@ final class ChatViewModel: ObservableObject {
             }
         }
         
-        throw URLError(.timedOut)
+        throw lastError ?? URLError(.timedOut)
     }
 
     // 修改執行刪除任務的函數
@@ -2262,6 +2293,14 @@ final class ChatViewModel: ObservableObject {
             print("成功更新token使用量：\(tokenCount) tokens，模型：\(model)")
         } catch {
             print("更新token使用量失敗：\(error.localizedDescription)")
+        }
+    }
+
+    // 新增一個用於最終儲存的方法
+    private func finalSave() {
+        let chatRoomsData = try? JSONEncoder().encode(chatRooms)
+        if let data = chatRoomsData {
+            UserDefaults.standard.set(data, forKey: chatRoomsKey)
         }
     }
 }

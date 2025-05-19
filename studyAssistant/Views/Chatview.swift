@@ -134,26 +134,81 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Header
     private var header: some View {
-        HStack {
-            Button {
-                // 打開側邊欄時取消生成並收起鍵盤
-                if isGenerating {
-                    cancelGeneration()
-                }
-                // 收起鍵盤
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+        ZStack {
+            // 底層按鈕
+            HStack {
+                Button {
+                    // 打開側邊欄時取消生成並收起鍵盤
+                    if isGenerating {
+                        cancelGeneration()
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                                              to: nil, from: nil, for: nil)
-                withAnimation { showSidebar.toggle() }
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(Color.hex(hex: "E27844"))
+                    withAnimation { showSidebar.toggle() }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 40, height: 44)  // 改回原本的大小
+                .padding(.leading, 8)
+                Spacer()
+                
+                // 設定圖示
+                Button(action: { 
+                    isEditingTitle = false  // 打開設定時取消編輯狀態
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
+                    showSettings = true 
+                }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 28, height: 44)  // 改回原本的大小
+                .padding(.trailing, 8)
+
+                Button(action: {
+                    // 創建新聊天室時取消生成並收起鍵盤
+                    if isGenerating {
+                        cancelGeneration()
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
+                    isEditingTitle = false  // 創建新聊天室時取消編輯狀態
+                    viewModel.createNewChatRoom()
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 28, height: 44)  // 改回原本的大小
+                .disabled(!viewModel.canCreateNewChatRoom)
+                .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
             }
-            .frame(width: 44, height: 44)  // 改回原本的大小
+            .padding(.horizontal)
             
-            Spacer()
+            // 中間層標題
+            if !isEditingTitle {
+                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ? 
+                     viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." : 
+                     viewModel.chatRooms[viewModel.selectedRoomIndex].name)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(titleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.5, alignment: .center)
+                    .onTapGesture {
+                        editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
+                        isEditingTitle = true
+                    }
+            }
             
-            // 可編輯的標題
+            // 最上層編輯框
             if isEditingTitle {
                 TextField("聊天室名稱", text: $editingTitleText, onCommit: {
                     if !editingTitleText.isEmpty {
@@ -170,69 +225,16 @@ struct ChatDemoDynamicView: View {
                 .padding(.horizontal, 10)
                 .background(Color.hex(hex: "F3D4B8").opacity(0.7))
                 .cornerRadius(8)
-                .padding(.leading, 22)  // 從 23 減少到 22
-                .padding(.trailing, -22)  // 從 -23 增加到 -22
                 .onAppear {
                     // 顯示輸入框時自動獲取焦點
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         isTitleFocused = true
                     }
                 }
-            } else {
-            Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ? 
-                 viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." : 
-                 viewModel.chatRooms[viewModel.selectedRoomIndex].name)
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(titleColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                    .padding(.leading, 22)  // 從 23 減少到 22
-                    .padding(.trailing, -22)  // 從 -23 增加到 -22
-                    .onTapGesture {
-                        editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
-                        isEditingTitle = true
-                    }
             }
-            
-            Spacer()
-
-            // 設定圖示
-            Button(action: { 
-                isEditingTitle = false  // 打開設定時取消編輯狀態
-                // 收起鍵盤
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                             to: nil, from: nil, for: nil)
-                showSettings = true 
-            }) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(Color.hex(hex: "E27844"))
-            }
-            .frame(width: 44, height: 44)  // 改回原本的大小
-            .padding(.trailing, 8)
-
-            Button(action: {
-                // 創建新聊天室時取消生成並收起鍵盤
-                if isGenerating {
-                    cancelGeneration()
-                }
-                // 收起鍵盤
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                             to: nil, from: nil, for: nil)
-                isEditingTitle = false  // 創建新聊天室時取消編輯狀態
-                viewModel.createNewChatRoom()
-            }) {
-                Image(systemName: "plus")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(Color.hex(hex: "E27844"))
-            }
-            .frame(width: 44, height: 44)  // 改回原本的大小
-            .disabled(!viewModel.canCreateNewChatRoom)
-            .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
         }
-        .padding(.horizontal)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, 4) // 從8減少到4，讓標題條往上移
+        .padding(.bottom, 8) // 從12減少到8，讓標題條往上移
     }
 
     // MARK: Message List
@@ -249,8 +251,8 @@ struct ChatDemoDynamicView: View {
                         }
                     }
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 15)
                 .id("messageBottom")  // 添加一個 ID 用於滾動
             }
             .onChange(of: expandedTaskMessages) { newValue in
@@ -300,10 +302,8 @@ struct ChatDemoDynamicView: View {
                 isConversationEnded = false
             }
             .onAppear {
-                // 每次進入聊天室頁面時自動滾動到底部
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    scrollToBottom(proxy: proxy)
-                }
+                // 每次進入聊天室頁面時直接滾動到底部（無動畫）
+                proxy.scrollTo("messageBottom", anchor: .bottom)
                 
                 // 重置對話結束標記
                 isConversationEnded = false
@@ -332,7 +332,7 @@ struct ChatDemoDynamicView: View {
                 .background(darkBubbleColor)
                 .foregroundColor(.white)
                 .cornerRadius(12)
-                .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
+                .shadow(color: .black.opacity(0.08), radius: 6, x: 1, y: 2)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.6, alignment: .trailing)
                 .textSelection(.enabled)
                 .contextMenu {
@@ -492,8 +492,8 @@ struct ChatDemoDynamicView: View {
                                                         : "")
                                                 : "新增任務失敗"
                                         )
-                                        .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
-                                        .padding(.top, 8)
+                                        .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+
                                     }
                                 }
                             }
@@ -602,8 +602,8 @@ struct ChatDemoDynamicView: View {
                                                     : "")
                                             : "刪除任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
-                                    .padding(.top, 8)
+                                    .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+
                                 }
                             }
                             .padding(8)
@@ -719,8 +719,8 @@ struct ChatDemoDynamicView: View {
                                                     : "")
                                             : "修改任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .green.opacity(0.6) : .red.opacity(0.6))
-                                    .padding(.top, 8)
+                                    .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+
                                 }
                             }
                             .padding(8)
@@ -733,7 +733,7 @@ struct ChatDemoDynamicView: View {
             .padding(16)
             .background(lightBubbleColor)
             .cornerRadius(12)
-            .shadow(color: .black.opacity(0.15), radius: 4, x: 2, y: 2)
+            .shadow(color: .black.opacity(0.08), radius: 6, x: 1, y: 2)
             .frame(maxWidth: UIScreen.main.bounds.width * 0.95, alignment: .leading)
             Spacer()
         }
@@ -1098,8 +1098,8 @@ struct ChatDemoDynamicView: View {
                 }
             }
             .padding(.horizontal)
-            .padding(.bottom, 12)
-            .padding(.top, 8)
+            .padding(.bottom, 8) // 從12減少到8，讓底部輸入欄往上移
+            .padding(.top, 6) // 從8減少到6，讓底部輸入欄往上移
             .background( // 背景與邊框包在一起
                 ZStack(alignment: .top) {
                     backgroundColor

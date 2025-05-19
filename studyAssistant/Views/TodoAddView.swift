@@ -88,7 +88,7 @@ struct TodoAddView: View {
             .background(backgroundColor)
             .cornerRadius(25, corners: [.topLeft, .topRight])
             .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: -5)
-            .offset(y: offset)
+            .offset(y: offset) // 這行是為了讓視圖在底部顯示
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: offset)
             .edgesIgnoringSafeArea(.bottom)
             .ignoresSafeArea(.keyboard) // 忽略鍵盤
@@ -161,9 +161,6 @@ struct TodoAddView: View {
                     
                     // 時間設定
                     dateSelectionView
-                    Divider()
-                        .background(dividerColor)
-                        .padding(.horizontal, 5)
                     
                     // 顏色選擇
                     colorPickerView
@@ -318,6 +315,10 @@ struct TodoAddView: View {
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
+            
+            Divider()
+                .background(dividerColor)
+                .padding(.horizontal, 15)
         }
         .background(backgroundColor)
         .cornerRadius(10)
@@ -343,6 +344,10 @@ struct TodoAddView: View {
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
+            
+            Divider()
+                .background(dividerColor)
+                .padding(.horizontal, 15)
         }
         .background(backgroundColor)
         .cornerRadius(10)
@@ -351,33 +356,70 @@ struct TodoAddView: View {
     // 重複選項視圖
     private var repeatOptionView: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 0) {
                 Text("重複")
                     .font(.system(size: 18, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 50, alignment: .leading)
+                    .padding(.horizontal, 15)
                 
                 Spacer()
                 
-                Picker("", selection: $repeatOption) {
-                    Text("不重複").tag(RepeatType.none)
-                    Text("每天").tag(RepeatType.daily)
-                    Text("每週").tag(RepeatType.weekly)
-                    Text("每月").tag(RepeatType.monthly)
+                // 使用Menu替代Picker，以便更好地控制對齊
+                Menu {
+                    Button("不重複") { 
+                        repeatOption = .none
+                        updateEndDateBasedOnRepeatOption(.none)
+                        viewModel.newTaskRepeatType = .none
+                    }
+                    Button("每天") { 
+                        repeatOption = .daily
+                        updateEndDateBasedOnRepeatOption(.daily)
+                        viewModel.newTaskRepeatType = .daily
+                    }
+                    Button("每週") { 
+                        repeatOption = .weekly
+                        updateEndDateBasedOnRepeatOption(.weekly)
+                        viewModel.newTaskRepeatType = .weekly
+                    }
+                    Button("每月") { 
+                        repeatOption = .monthly
+                        updateEndDateBasedOnRepeatOption(.monthly)
+                        viewModel.newTaskRepeatType = .monthly
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text(repeatOptionText)
+                            .foregroundColor(.black)
+                            .frame(width: 60, alignment: .trailing)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13))
+                            .foregroundColor(.black)
+                    }
+                    .frame(width: 90)
                 }
-                .pickerStyle(.menu)
-                .accentColor(.black)
-                .padding(.trailing, 8)  // 右移 8 點
-                .frame(width: 100, height: 44)  // 固定選單按鈕大小
-                .contentShape(Rectangle())  // 增加點擊區域但保持圖片大小
-                .onChange(of: repeatOption) { newValue in
-                    updateEndDateBasedOnRepeatOption(newValue)
-                    viewModel.newTaskRepeatType = newValue
-                }
+                .padding(.trailing, 15)
             }
-            .padding(.horizontal, 15)
             .padding(.vertical, 12)
         }
         .background(backgroundColor)
         .cornerRadius(10)
+    }
+    
+    // 根據選擇的重複選項返回對應的文字
+    private var repeatOptionText: String {
+        switch repeatOption {
+        case .none:
+            return "不重複"
+        case .daily:
+            return "每天"
+        case .weekly:
+            return "每週"
+        case .monthly:
+            return "每月"
+        }
     }
     
     // 格式化日期
