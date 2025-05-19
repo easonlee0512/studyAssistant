@@ -113,7 +113,14 @@ struct TabButtonNew: View {
     var action: () -> Void
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            // 觸發輕微震動反饋
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            
+            // 執行原本的動作
+            action()
+        }) {
             VStack(spacing: 0) {
                 Spacer()
                     .frame(height: 37)  // 增加頂部間距，讓圖標往下移

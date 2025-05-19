@@ -523,6 +523,14 @@ class TodoViewModel: ObservableObject {
     func sortedTasks(by date: Date) -> [TodoTask] {
         let filteredTasks = tasksForDate(date)
         return filteredTasks.sorted { task1, task2 in
+            return task1.startDate < task2.startDate
+        }
+    }
+    
+    // 按完成狀態和開始時間排序 - 未完成任務在前，已完成任務在後
+    func sortedTasksWithCompletionStatus(by date: Date) -> [TodoTask] {
+        let filteredTasks = tasksForDate(date)
+        return filteredTasks.sorted { task1, task2 in
             if task1.isCompleted == task2.isCompleted {
                 return task1.startDate < task2.startDate
             }

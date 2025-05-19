@@ -23,7 +23,10 @@ struct TodoDetailView: View {
     let addButtonColor = Color.hex(hex: "E28A5F") // #E28A5F 約等於 rgb(226, 138, 95)
     
     var filteredTasks: [TodoTask] {
-        viewModel.tasksForDate(date)
+        viewModel.tasksForDate(date).sorted { task1, task2 in
+            // 按照開始時間排序
+            return task1.startDate < task2.startDate
+        }
     }
     
     var body: some View {

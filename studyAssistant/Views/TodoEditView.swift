@@ -159,9 +159,6 @@ struct TodoEditView: View {
                     
                     // 時間設定
                     dateSelectionView
-                    Divider()
-                        .background(dividerColor)
-                        .padding(.horizontal, 5)
                     
                     // 顏色選擇
                     colorPickerView
@@ -171,6 +168,9 @@ struct TodoEditView: View {
                     
                     // 重複選項
                     repeatOptionView
+                    Divider()
+                    .background(dividerColor)
+                    .padding(.horizontal, 15)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 20)
@@ -317,6 +317,10 @@ struct TodoEditView: View {
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
+
+            Divider()
+                .background(dividerColor)
+                .padding(.horizontal, 15)
         }
         .background(backgroundColor)
         .cornerRadius(10)
@@ -350,32 +354,66 @@ struct TodoEditView: View {
     // 重複選項視圖
     private var repeatOptionView: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 0) {
                 Text("重複")
                     .font(.system(size: 18, weight: .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 50, alignment: .leading)
+                    .padding(.horizontal, 15)
                 
                 Spacer()
                 
-                Picker("", selection: $repeatOption) {
-                    Text("不重複").tag(RepeatType.none)
-                    Text("每天").tag(RepeatType.daily)
-                    Text("每週").tag(RepeatType.weekly)
-                    Text("每月").tag(RepeatType.monthly)
+                // 使用Menu替代Picker，以便更好地控制對齊
+                Menu {
+                    Button("不重複") { 
+                        repeatOption = .none
+                        updateEndDateBasedOnRepeatOption(.none)
+                    }
+                    Button("每天") { 
+                        repeatOption = .daily
+                        updateEndDateBasedOnRepeatOption(.daily)
+                    }
+                    Button("每週") { 
+                        repeatOption = .weekly
+                        updateEndDateBasedOnRepeatOption(.weekly)
+                    }
+                    Button("每月") { 
+                        repeatOption = .monthly
+                        updateEndDateBasedOnRepeatOption(.monthly)
+                    }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text(repeatOptionText)
+                            .foregroundColor(.black)
+                            .frame(width: 60, alignment: .trailing)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13))
+                            .foregroundColor(.black)
+                    }
+                    .frame(width: 90)
                 }
-                .pickerStyle(.menu)
-                .accentColor(.black)
-                .padding(.trailing, 8)  // 右移 8 點
-                .frame(width: 100, height: 44)  // 固定選單按鈕大小
-                .contentShape(Rectangle())  // 增加點擊區域但保持圖片大小
-                .onChange(of: repeatOption) { newValue in
-                    updateEndDateBasedOnRepeatOption(newValue)
-                }
+                .padding(.trailing, 15)
             }
-            .padding(.horizontal, 15)
             .padding(.vertical, 12)
         }
         .background(backgroundColor)
         .cornerRadius(10)
+    }
+    
+    // 根據選擇的重複選項返回對應的文字
+    private var repeatOptionText: String {
+        switch repeatOption {
+        case .none:
+            return "不重複"
+        case .daily:
+            return "每天"
+        case .weekly:
+            return "每週"
+        case .monthly:
+            return "每月"
+        }
     }
     
     // 關閉視圖帶動畫
