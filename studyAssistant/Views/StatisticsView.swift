@@ -167,8 +167,8 @@ struct StatisticsView: View {
             try? await todoViewModel.loadTasks()
             let allTasks = todoViewModel.tasks
             
-            // 3. 按類別分組計算任務數量
-            var categoryTaskCounts: [String: (total: Int, completed: Int)] = [:]
+            // 3. 按類別分組計算任務數量和專注時間
+            var categoryStats: [String: (total: Int, completed: Int, focusTime: Int)] = [:]
             
             for task in allTasks {
                 let category = task.category
@@ -176,23 +176,31 @@ struct StatisticsView: View {
                 // 忽略空類別或「未分類」
                 guard !category.isEmpty && category != "未分類" else { continue }
                 
-                // 更新該類別的任務總數和已完成數量
-                var currentCount = categoryTaskCounts[category] ?? (total: 0, completed: 0)
-                currentCount.total += 1
+                // 更新該類別的任務總數、已完成數量和專注時間
+                var currentStats = categoryStats[category] ?? (total: 0, completed: 0, focusTime: 0)
+                currentStats.total += 1
                 if task.isCompleted {
-                    currentCount.completed += 1
+                    currentStats.completed += 1
                 }
-                categoryTaskCounts[category] = currentCount
+                currentStats.focusTime += task.focusTime // 加總該類別的專注時間
+                categoryStats[category] = currentStats
+                
+                print("任務：\(task.title), 類別：\(category), 專注時間：\(task.focusTime)分鐘")
             }
             
             // 4. 遍歷每個類別，更新統計資料
-            for (category, counts) in categoryTaskCounts {
-                try? await staticViewModel.updateCategoryTaskStats(
+            for (category, stats) in categoryStats {
+                print("更新類別 \(category) 的統計資料：完成 \(stats.completed)/\(stats.total), 總專注時間：\(stats.focusTime)分鐘")
+                
+                // 更新任務統計和專注時間
+                try? await staticViewModel.updateCategoryStats(
                     category: category,
-                    completedCount: counts.completed,
-                    totalCount: counts.total
+                    completedCount: stats.completed,
+                    totalCount: stats.total,
+                    totalFocusTime: stats.focusTime
                 )
-                print("已更新類別 \(category) 的任務統計: 完成 \(counts.completed)/\(counts.total)")
+                
+                print("已更新類別 \(category) 的任務統計: 完成 \(stats.completed)/\(stats.total), 專注時間：\(stats.focusTime)分鐘")
             }
             
             // 5. 重新載入統計資料以確保顯示最新數據

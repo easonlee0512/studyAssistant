@@ -293,6 +293,35 @@ class StaticViewModel: ObservableObject {
         }
     }
     
+    // 新增：同時更新任務統計和專注時間的方法
+    func updateCategoryStats(category: String, completedCount: Int, totalCount: Int, totalFocusTime: Int) async {
+        // 檢查是否已存在該類別的統計數據
+        if let existingStat = statistics.first(where: { $0.category == category }) {
+            var updatedStat = existingStat
+            updatedStat.taskcount = totalCount
+            updatedStat.taskcompletecount = completedCount
+            updatedStat.totalFocusTime = totalFocusTime // 直接設置總專注時間
+            _ = await saveStatistic(updatedStat)
+            
+            print("更新現有統計：\(category) - 完成度：\(completedCount)/\(totalCount), 專注時間：\(totalFocusTime)分鐘")
+        } else {
+            // 創建新的統計數據
+            let newStat = LearningStatistic(
+                userId: Auth.auth().currentUser?.uid ?? "",
+                category: category,
+                taskcount: totalCount,
+                taskcompletecount: completedCount,
+                totalFocusTime: totalFocusTime,
+                date: Date(),
+                updatedAt: Date(),
+                version: 1
+            )
+            _ = await saveStatistic(newStat)
+            
+            print("創建新統計：\(category) - 完成度：\(completedCount)/\(totalCount), 專注時間：\(totalFocusTime)分鐘")
+        }
+    }
+    
     // 計算類別數量
     func categoryCount() -> Int {
         return Set(statistics.map { $0.category }).count

@@ -324,6 +324,8 @@ struct TimerView: View {
     @EnvironmentObject var timerManager: TimerManager
     // 添加TodoViewModel環境物件
     @EnvironmentObject var todoViewModel: TodoViewModel
+    // 添加 StaticViewModel 環境物件
+    @EnvironmentObject var staticViewModel: StaticViewModel
     
     // 僅保留視圖相關的本地狀態
     @State private var isDragging = false // 是否正在拖動
@@ -386,9 +388,12 @@ struct TimerView: View {
         .onAppear {
             // 當視圖出現時，設置TodoViewModel並更新當前任務
             timerManager.setTodoViewModel(todoViewModel)
+            // 設置 StaticViewModel
+            timerManager.setStaticViewModel(staticViewModel)
             
             // 輸出偵錯信息
             print("TimerView appeared - todoViewModel available: \(todoViewModel != nil)")
+            print("TimerView appeared - staticViewModel available: \(staticViewModel != nil)")
             
             // 如果計時器正在運行，觸發一次更新
             if timerManager.isRunning {
@@ -513,6 +518,7 @@ struct TimerView_Previews: PreviewProvider {
         TimerView()
             .environmentObject(TimerManager())
             .environmentObject(TodoViewModel())
+            .environmentObject(StaticViewModel())
     }
 }
 
@@ -521,5 +527,6 @@ struct TimerView_Previews: PreviewProvider {
     TimerView()
         .environmentObject(TimerManager())
         .environmentObject(TodoViewModel())
+        .environmentObject(StaticViewModel())
 }
 
