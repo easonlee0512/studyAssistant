@@ -178,14 +178,15 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         let startOfStartDate = calendar.startOfDay(for: startDate)
         let startOfEndDate   = calendar.startOfDay(for: endDate)
         
+        // 如果日期早於起始日，一律不顯示
+        guard startOfDate >= startOfStartDate else { return false }
+        
         switch repeatType {
         case .daily:
             // 每天無限重複，只要日期不早於起始日
             return startOfDate >= startOfStartDate
             
         case .weekly:
-            guard startOfDate >= startOfStartDate else { return false }
-            
             // ① 這週的「起日」「迄日」各落在星期幾
             let startW = (calendar.component(.weekday, from: startDate) - 1 + 7) % 7
             let span   = calendar.dateComponents([.day],
@@ -197,11 +198,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             let shiftInWeek = (weekday - startW + 7) % 7
             
             // ③ 「有指定 days」→ 直接比對；否則就用 span 判斷連續區段
-                return shiftInWeek < span
+            return shiftInWeek < span
             
         case .monthly:
-            guard startOfDate >= startOfStartDate else { return false }
-            
             // ① 取得目標日期是幾號
             let dayOfMonth = calendar.component(.day, from: date)
             
@@ -215,7 +214,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             let shift = ((dayOfMonth - startDay + 31) % 31)
             
             // ④ 「有指定日期」→ 直接比對；否則就用 span 判斷連續區段
-                return shift < span
+            return shift < span
             
         case .none:
             // 不重複：仍只顯示在原始區段內
