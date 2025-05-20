@@ -483,7 +483,7 @@ struct TaskBarView<Content: View>: View {
     let width: CGFloat
     let content: () -> Content
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack {
             RoundedRectangle(cornerRadius: 4)
                 .fill(color)
                 .modifier(TaskBarCornerModifier(showLeftRadius: showLeftRadius, showRightRadius: showRightRadius, isSingle: isSingle, radius: 4))
@@ -493,8 +493,9 @@ struct TaskBarView<Content: View>: View {
             
             content()
                 .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 2)  // 減少左邊間距（原本是 3）
+                .frame(maxWidth: width - 8, alignment: .center) // 修改：設置最大寬度並置中
+                .lineLimit(1) // 確保只顯示一行
+                .truncationMode(.tail) // 超出部分顯示省略號
                 .zIndex(1) // 確保內容在上層
         }
         .frame(width: width)
