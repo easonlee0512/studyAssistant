@@ -61,6 +61,9 @@ class TimerManager: ObservableObject {
     // 新增當前任務ID
     private var currentTaskId: String?
     
+    // 新增 StaticViewModel 屬性
+    private var staticViewModel: StaticViewModel?
+    
     init() {
         // 初始化時分秒
         updateTimeComponents()
@@ -135,6 +138,9 @@ class TimerManager: ObservableObject {
         
         // 清除 TodoViewModel 參考
         todoViewModel = nil
+        
+        // 重置 StaticViewModel 參考
+        staticViewModel = nil
         
         print("計時器狀態已完全清理")
     }
@@ -507,8 +513,8 @@ class TimerManager: ObservableObject {
             return
         }
         
-        // 取得靜態數據的ViewModel
-        guard let staticViewModel = getStaticViewModel() else {
+        // 使用直接注入的 StaticViewModel
+        guard let staticViewModel = self.staticViewModel else {
             print("❌ 無法獲取 StaticViewModel - 這可能是統計不更新的原因")
             return
         }
@@ -702,5 +708,11 @@ class TimerManager: ObservableObject {
             // 輸出調試信息
             print("手動調整時間 - 將時間更新為: \(hours):\(minutes):\(seconds) - 總秒數: \(timeRemaining)")
         }
+    }
+    
+    // 新增設置 StaticViewModel 的方法
+    @MainActor func setStaticViewModel(_ viewModel: StaticViewModel) {
+        self.staticViewModel = viewModel
+        print("StaticViewModel 已設置")
     }
 }
