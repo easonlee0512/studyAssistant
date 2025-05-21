@@ -1077,9 +1077,8 @@ final class ChatViewModel: ObservableObject {
         let systemMsg = OpenAIMessage(
             role: "system",
             content: """
-                你是一位「計畫大師」，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
-
-                使用者的讀書習慣設定：
+                你可以安排計劃，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
+                
                 \(formatStudySettings())
 
                 可用工具：
@@ -1094,18 +1093,21 @@ final class ChatViewModel: ObservableObject {
                     - 使用者明確表示要結束對話
                     - 使用者的需求已完整處理完畢
                     - 對話已經沒有明確目標或進展
-                3. 避免冗長對話。
+                3. 講話講重點就好了。
                 4. 不要重複呼叫同一個 function，除非有新需求或新資訊。
-                5. 如需要詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
-                6. 如有疑問需要向使用者請教，那先等使用者回答之後再使用除end_conversation外的function。
-                7. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
+                5. 不要在文字裡打出要用的function。
+                6. 詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
+                7. 如有疑問需要向使用者請教，那先等使用者回答之後再使用除end_conversation外的function。
+                8. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
                     - 只能在使用者設定的可讀書日期和時間內安排任務
                     - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
                     - 不要在設定的時間範圍外安排任務
                     - 不要與原有的任務時間重疊
-                8. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
-                9. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
-                10. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），要遵從使用者的安排，不要先安排幾個然後再問使用者是否要安排更多。
+                9. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
+                10. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
+                11. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），要遵從使用者的安排一次安排好，不要先安排幾個然後再問使用者是否要安排更多。
+                12. 使用者說想要，就要直接安排任務。
+                13. 沒有指定時間就是現在。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1139,7 +1141,7 @@ final class ChatViewModel: ObservableObject {
             }
 
             let reqBody = OpenAIRequest(
-                model: "gpt-4.1",
+                model: "gpt-4.1-mini",
                 messages: allMessages,
                 temperature: 0.7,
                 stream: true,
@@ -1764,7 +1766,7 @@ final class ChatViewModel: ObservableObject {
             return "尚未設定讀書習慣"
         }
 
-        var result = "可讀書時段如下：\n"
+        var result = "使用者的讀書習慣設定：\n讀書時段如下：\n"
 
         for day in settings.selectedDays.sorted() {
             let dayString = String(day)
