@@ -103,10 +103,8 @@ struct SettingsView: View {
                                     set: { newValue in
                                         Task {
                                             await viewModel.updateAppSettings(
-                                            isDarkMode: viewModel.appSettings.isDarkMode,
-                                            notificationsEnabled: newValue,
-                                            isShockEnabled: viewModel.appSettings.isShockEnabled
-                                        )
+                                                notificationsEnabled: newValue
+                                            )
                                         }
                                     }
                                 )

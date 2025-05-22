@@ -93,8 +93,20 @@ struct TodoDetailView: View {
                     ScrollView {
                         LazyVStack(spacing: 10) {
                             ForEach(filteredTasks) { task in
-                                todoCard(task: task)
-                                    .frame(height: 90)
+                                // 獲取該任務在當前日期的實例
+                                let instances = viewModel.getInstancesForDate(date, task: task)
+                                
+                                if !instances.isEmpty {
+                                    // 顯示每個實例
+                                    ForEach(instances) { instance in
+                                        todoInstanceCard(task: task, instance: instance)
+                                            .frame(height: 90)
+                                    }
+                                } else {
+                                    // 如果沒有實例但任務應該顯示在這一天，顯示任務本身
+                                    todoCard(task: task)
+                                        .frame(height: 90)
+                                }
                             }
                         }
                         .padding(.top, 10)
@@ -144,6 +156,64 @@ struct TodoDetailView: View {
                     Text(task.note)
                         .font(.system(size: 15))
                         .foregroundColor(.black.opacity(0.7))
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: 90)
+        .background(Color.hex(hex: "FEECD8"))
+        .cornerRadius(16)
+    }
+    
+    // 任務實例卡片視圖
+    func todoInstanceCard(task: TodoTask, instance: TaskInstance) -> some View {
+        HStack(spacing: 0) {
+            // 背景色塊
+            RoundedRectangle(cornerRadius: 16)
+                .fill(task.color)
+                .frame(maxWidth: 10, maxHeight: .infinity)
+            
+            // 內容
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .center) {
+                    Text(task.title)
+                        .font(.system(size: 20))
+                        .fontWeight(.semibold)
+                        .foregroundColor(instance.isCompleted ? .gray : .black)
+                        .strikethrough(instance.isCompleted)
+                    
+                    Spacer()
+                    
+                    Text(task.formattedTime)
+                        .font(.system(size: 15))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black.opacity(0.7))
+                }
+                .padding(.top, 5)
+                
+                if !task.note.isEmpty {
+                    Text(task.note)
+                        .font(.system(size: 15))
+                        .foregroundColor(.black.opacity(0.7))
+                }
+                
+                // 實例完成狀態
+                HStack {
+                    Spacer()
+                    Text(instance.isCompleted ? "已完成" : "未完成")
+                        .font(.system(size: 12))
+                        .foregroundColor(instance.isCompleted ? .green : .orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(instance.isCompleted ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
+                        )
                 }
                 
                 Spacer()

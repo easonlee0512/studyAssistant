@@ -561,12 +561,152 @@ struct CalendarMonthView: View {
     let monthDate: Date
     let geometry: GeometryProxy
     let selectDate: (Int, Int) -> Void
-    @ObservedObject var viewModel: TodoViewModel // 改為 ObservedObject
+    @ObservedObject var viewModel: TodoViewModel
     let isDragging: Bool
     @State private var selectedDateId: String? = nil
     private let calendar = Calendar.current
     private let maxRows = 4 // 最大顯示行數
-
+    
+    var body: some View {
+        let cellHeight = (geometry.size.height - 25) / 6
+        
+        // 預先計算所有所需數據
+        let tasksData = prepareTasksData()
+        
+        VStack(spacing: 0) {
+            ForEach(0..<6) { rowIndex in
+                HStack(spacing: 0) {
+                    ForEach(0..<7) { columnIndex in
+                        let dateText = calendarData[rowIndex][columnIndex]
+                        let cellDate = getCellDate(row: rowIndex, column: columnIndex)
+                        
+                        // 獲取該天所有該顯示的任務
+                        let allTasksForThisDay: [TodoTask] = getTasksForDate(cellDate)
+                        
+                        // 從分配結果中獲取當天的任務列表
+                        let tasksToShowInCell: [TodoTask?] = cellDate.map { date in
+                            (0..<maxRows).map { tasksData.rowAssignments[date]?[$0] }
+                        } ?? Array(repeating: nil, count: maxRows)
+                        
+                        let isToday = cellDate.map { calendar.isDateInToday($0) } ?? false
+                        let isCurrentCellMonth = cellDate.map { calendar.isDate($0, equalTo: monthDate, toGranularity: .month) } ?? false
+                        
+                        DayCellView(
+                            row: rowIndex,
+                            column: columnIndex,
+                            dateText: dateText,
+                            cellDate: cellDate,
+                            tasksForThisDay: tasksToShowInCell,
+                            allTasksForThisDay: allTasksForThisDay,
+                            isToday: isToday,
+                            isCurrentMonth: isCurrentCellMonth,
+                            geometry: geometry,
+                            cellHeight: cellHeight,
+                            dateLabelHeight: 20,
+                            onTap: {
+                                selectedDateId = "\(rowIndex)-\(columnIndex)"
+                                if let date = cellDate {
+                                    selectDate(rowIndex, columnIndex)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        .frame(width: geometry.size.width, height: geometry.size.height - 25)
+        .drawingGroup()
+        .animation(nil, value: isDragging)
+        .onAppear {
+            eventPlacementManager.clearPositions()
+        }
+    }
+    
+    // 輔助函數：準備所有任務數據
+    private func prepareTasksData() -> (allTasks: [TodoTask], rowAssignments: [Date: [Int: TodoTask]]) {
+        // 獲取當月的日期範圍
+        let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: monthDate))!
+        let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart)!
+        let daysInMonth = calendar.dateComponents([.day], from: monthStart, to: nextMonthStart).day!
+        
+        // 收集所有任務（包括重複任務的實例）
+        var allTasksForMonth: [TodoTask] = []
+        
+        // 為當月每一天收集任務
+        for day in 0..<daysInMonth {
+            if let date = calendar.date(byAdding: .day, value: day, to: monthStart) {
+                allTasksForMonth.append(contentsOf: getTasksForDate(date))
+            }
+        }
+        
+        // 分配任務行
+        let rowAssignments = assignRowsForMonth(allTasks: allTasksForMonth)
+        
+        return (allTasksForMonth, rowAssignments)
+    }
+    
+    // 輔助函數：獲取指定日期的所有任務
+    private func getTasksForDate(_ date: Date?) -> [TodoTask] {
+        guard let date = date else { return [] }
+        
+        let tasksForDate = viewModel.tasksForDate(date)
+        var tasksToShow: [TodoTask] = []
+        
+        for task in tasksForDate {
+            if task.repeatType == .none {
+                tasksToShow.append(task)
+            } else {
+                // 獲取當前日期的實例
+                let instances = viewModel.getInstancesForDate(date, task: task)
+                
+                // 即使沒有當前日期的實例，也檢查是否有已完成的實例
+                var foundInstance = false
+                
+                // 檢查所有實例，查找匹配當前日期的實例
+                for instance in task.instances {
+                    if Calendar.current.isDate(instance.date, inSameDayAs: date) {
+                        var instanceTask = task
+                        instanceTask.startDate = instance.date
+                        instanceTask.endDate = instance.date
+                        instanceTask.isCompleted = instance.isCompleted
+                        tasksToShow.append(instanceTask)
+                        foundInstance = true
+                        break
+                    }
+                }
+                
+                // 如果沒有找到實例但根據當前的重複模式應該顯示
+                if !foundInstance && !instances.isEmpty {
+                    let instance = instances.first!
+                    var instanceTask = task
+                    instanceTask.startDate = instance.date
+                    instanceTask.endDate = instance.date
+                    instanceTask.isCompleted = instance.isCompleted
+                    tasksToShow.append(instanceTask)
+                }
+            }
+        }
+        
+        return tasksToShow
+    }
+    
+    // 計算這格的 Date，根據 monthDate
+    func getCellDate(row: Int, column: Int) -> Date? {
+        let dateText = calendarData[row][column]
+        guard let day = Int(dateText) else { return nil }
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month], from: monthDate)
+        dateComponents.day = day
+        // 判斷這格是本月、上月還是下月
+        if row == 0 && day > 7 { // 上個月
+            return calendar.date(byAdding: .month, value: -1, to: calendar.date(from: dateComponents)!)
+        } else if row >= 4 && day < 15 { // 下個月
+            return calendar.date(byAdding: .month, value: 1, to: calendar.date(from: dateComponents)!)
+        }
+        // 本月
+        return calendar.date(from: dateComponents)
+    }
+    
     // 將任務分配邏輯移至此處
     func assignRowsForMonth(allTasks: [TodoTask]) -> [Date: [Int: TodoTask]] {
         var rowUsage: [Date: [Int: TodoTask]] = [:]
@@ -626,80 +766,6 @@ struct CalendarMonthView: View {
         }
 
         return rowUsage
-    }
-    
-    var body: some View {
-        let cellHeight = (geometry.size.height - 25) / 6
-        // 獲取當月所有任務，然後進行行分配
-        let allTasksForMonth = viewModel.tasks // 假設 viewModel.tasks 包含所有任務
-        let rowAssignments = assignRowsForMonth(allTasks: allTasksForMonth)
-
-        VStack(spacing: 0) {
-            ForEach(0..<6) { rowIndex in // Grid row
-                HStack(spacing: 0) {
-                    ForEach(0..<7) { columnIndex in // Grid column
-                        let dateText = calendarData[rowIndex][columnIndex]
-                        let cellDate = getCellDate(row: rowIndex, column: columnIndex)
-                        
-                        // 新增：取得該天所有該顯示的任務
-                        let allTasksForThisDay: [TodoTask] = cellDate.map { date in
-                            allTasksForMonth.filter { $0.shouldDisplay(on: date) }
-                        } ?? []
-                        // 從分配結果中獲取當天的任務列表，保留空位
-                        let tasksToShowInCell: [TodoTask?] = cellDate.map { date in
-                            (0..<maxRows).map { rowAssignments[date]?[$0] }
-                        } ?? Array(repeating: nil, count: maxRows)
-                        
-                        let isToday = cellDate.map { calendar.isDateInToday($0) } ?? false
-                        let isCurrentCellMonth = cellDate.map { calendar.isDate($0, equalTo: monthDate, toGranularity: .month) } ?? false
-                        
-                        DayCellView(
-                            row: rowIndex,
-                            column: columnIndex,
-                            dateText: dateText,
-                            cellDate: cellDate,
-                            tasksForThisDay: tasksToShowInCell,
-                            allTasksForThisDay: allTasksForThisDay, // 新增
-                            isToday: isToday,
-                            isCurrentMonth: isCurrentCellMonth,
-                            geometry: geometry,
-                            cellHeight: cellHeight,
-                            dateLabelHeight: 20,
-                            onTap: {
-                                selectedDateId = "\(rowIndex)-\(columnIndex)"
-                                if let date = cellDate {
-                                    selectDate(rowIndex, columnIndex)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        .frame(width: geometry.size.width, height: geometry.size.height - 25)
-        .drawingGroup()
-        .animation(nil, value: isDragging)
-        .onAppear {
-            // 清除之前的位置信息
-            eventPlacementManager.clearPositions()
-        }
-    }
-    
-    // 計算這格的 Date，根據 monthDate
-    func getCellDate(row: Int, column: Int) -> Date? {
-        let dateText = calendarData[row][column]
-        guard let day = Int(dateText) else { return nil }
-        let calendar = Calendar.current
-        var dateComponents = calendar.dateComponents([.year, .month], from: monthDate)
-        dateComponents.day = day
-        // 判斷這格是本月、上月還是下月
-        if row == 0 && day > 7 { // 上個月
-            return calendar.date(byAdding: .month, value: -1, to: calendar.date(from: dateComponents)!)
-        } else if row >= 4 && day < 15 { // 下個月
-            return calendar.date(byAdding: .month, value: 1, to: calendar.date(from: dateComponents)!)
-        }
-        // 本月
-        return calendar.date(from: dateComponents)
     }
 }
 

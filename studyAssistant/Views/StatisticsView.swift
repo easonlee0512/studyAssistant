@@ -134,8 +134,12 @@ struct StatisticsView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
-            loadData()
-            syncStatisticsWithTasks()
+            Task {
+                // 先同步和清理統計資料
+                await syncStatisticsWithTasks()
+                // 再載入顯示資料
+                loadData()
+            }
         }
     }
     
@@ -155,7 +159,7 @@ struct StatisticsView: View {
     }
     
     // 同步任務與統計數據
-    private func syncStatisticsWithTasks() {
+    private func syncStatisticsWithTasks() async {
         Task {
             isSyncing = true
             defer { isSyncing = false }
@@ -173,8 +177,10 @@ struct StatisticsView: View {
             for task in allTasks {
                 let category = task.category
                 
-                // 忽略空類別或「未分類」
-                guard !category.isEmpty && category != "未分類" else { continue }
+                // 忽略空類別、「未分類」和重複任務
+                guard !category.isEmpty && 
+                      category != "未分類" && 
+                      task.repeatType == .none else { continue }
                 
                 // 更新該類別的任務總數、已完成數量和專注時間
                 var currentStats = categoryStats[category] ?? (total: 0, completed: 0, focusTime: 0)
@@ -182,28 +188,37 @@ struct StatisticsView: View {
                 if task.isCompleted {
                     currentStats.completed += 1
                 }
-                currentStats.focusTime += task.focusTime // 加總該類別的專注時間
+                currentStats.focusTime += task.focusTime
                 categoryStats[category] = currentStats
                 
-                print("任務：\(task.title), 類別：\(category), 專注時間：\(task.focusTime)分鐘")
+                print("計入統計的任務：\(task.title), 類別：\(category), 專注時間：\(task.focusTime)分鐘")
             }
             
-            // 4. 遍歷每個類別，更新統計資料
+            // 4. 檢查並刪除沒有任務的類別統計
+            let existingCategories = Set(categoryStats.keys)
+            for statistic in staticViewModel.statistics {
+                if !existingCategories.contains(statistic.category) {
+                    // 如果統計中的類別在實際任務中不存在，則刪除該統計
+                    if let statisticId = statistic.id {
+                        print("刪除無效統計類別：\(statistic.category)")
+                        await staticViewModel.deleteStatistic(statisticId)
+                    }
+                }
+            }
+            
+            // 5. 更新或創建有效的類別統計
             for (category, stats) in categoryStats {
                 print("更新類別 \(category) 的統計資料：完成 \(stats.completed)/\(stats.total), 總專注時間：\(stats.focusTime)分鐘")
                 
-                // 更新任務統計和專注時間
                 try? await staticViewModel.updateCategoryStats(
                     category: category,
                     completedCount: stats.completed,
                     totalCount: stats.total,
                     totalFocusTime: stats.focusTime
                 )
-                
-                print("已更新類別 \(category) 的任務統計: 完成 \(stats.completed)/\(stats.total), 專注時間：\(stats.focusTime)分鐘")
             }
             
-            // 5. 重新載入統計資料以確保顯示最新數據
+            // 6. 重新載入統計資料以確保顯示最新數據
             try? await staticViewModel.fetchStatistics()
         }
     }
@@ -259,9 +274,28 @@ struct StatisticsView: View {
         let now = Date()
         let today = calendar.startOfDay(for: now)
         
-        // 獲取當天的任務
+        // 獲取當天的所有任務
         let dayTasks = todoViewModel.tasksForDate(today)
-        todayTasks = dayTasks.map { ($0.title, $0.isCompleted) }
+        var todayTasksStatus: [(task: String, isCompleted: Bool)] = []
+        
+        for task in dayTasks {
+            if task.repeatType == .none {
+                // 非重複任務直接使用任務的完成狀態
+                todayTasksStatus.append((task.title, task.isCompleted))
+            } else {
+                // 對於重複任務，檢查當天的實例狀態
+                let instances = todoViewModel.getInstancesForDate(today, task: task)
+                if let instance = instances.first {
+                    // 使用實例的完成狀態
+                    todayTasksStatus.append((task.title, instance.isCompleted))
+                } else {
+                    // 如果沒有找到實例，使用任務的預設狀態
+                    todayTasksStatus.append((task.title, false))
+                }
+            }
+        }
+        
+        todayTasks = todayTasksStatus
     }
     
     // 更新日期顯示

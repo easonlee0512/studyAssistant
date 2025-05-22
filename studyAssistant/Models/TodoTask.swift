@@ -40,6 +40,41 @@ public enum RepeatType: Hashable, Codable {
     }
 }
 
+// 任務實例資料結構
+public struct TaskInstance: Identifiable, Codable, Equatable {
+    public let id: String
+    var date: Date
+    var isCompleted: Bool
+    var parentTaskId: String
+    
+    // 從 Firestore 資料建立實例
+    init?(documentId: String, data: [String: Any]) {
+        guard let date = (data["date"] as? Timestamp)?.dateValue(),
+              let isCompleted = data["isCompleted"] as? Bool,
+              let parentTaskId = data["parentTaskId"] as? String
+        else { return nil }
+        
+        self.id = documentId
+        self.date = date
+        self.isCompleted = isCompleted
+        self.parentTaskId = parentTaskId
+    }
+    
+    // 轉換為 Firestore 資料
+    var toFirestore: [String: Any] {
+        return [
+            "date": Timestamp(date: date),
+            "isCompleted": isCompleted,
+            "parentTaskId": parentTaskId
+        ]
+    }
+    
+    // 實現 Equatable
+    public static func == (lhs: TaskInstance, rhs: TaskInstance) -> Bool {
+        return lhs.id == rhs.id
+    }
+}
+
 // Todo 任務資料結構
 public struct TodoTask: Identifiable, Codable, Equatable {
     public let id: String                     // Firestore 文件 ID
@@ -53,14 +88,17 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     var isCompleted: Bool              // 是否完成
     var repeatType: RepeatType         // 重複類型
     var startDate: Date                // 任務開始日期（重複任務的起始日）
-    var endDate: Date                  // 任務結束日期（重複任務的結束日）
+    var endDate: Date                  // 任務結束日期
+    var repeatEndDate: Date?           // 重複任務的結束日期
     var createdAt: Date                // 任務建立時間
     var userId: String                 // 使用者 ID
+    
+    var instances: [TaskInstance]
     
     // 建立新任務的初始化方法
     init(title: String, note: String, color: Color, focusTime: Int = 0, category: String,
          isAllDay: Bool, isCompleted: Bool, repeatType: RepeatType,
-         startDate: Date, endDate: Date, userId: String = Auth.auth().currentUser?.uid ?? "") {
+         startDate: Date, endDate: Date, repeatEndDate: Date? = nil, userId: String = Auth.auth().currentUser?.uid ?? "") {
         self.id = UUID().uuidString
         self.title = title
         self.note = note
@@ -72,8 +110,10 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         self.repeatType = repeatType
         self.startDate = startDate
         self.endDate = endDate
+        self.repeatEndDate = repeatEndDate
         self.createdAt = Date()
         self.userId = userId.isEmpty ? (Auth.auth().currentUser?.uid ?? "default") : userId
+        self.instances = []
     }
     
     // 從 Firestore 資料建立任務
@@ -107,8 +147,10 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         self.isCompleted = isCompleted
         self.startDate = startDate
         self.endDate = endDate
+        self.repeatEndDate = (data["repeatEndDate"] as? Timestamp)?.dateValue()
         self.createdAt = createdAt
         self.userId = userId
+        self.instances = []
         
         // 解析 RepeatType
         if let type = repeatTypeRaw["type"] as? String {
@@ -149,7 +191,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             break
         }
         
-        return [
+        var data: [String: Any] = [
             "title": title,
             "note": note,
             "color": colorData,
@@ -163,6 +205,13 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             "createdAt": Timestamp(date: createdAt),
             "userId": userId
         ]
+        
+        // 如果有重複結束日期，加入資料中
+        if let repeatEndDate = repeatEndDate {
+            data["repeatEndDate"] = Timestamp(date: repeatEndDate)
+        }
+        
+        return data
     }
     
     // 格式化時間為字符串
@@ -178,13 +227,26 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         let startOfStartDate = calendar.startOfDay(for: startDate)
         let startOfEndDate   = calendar.startOfDay(for: endDate)
         
+        // 檢查是否有該日期的已完成實例
+        if hasCompletedInstance(on: date) {
+            return true
+        }
+        
         // 如果日期早於起始日，一律不顯示
         guard startOfDate >= startOfStartDate else { return false }
         
+        // 如果是重複任務且有結束日期，檢查是否超過結束日期
+        if repeatType != .none, let repeatEndDate = repeatEndDate {
+            let startOfRepeatEndDate = calendar.startOfDay(for: repeatEndDate)
+            if startOfDate > startOfRepeatEndDate {
+                return false
+            }
+        }
+        
         switch repeatType {
         case .daily:
-            // 每天無限重複，只要日期不早於起始日
-            return startOfDate >= startOfStartDate
+            // 每天重複，只要日期不早於起始日且不晚於結束日即可
+            return true
             
         case .weekly:
             // ① 這週的「起日」「迄日」各落在星期幾
@@ -222,6 +284,20 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         }
     }
     
+    // 檢查特定日期是否有已完成的實例
+    func hasCompletedInstance(on date: Date) -> Bool {
+        let calendar = Calendar.current
+        
+        // 檢查所有實例
+        for instance in instances {
+            if instance.isCompleted && calendar.isDate(instance.date, inSameDayAs: date) {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
     // 實現 Equatable
     public static func == (lhs: TodoTask, rhs: TodoTask) -> Bool {
         return lhs.id == rhs.id
@@ -229,7 +305,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     
     // 為 Codable 添加 CodingKeys
     enum CodingKeys: String, CodingKey {
-        case id, title, note, focusTime, category, isAllDay, isCompleted, repeatType, startDate, endDate, createdAt, userId
+        case id, title, note, focusTime, category, isAllDay, isCompleted, repeatType, startDate, endDate, createdAt, userId, instances
         case color // 特別處理
     }
     
@@ -248,6 +324,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         try container.encode(endDate, forKey: .endDate)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(userId, forKey: .userId)
+        try container.encode(instances, forKey: .instances)
         
         // 編碼顏色
         let colorComponents = UIColor(color).cgColor.components ?? [0, 0, 0, 1]
@@ -275,6 +352,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         endDate = try container.decode(Date.self, forKey: .endDate)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         userId = try container.decode(String.self, forKey: .userId)
+        instances = try container.decode([TaskInstance].self, forKey: .instances)
         
         // 解碼顏色
         let colorData = try container.decode([String: CGFloat].self, forKey: .color)

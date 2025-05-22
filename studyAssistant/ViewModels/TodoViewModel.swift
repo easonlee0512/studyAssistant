@@ -26,6 +26,7 @@ class TodoViewModel: ObservableObject {
     @Published var newTaskStartDate = Date()
     @Published var newTaskEndDate = Date().addingTimeInterval(3600)
     @Published var newTaskRepeatType: RepeatType = .none
+    @Published var newTaskRepeatEndDate: Date? = nil
     @Published var newTaskSelectedDays: Set<Int> = []
     @Published var newTaskSelectedMonthDays: Set<Int> = []
     @Published var isLoading = false
@@ -160,20 +161,21 @@ class TodoViewModel: ObservableObject {
                 if !changes.isEmpty {
                     print("檢測到任務更新，共 \(changes.count) 個變化")
                     
-                    // 直接更新本地任務列表，而不是重新載入
-                    var updatedTasks: [TodoTask] = []
-                    
-                    for document in snapshot.documents {
-                        if let task = TodoTask(documentId: document.documentID, data: document.data()) {
-                            updatedTasks.append(task)
+                    Task {
+                        do {
+                            // 直接重新載入所有任務，包括實例
+                            let updatedTasks = try await self.firebaseService.fetchTodoTasks()
+                            
+                            // 在主線程更新 UI
+                            await MainActor.run {
+                                self.tasks = updatedTasks
+                                self.lastTasksLoadTime = Date()
+                                // 發送資料變更通知
+                                NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
+                            }
+                        } catch {
+                            print("Error reloading tasks: \(error)")
                         }
-                    }
-                    
-                    // 在主線程更新 UI
-                    Task { @MainActor in
-                        self.tasks = updatedTasks
-                        // 發送資料變更通知
-                        NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
                     }
                 }
             }
@@ -227,6 +229,7 @@ class TodoViewModel: ObservableObject {
         newTaskStartDate = selectedDate
         newTaskEndDate = selectedDate.addingTimeInterval(3600)
         newTaskRepeatType = .none
+        newTaskRepeatEndDate = nil
         newTaskSelectedDays.removeAll()
         newTaskSelectedMonthDays.removeAll()
         errorMessage = nil
@@ -283,6 +286,7 @@ class TodoViewModel: ObservableObject {
             repeatType: newTaskRepeatType,
             startDate: newTaskStartDate,
             endDate: newTaskEndDate,
+            repeatEndDate: newTaskRepeatType != .none ? newTaskRepeatEndDate : nil,
             userId: currentUserId
         )
         
@@ -301,16 +305,7 @@ class TodoViewModel: ObservableObject {
             return
         }
         
-        // 檢查是否需要重新載入
-        let now = Date()
-        if let lastLoad = lastTasksLoadTime, 
-           now.timeIntervalSince(lastLoad) < cacheTimeInterval,
-           !tasks.isEmpty {
-            // 如果在快取時間內且已有資料，直接返回
-            print("使用快取的任務數據，距離上次載入: \(now.timeIntervalSince(lastLoad))秒")
-            return
-        }
-        
+        // 強制重新載入資料
         isLoading = true
         defer { isLoading = false }
         
@@ -327,7 +322,7 @@ class TodoViewModel: ObservableObject {
         
         // 載入任務
         tasks = try await firebaseService.fetchTodoTasks()
-        lastTasksLoadTime = now
+        lastTasksLoadTime = Date()
         print("從Firebase重新載入任務數據")
         
         // 設置監聽器（如果還沒有設置）
@@ -388,6 +383,11 @@ class TodoViewModel: ObservableObject {
             var updatedTask = task
             updatedTask.userId = currentUserId
             
+            // 如果是重複任務，設定 repeatEndDate
+            if updatedTask.repeatType != .none {
+                updatedTask.repeatEndDate = newTaskRepeatEndDate
+            }
+            
             try await firebaseService.saveTodoTask(updatedTask)
             
             // 重新加載任務列表以獲取最新數據
@@ -408,6 +408,11 @@ class TodoViewModel: ObservableObject {
     }
     
     func toggleTaskCompletion(_ task: TodoTask) async {
+        // 如果是重複任務，不應該直接切換主任務的完成狀態
+        if task.repeatType != .none {
+            return
+        }
+        
         // 1. 立即更新本地狀態
         var updatedTask = task
         updatedTask.isCompleted.toggle()
@@ -541,6 +546,86 @@ class TodoViewModel: ObservableObject {
     // 根據ID獲取任務
     func getTaskById(_ id: String) -> TodoTask? {
         return tasks.first { $0.id == id }
+    }
+    
+    // MARK: - Task Instances
+    
+    func toggleInstanceCompletion(_ instance: TaskInstance, in task: TodoTask) async throws {
+        // 1. 立即更新本地狀態
+        if let taskIndex = tasks.firstIndex(where: { $0.id == task.id }),
+           let instanceIndex = tasks[taskIndex].instances.firstIndex(where: { $0.id == instance.id }) {
+            var updatedTask = tasks[taskIndex]
+            var updatedInstance = instance
+            updatedInstance.isCompleted.toggle()
+            updatedTask.instances[instanceIndex] = updatedInstance
+            
+            // 不修改原始任務的 isCompleted 狀態
+            tasks[taskIndex] = updatedTask
+            
+            do {
+                // 2. 只更新實例的完成狀態
+                try await firebaseService.updateTaskInstanceCompletion(
+                    taskId: task.id,
+                    instanceId: instance.id,
+                    isCompleted: updatedInstance.isCompleted
+                )
+            } catch {
+                // 3. 如果更新失敗，恢復本地狀態
+                updatedInstance.isCompleted.toggle()
+                updatedTask.instances[instanceIndex] = updatedInstance
+                tasks[taskIndex] = updatedTask
+                
+                // 4. 拋出錯誤
+                throw error
+            }
+        }
+    }
+    
+    // 獲取特定日期的任務實例
+    func getInstancesForDate(_ date: Date, task: TodoTask) -> [TaskInstance] {
+        let calendar = Calendar.current
+        return task.instances.filter { instance in
+            calendar.isDate(instance.date, inSameDayAs: date)
+        }
+    }
+    
+    // 獲取所有未完成的任務實例
+    func getIncompleteInstances(task: TodoTask) -> [TaskInstance] {
+        return task.instances.filter { !$0.isCompleted }
+    }
+    
+    // 獲取所有已完成的任務實例
+    func getCompletedInstances(task: TodoTask) -> [TaskInstance] {
+        return task.instances.filter { $0.isCompleted }
+    }
+    
+    // 更新任務實例
+    func updateInstance(_ instance: TaskInstance, in task: TodoTask) async throws {
+        if let taskIndex = tasks.firstIndex(where: { $0.id == task.id }) {
+            var updatedTask = tasks[taskIndex]
+            if let instanceIndex = updatedTask.instances.firstIndex(where: { $0.id == instance.id }) {
+                updatedTask.instances[instanceIndex] = instance
+                
+                // 只更新實例的完成狀態，不使用 updateTask
+                try await firebaseService.updateTaskInstanceCompletion(
+                    taskId: task.id,
+                    instanceId: instance.id,
+                    isCompleted: instance.isCompleted
+                )
+                
+                // 更新本地狀態
+                tasks[taskIndex] = updatedTask
+            }
+        }
+    }
+    
+    // 刪除任務實例
+    func deleteInstance(_ instance: TaskInstance, from task: TodoTask) async throws {
+        if let taskIndex = tasks.firstIndex(where: { $0.id == task.id }) {
+            var updatedTask = tasks[taskIndex]
+            updatedTask.instances.removeAll { $0.id == instance.id }
+            try await updateTask(updatedTask)
+        }
     }
 }
 

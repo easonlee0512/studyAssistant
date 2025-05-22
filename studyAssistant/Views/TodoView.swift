@@ -401,16 +401,19 @@ struct TodoItemView: View {
     let isExample: Bool
     let onUpdate: ((TodoTask) -> Void)?
     let onTaskSelected: ((TodoTask) -> Void)?
+    let instance: TaskInstance?  // 新增：任務實例
     @State private var localIsCompleted: Bool
     @State private var showError = false
     @State private var errorMessage = ""
     
-    init(task: TodoTask, isExample: Bool, onUpdate: ((TodoTask) -> Void)? = nil, onTaskSelected: ((TodoTask) -> Void)? = nil) {
+    init(task: TodoTask, isExample: Bool, instance: TaskInstance? = nil, onUpdate: ((TodoTask) -> Void)? = nil, onTaskSelected: ((TodoTask) -> Void)? = nil) {
         self.task = task
         self.isExample = isExample
         self.onUpdate = onUpdate
         self.onTaskSelected = onTaskSelected
-        self._localIsCompleted = State(initialValue: task.isCompleted)
+        self.instance = instance
+        // 如果有實例，使用實例的完成狀態，否則使用任務的完成狀態
+        self._localIsCompleted = State(initialValue: instance?.isCompleted ?? task.isCompleted)
     }
     
     var body: some View {
@@ -778,18 +781,43 @@ struct DayContent: View {
         ScrollView {
             LazyVStack() {
                 ForEach(viewModel.sortedTasksWithCompletionStatus(by: date)) { task in
-                    TodoItemView(task: task, isExample: false, onUpdate: { updatedTask in
-                        Task {
-                            do {
-                                // 不需要等待更新完成，直接返回讓 UI 保持響應
-                                Task {
-                                    try await viewModel.toggleTaskCompletion(updatedTask)
-                                }
-                            } catch {
-                                onError(error)
-                            }
+                    // 獲取該任務在當前日期的實例
+                    let instances = viewModel.getInstancesForDate(date, task: task)
+                    
+                    if !instances.isEmpty {
+                        // 如果有實例，顯示每個實例
+                        ForEach(instances) { instance in
+                            TodoItemView(
+                                task: task,
+                                isExample: false,
+                                instance: instance,  // 傳遞實例
+                                onUpdate: { _ in
+                                    Task {
+                                        do {
+                                            // 切換任務實例的完成狀態
+                                            try await viewModel.toggleInstanceCompletion(instance, in: task)
+                                        } catch {
+                                            onError(error)
+                                        }
+                                    }
+                                },
+                                onTaskSelected: onTaskSelected
+                            )
                         }
-                    }, onTaskSelected: onTaskSelected)
+                    } else {
+                        // 如果沒有實例，表示這是非重複性任務
+                        TodoItemView(
+                            task: task,
+                            isExample: false,
+                            onUpdate: { _ in
+                                Task {
+                                    // 直接切換任務的完成狀態
+                                    await viewModel.toggleTaskCompletion(task)
+                                }
+                            },
+                            onTaskSelected: onTaskSelected
+                        )
+                    }
                 }
                 
                 if viewModel.sortedTasksWithCompletionStatus(by: date).isEmpty {

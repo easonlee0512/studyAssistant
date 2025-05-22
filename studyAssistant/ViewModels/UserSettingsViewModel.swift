@@ -88,11 +88,9 @@ class UserSettingsViewModel: ObservableObject {
     
     // MARK: - App Settings Methods
     
-    func updateAppSettings(isDarkMode: Bool, notificationsEnabled: Bool, isShockEnabled: Bool) async {
+    func updateAppSettings(notificationsEnabled: Bool) async {
         var updatedSettings = appSettings
-        updatedSettings.isDarkMode = isDarkMode
         updatedSettings.notificationsEnabled = notificationsEnabled
-        updatedSettings.isShockEnabled = isShockEnabled
         updatedSettings.lastModified = Date()
         
         do {

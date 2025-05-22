@@ -345,15 +345,19 @@ class StaticViewModel: ObservableObject {
                 .delete()
             
             // 從本地陣列中移除該統計
-            if let index = statistics.firstIndex(where: { $0.id == statisticId }) {
-                statistics.remove(at: index)
+            await MainActor.run {
+                if let index = statistics.firstIndex(where: { $0.id == statisticId }) {
+                    statistics.remove(at: index)
+                }
             }
             
             isLoading = false
             print("成功刪除統計類別 ID: \(statisticId)")
         } catch {
-            errorMessage = "刪除統計類別失敗: \(error.localizedDescription)"
-            isLoading = false
+            await MainActor.run {
+                errorMessage = "刪除統計類別失敗: \(error.localizedDescription)"
+                isLoading = false
+            }
             print("刪除統計類別錯誤: \(error)")
         }
     }

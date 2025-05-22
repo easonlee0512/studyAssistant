@@ -27,6 +27,7 @@ struct TodoEditView: View {
     @State private var startDate: Date
     @State private var endDate: Date
     @State private var repeatOption: RepeatType
+    @State private var repeatEndDate: Date?
     @State private var offset: CGFloat = UIScreen.main.bounds.height // 用於動畫
     @State private var isDismissing = false // 標記是否正在關閉
     @State private var isLoading = false // 是否正在保存
@@ -84,6 +85,7 @@ struct TodoEditView: View {
         self._startDate = State(initialValue: task.startDate)
         self._endDate = State(initialValue: task.endDate)
         self._repeatOption = State(initialValue: task.repeatType)
+        self._repeatEndDate = State(initialValue: task.repeatEndDate)
     }
     
     var body: some View {
@@ -346,6 +348,10 @@ struct TodoEditView: View {
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
+
+            Divider()
+                .background(dividerColor)
+                .padding(.horizontal, 15)
         }
         .background(backgroundColor)
         .cornerRadius(10)
@@ -368,19 +374,15 @@ struct TodoEditView: View {
                 Menu {
                     Button("不重複") { 
                         repeatOption = .none
-                        updateEndDateBasedOnRepeatOption(.none)
                     }
                     Button("每天") { 
                         repeatOption = .daily
-                        updateEndDateBasedOnRepeatOption(.daily)
                     }
                     Button("每週") { 
                         repeatOption = .weekly
-                        updateEndDateBasedOnRepeatOption(.weekly)
                     }
                     Button("每月") { 
                         repeatOption = .monthly
-                        updateEndDateBasedOnRepeatOption(.monthly)
                     }
                 } label: {
                     HStack {
@@ -397,6 +399,29 @@ struct TodoEditView: View {
                 .padding(.trailing, 15)
             }
             .padding(.vertical, 12)
+
+
+            // 新增重複結束日期選擇器
+            if repeatOption != .none {
+                Divider()
+                    .background(dividerColor)
+                    .padding(.horizontal, 15)
+                
+                HStack {
+                    Text("重複結束")
+                        .font(.system(size: 18, weight: .medium))
+                    
+                    Spacer()
+                    
+                    DatePicker("", selection: Binding(
+                        get: { repeatEndDate ?? Date() },
+                        set: { repeatEndDate = $0 }
+                    ), displayedComponents: .date)
+                        .labelsHidden()
+                }
+                .padding(.horizontal, 15)
+                .padding(.vertical, 12)
+            }
         }
         .background(backgroundColor)
         .cornerRadius(10)
@@ -493,6 +518,7 @@ struct TodoEditView: View {
                 updatedTask.repeatType = repeatOption
                 updatedTask.startDate = startDate
                 updatedTask.endDate = endDate
+                updatedTask.repeatEndDate = repeatOption != .none ? repeatEndDate : nil
                 
                 // 使用 updateTask 方法更新任務
                 try await viewModel.updateTask(updatedTask)
@@ -504,32 +530,6 @@ struct TodoEditView: View {
                 errorMessage = error.localizedDescription
                 isLoading = false
                 print("Error updating task: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    // 更新結束日期基於重複選項
-    private func updateEndDateBasedOnRepeatOption(_ option: RepeatType) {
-        let calendar = Calendar.current
-        
-        switch option {
-        case .daily:
-            // 每天重複，是無限期的，使用與startDate相同的日期
-            endDate = startDate
-        case .weekly:
-            // 每週重複，將結束日期設為startDate後一週
-            if let oneWeekLater = calendar.date(byAdding: .day, value: 7, to: startDate) {
-                endDate = oneWeekLater
-            }
-        case .monthly:
-            // 每月重複，將結束日期設為startDate後一個月
-            if let oneMonthLater = calendar.date(byAdding: .month, value: 1, to: startDate) {
-                endDate = oneMonthLater
-            }
-        default:
-            // 不重複，若endDate在startDate之前，則設為startDate
-            if endDate < startDate {
-                endDate = startDate
             }
         }
     }
