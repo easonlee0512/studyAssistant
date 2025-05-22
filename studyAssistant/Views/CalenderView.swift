@@ -631,11 +631,27 @@ struct CalendarMonthView: View {
         
         // 收集所有任務（包括重複任務的實例）
         var allTasksForMonth: [TodoTask] = []
+        // 使用 Set 追踪已添加的多日任務 ID，避免重複添加
+        var addedMultiDayTaskIds = Set<String>()
         
         // 為當月每一天收集任務
         for day in 0..<daysInMonth {
             if let date = calendar.date(byAdding: .day, value: day, to: monthStart) {
-                allTasksForMonth.append(contentsOf: getTasksForDate(date))
+                let tasksForDate = getTasksForDate(date)
+                
+                for task in tasksForDate {
+                    // 對於跨多天的任務，使用 ID 去重
+                    if !task.startDate.isSameDay(as: task.endDate) {
+                        if !addedMultiDayTaskIds.contains(task.id) {
+                            allTasksForMonth.append(task)
+                            addedMultiDayTaskIds.insert(task.id)
+                        }
+                    } else {
+                        // 對於單日任務或重複任務的實例，直接添加
+                        // 因為它們只會在特定日期顯示一次
+                        allTasksForMonth.append(task)
+                    }
+                }
             }
         }
         
