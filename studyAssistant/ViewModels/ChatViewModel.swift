@@ -1104,10 +1104,11 @@ final class ChatViewModel: ObservableObject {
                     - 不要在設定的時間範圍外安排任務
                     - 不要與原有的任務時間重疊
                 9. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
-                10. 安排刪除修改任務後要跟使用者解釋做了什麼改變。
-                11. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），要遵從使用者的安排一次安排好，不要先安排幾個然後再問使用者是否要安排更多。
-                12. 使用者說想要，就要直接安排任務。
+                10. 新增、刪除、修改任務後要跟使用者解釋做了什麼改變。
+                11. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），必須要遵從使用者的安排一次安排好一兩百個任務，不要先安排幾個然後再問使用者是否要安排更多。
+                12. 使用者提到要幹嘛，請直接依照現在時間安排任務。
                 13. 沒有指定時間就是現在。
+                14. 不要叫使用者等待gpt安排任務。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1141,7 +1142,7 @@ final class ChatViewModel: ObservableObject {
             }
 
             let reqBody = OpenAIRequest(
-                model: "gpt-4.1-mini",
+                model: "gpt-4.1",
                 messages: allMessages,
                 temperature: 0.7,
                 stream: true,
