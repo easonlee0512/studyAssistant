@@ -1764,37 +1764,58 @@ final class ChatViewModel: ObservableObject {
     // 添加格式化讀書設定的輔助函數
     private func formatStudySettings() -> String {
         guard let settings = studySettings else {
-            return "尚未設定讀書習慣"
+            return ""
         }
 
-        var result = "使用者的讀書習慣設定：\n讀書時段如下：\n"
+        var result = ""
 
-        for day in settings.selectedDays.sorted() {
-            let dayString = String(day)
-            
-            if let startHour = settings.dailyStartHours[dayString],
-                let startMinute = settings.dailyStartMinutes[dayString],
-                let endHour = settings.dailyEndHours[dayString],
-                let endMinute = settings.dailyEndMinutes[dayString]
-            {
+        if settings.isStudyDatePreferenceEnabled {
+            result += "使用者的讀書習慣設定：\n讀書時段如下：\n"
+            if settings.selectedDays.isEmpty {
+                result += "未設定可讀書的日期。\n"
+            } else {
+                for day in settings.selectedDays.sorted() {
+                    let dayString = String(day)
+                    
+                    if let startHour = settings.dailyStartHours[dayString],
+                       let startMinute = settings.dailyStartMinutes[dayString],
+                       let endHour = settings.dailyEndHours[dayString],
+                       let endMinute = settings.dailyEndMinutes[dayString]
+                    {
+                        let weekday =
+                            switch day {
+                            case 1: "星期一"
+                            case 2: "星期二"
+                            case 3: "星期三"
+                            case 4: "星期四"
+                            case 5: "星期五"
+                            case 6: "星期六"
+                            case 7: "星期日"
+                            default: "未知"
+                            }
 
-                let weekday =
-                    switch day {
-                    case 1: "星期一"
-                    case 2: "星期二"
-                    case 3: "星期三"
-                    case 4: "星期四"
-                    case 5: "星期五"
-                    case 6: "星期六"
-                    case 7: "星期日"
-                    default: "未知"
+                        result +=
+                            "\(weekday)：\(String(format: "%02d:%02d", startHour, startMinute)) - \(String(format: "%02d:%02d", endHour, endMinute))\n"
                     }
-
-                result +=
-                    "\(weekday)：\(String(format: "%02d:%02d", startHour, startMinute)) - \(String(format: "%02d:%02d", endHour, endMinute))\n"
+                }
             }
         }
-        result += "每次讀書時間：\(Int(settings.studyDuration))分鐘\n"
+
+        if settings.isStudyTimePreferenceEnabled {
+            if result.isEmpty {
+                result += "使用者的讀書習慣設定：\n"
+            }
+            result += "每次讀書時間：\(Int(settings.studyDuration))分鐘\n"
+        }
+
+        if result.isEmpty {
+            return ""
+        } else {
+            // 移除最後一個換行符（如果有的話）
+            if result.hasSuffix("\n") {
+                result.removeLast()
+            }
+        }
 
         return result
     }

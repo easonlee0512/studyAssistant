@@ -19,11 +19,14 @@ struct StudySettings: Codable {
     var dailyEndHours: [String: Int] = [:]  // 每天的結束時間 (小時)
     var dailyEndMinutes: [String: Int] = [:]  // 每天的結束時間 (分鐘)
     var tone: String = "沉著穩重的專家"  // 預設語氣
+    var isStudyDatePreferenceEnabled: Bool = true // 新增：控制讀書日期/時段偏好
+    var isStudyTimePreferenceEnabled: Bool = true // 新增：控制每次讀書時長偏好
     var updatedAt: Timestamp
 
     init(userId: String) {
         self.userId = userId
         self.updatedAt = Timestamp()
+        // isStudyDatePreferenceEnabled 和 isStudyTimePreferenceEnabled 使用預設值 true
 
         // 初始化每天的預設開始和結束時間
         for day in 1...7 {
@@ -48,6 +51,8 @@ struct StudySettings: Codable {
         self.dailyEndHours = data["dailyEndHours"] as? [String: Int] ?? [:]
         self.dailyEndMinutes = data["dailyEndMinutes"] as? [String: Int] ?? [:]
         self.tone = data["tone"] as? String ?? "沉著穩重的專家"
+        self.isStudyDatePreferenceEnabled = data["isStudyDatePreferenceEnabled"] as? Bool ?? true
+        self.isStudyTimePreferenceEnabled = data["isStudyTimePreferenceEnabled"] as? Bool ?? true
         self.updatedAt = data["updatedAt"] as? Timestamp ?? Timestamp()
     }
 
@@ -62,6 +67,8 @@ struct StudySettings: Codable {
             "dailyEndHours": dailyEndHours,
             "dailyEndMinutes": dailyEndMinutes,
             "tone": tone,
+            "isStudyDatePreferenceEnabled": isStudyDatePreferenceEnabled,
+            "isStudyTimePreferenceEnabled": isStudyTimePreferenceEnabled,
             "updatedAt": updatedAt,
         ]
     }

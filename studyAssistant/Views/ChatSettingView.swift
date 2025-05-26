@@ -15,6 +15,10 @@ struct ChatSettingView: View {
     private let cardColor = Color.hex(hex: "FEECD8")
     private let textColor = Color.black.opacity(0.8)
 
+    // UserDefaults keys
+    private let studyTimePreferenceKey = "isStudyTimePreferenceEnabled"
+    private let studyDatePreferenceKey = "isStudyDatePreferenceEnabled"
+
     // ViewModel 引用
     @EnvironmentObject private var viewModel: ChatViewModel
 
@@ -36,6 +40,10 @@ struct ChatSettingView: View {
 
     @State private var studyDuration: Double = 60
     @State private var tone: String = ""
+
+    // 本地偏好設定
+    @AppStorage("isStudyTimePreferenceEnabled") private var isStudyTimePreferenceEnabled: Bool = true
+    @AppStorage("isStudyDatePreferenceEnabled") private var isStudyDatePreferenceEnabled: Bool = true
 
     init() {
         // 不在這裡設置初始值，而是在 onAppear 時從 viewModel 讀取
@@ -104,129 +112,159 @@ struct ChatSettingView: View {
                             if let settings = tempSettings {
                                 settingCard(title: "讀書時間偏好") {
                                     VStack(alignment: .leading, spacing: 15) {
-                                        Text("每次讀書時間：\(Int(settings.studyDuration)) 分鐘")
-                                            .font(.system(size: 18))
+                                        Toggle(isOn: Binding(
+                                            get: { isStudyTimePreferenceEnabled },
+                                            set: { newValue in
+                                                isStudyTimePreferenceEnabled = newValue
+                                                tempSettings?.isStudyTimePreferenceEnabled = newValue
+                                            }
+                                        )) {
+                                            Text("啟用讀書時間偏好")
+                                                .font(.system(size: 18))
+                                        }
+                                        .tint(accentColor)
+                                        .padding(.bottom, 5)
 
-                                        Slider(
-                                            value: Binding(
-                                                get: { settings.studyDuration },
-                                                set: { tempSettings?.studyDuration = $0 }
-                                            ), in: 15...240, step: 15
-                                        )
-                                        .accentColor(accentColor)
+                                        if isStudyTimePreferenceEnabled {
+                                            Text("每次讀書時間：\(Int(settings.studyDuration)) 分鐘")
+                                                .font(.system(size: 18))
+
+                                            Slider(
+                                                value: Binding(
+                                                    get: { settings.studyDuration },
+                                                    set: { tempSettings?.studyDuration = $0 }
+                                                ), in: 15...240, step: 15
+                                            )
+                                            .accentColor(accentColor)
+                                        }
                                     }
                                 }
 
                                 // 讀書日期設定
                                 settingCard(title: "讀書日期偏好") {
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("選擇習慣讀書的日子：")
-                                            .font(.system(size: 18))
-
-                                        weekdaysSelector
-
-                                        if !selectedDaysSet.isEmpty {
-                                            Divider()
-                                                .padding(.vertical, 10)
-
-                                            Text("選擇要設定時間的日子：")
+                                        Toggle(isOn: Binding(
+                                            get: { isStudyDatePreferenceEnabled },
+                                            set: { newValue in
+                                                isStudyDatePreferenceEnabled = newValue
+                                                tempSettings?.isStudyDatePreferenceEnabled = newValue
+                                            }
+                                        )) {
+                                            Text("啟用讀書日期偏好")
                                                 .font(.system(size: 18))
-                                                .padding(.bottom, 5)
+                                        }
+                                        .tint(accentColor)
+                                        .padding(.bottom, 5)
 
-                                            // 選擇要設定時間的日子
-                                            ScrollView(.horizontal, showsIndicators: false) {
-                                                HStack(spacing: 10) {
-                                                    ForEach(
-                                                        Array(selectedDaysSet).sorted(), id: \.self
-                                                    ) { day in
-                                                        Button(action: {
-                                                            selectedDayForTimeSettings = day
-                                                        }) {
-                                                            Text(weekdaySymbol(for: day))
-                                                                .font(
-                                                                    .system(size: 18, weight: .bold)
-                                                                )
-                                                                .frame(width: 40, height: 40)
-                                                                .background(
-                                                                    selectedDayForTimeSettings
-                                                                        == day
-                                                                        ? accentColor : Color.white
-                                                                )
-                                                                .foregroundColor(
-                                                                    selectedDayForTimeSettings
-                                                                        == day ? .white : textColor
-                                                                )
-                                                                .cornerRadius(20)
-                                                                .overlay(
-                                                                    Circle()
-                                                                        .stroke(
-                                                                            accentColor,
-                                                                            lineWidth: 2)
-                                                                )
+                                        if isStudyDatePreferenceEnabled {
+                                            Text("選擇習慣讀書的日子：")
+                                                .font(.system(size: 18))
+
+                                            weekdaysSelector
+
+                                            if !selectedDaysSet.isEmpty {
+                                                Divider()
+                                                    .padding(.vertical, 10)
+
+                                                Text("選擇要設定時間的日子：")
+                                                    .font(.system(size: 18))
+                                                    .padding(.bottom, 5)
+
+                                                // 選擇要設定時間的日子
+                                                ScrollView(.horizontal, showsIndicators: false) {
+                                                    HStack(spacing: 10) {
+                                                        ForEach(
+                                                            Array(selectedDaysSet).sorted(), id: \.self
+                                                        ) { day in
+                                                            Button(action: {
+                                                                selectedDayForTimeSettings = day
+                                                            }) {
+                                                                Text(weekdaySymbol(for: day))
+                                                                    .font(
+                                                                        .system(size: 18, weight: .bold)
+                                                                    )
+                                                                    .frame(width: 40, height: 40)
+                                                                    .background(
+                                                                        selectedDayForTimeSettings
+                                                                            == day
+                                                                            ? accentColor : Color.white
+                                                                    )
+                                                                    .foregroundColor(
+                                                                        selectedDayForTimeSettings
+                                                                            == day ? .white : textColor
+                                                                    )
+                                                                    .cornerRadius(20)
+                                                                    .overlay(
+                                                                        Circle()
+                                                                            .stroke(
+                                                                                accentColor,
+                                                                                lineWidth: 2)
+                                                                    )
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
-                                            .padding(.bottom, 10)
+                                                .padding(.bottom, 10)
 
-                                            // 顯示當前選擇日的設定
-                                            if selectedDaysSet.contains(selectedDayForTimeSettings)
-                                            {
-                                                VStack(alignment: .leading, spacing: 15) {
-                                                    Text(
-                                                        "星期\(weekdaySymbol(for: selectedDayForTimeSettings))偏好時間："
-                                                    )
-                                                    .font(.system(size: 18, weight: .bold))
-                                                    .foregroundColor(accentColor)
+                                                // 顯示當前選擇日的設定
+                                                if selectedDaysSet.contains(selectedDayForTimeSettings)
+                                                {
+                                                    VStack(alignment: .leading, spacing: 15) {
+                                                        Text(
+                                                            "星期\(weekdaySymbol(for: selectedDayForTimeSettings))偏好時間："
+                                                        )
+                                                        .font(.system(size: 18, weight: .bold))
+                                                        .foregroundColor(accentColor)
 
-                                                    Text("偏好開始時間：")
-                                                        .font(.system(size: 18))
+                                                        Text("偏好開始時間：")
+                                                            .font(.system(size: 18))
 
-                                                    DatePicker(
-                                                        "",
-                                                        selection: Binding(
-                                                            get: {
-                                                                dailyStartTimes[
-                                                                    selectedDayForTimeSettings]
-                                                                    ?? Date()
-                                                            },
-                                                            set: {
-                                                                dailyStartTimes[
-                                                                    selectedDayForTimeSettings] = $0
-                                                                updateTempSettingsTime()
-                                                            }
-                                                        ), displayedComponents: .hourAndMinute
-                                                    )
-                                                    .datePickerStyle(.wheel)
-                                                    .labelsHidden()
-                                                    .frame(maxHeight: 150)
+                                                        DatePicker(
+                                                            "",
+                                                            selection: Binding(
+                                                                get: {
+                                                                    dailyStartTimes[
+                                                                        selectedDayForTimeSettings]
+                                                                        ?? Date()
+                                                                },
+                                                                set: {
+                                                                    dailyStartTimes[
+                                                                        selectedDayForTimeSettings] = $0
+                                                                    updateTempSettingsTime()
+                                                                }
+                                                            ), displayedComponents: .hourAndMinute
+                                                        )
+                                                        .datePickerStyle(.wheel)
+                                                        .labelsHidden()
+                                                        .frame(maxHeight: 150)
 
-                                                    Text("偏好結束時間：")
-                                                        .font(.system(size: 18))
+                                                        Text("偏好結束時間：")
+                                                            .font(.system(size: 18))
 
-                                                    DatePicker(
-                                                        "",
-                                                        selection: Binding(
-                                                            get: {
-                                                                dailyEndTimes[
-                                                                    selectedDayForTimeSettings]
-                                                                    ?? Date()
-                                                            },
-                                                            set: {
-                                                                dailyEndTimes[
-                                                                    selectedDayForTimeSettings] = $0
-                                                                updateTempSettingsTime()
-                                                            }
-                                                        ), displayedComponents: .hourAndMinute
-                                                    )
-                                                    .datePickerStyle(.wheel)
-                                                    .labelsHidden()
-                                                    .frame(maxHeight: 150)
+                                                        DatePicker(
+                                                            "",
+                                                            selection: Binding(
+                                                                get: {
+                                                                    dailyEndTimes[
+                                                                        selectedDayForTimeSettings]
+                                                                        ?? Date()
+                                                                },
+                                                                set: {
+                                                                    dailyEndTimes[
+                                                                        selectedDayForTimeSettings] = $0
+                                                                    updateTempSettingsTime()
+                                                                }
+                                                            ), displayedComponents: .hourAndMinute
+                                                        )
+                                                        .datePickerStyle(.wheel)
+                                                        .labelsHidden()
+                                                        .frame(maxHeight: 150)
+                                                    }
+                                                    .padding(.horizontal, 5)
+                                                    .padding(.vertical, 10)
+                                                    .background(Color.white.opacity(0.1))
+                                                    .cornerRadius(10)
                                                 }
-                                                .padding(.horizontal, 5)
-                                                .padding(.vertical, 10)
-                                                .background(Color.white.opacity(0.1))
-                                                .cornerRadius(10)
                                             }
                                         }
                                     }
@@ -335,6 +373,11 @@ struct ChatSettingView: View {
         if let settings = viewModel.studySettings {
             // 複製設定，創建可變副本
             self.tempSettings = settings
+            
+            // 從本地讀取偏好設定的狀態
+            self.tempSettings?.isStudyTimePreferenceEnabled = isStudyTimePreferenceEnabled
+            self.tempSettings?.isStudyDatePreferenceEnabled = isStudyDatePreferenceEnabled
+            
             self.selectedDaysSet = Set(settings.selectedDays)
             self.studyDuration = settings.studyDuration
             self.tone = settings.tone
@@ -401,6 +444,10 @@ struct ChatSettingView: View {
 
         // 確保選擇的日子已更新
         settingsToSave.selectedDays = Array(selectedDaysSet)
+        
+        // 使用本地儲存的偏好設定
+        settingsToSave.isStudyTimePreferenceEnabled = isStudyTimePreferenceEnabled
+        settingsToSave.isStudyDatePreferenceEnabled = isStudyDatePreferenceEnabled
 
         // 顯示載入狀態
         isLoading = true
