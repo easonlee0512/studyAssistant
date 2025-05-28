@@ -930,7 +930,7 @@ final class ChatViewModel: ObservableObject {
 
             // 返回確認消息
             let taskCount = pendingTasks.count
-            return "已創建 \(taskCount) 個待確認任務，描述安排的任務後，等待用戶確認中..."
+            return "已創建 \(taskCount) 個任務"
 
         } catch {
             print("解析參數時發生錯誤：\(error)")
@@ -1081,12 +1081,6 @@ final class ChatViewModel: ObservableObject {
                 
                 \(formatStudySettings())
 
-                可用工具：
-                getTask()      ：取得使用者現有任務與目前時間
-                getTime()      ：取得目前時間
-                saveTask({...}): 儲存新任務，所有欄位皆必填  
-                end_conversation()：結束對話
-
                 特別注意：
                 1. **如果你要結束對話，請務必呼叫 end_conversation function，不要只用文字說再見。**
                 2. 在以下情況要主動結束對話：
@@ -1109,6 +1103,7 @@ final class ChatViewModel: ObservableObject {
                 12. 使用者提到要幹嘛，請直接依照現在時間安排任務。
                 13. 沒有指定時間就是現在。
                 14. 不要叫使用者等待gpt安排任務。
+                15. 安排任務請直接安排，不要只用文字說明。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1941,7 +1936,7 @@ final class ChatViewModel: ObservableObject {
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingDeleteTasks = tasksToDelete
 
             // 返回確認消息
-            return "已找到 \(tasksToDelete.count) 個待刪除任務，等待用戶確認中..."
+            return "已刪除 \(tasksToDelete.count) 個待刪除任務"
 
         } catch {
             print("解析參數時發生錯誤：\(error)")
@@ -2022,7 +2017,7 @@ final class ChatViewModel: ObservableObject {
             // 儲存待更新的任務到當前訊息
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks = tasksToUpdate
 
-            return "已準備好 \(tasksToUpdate.count) 個任務更新，等待用戶確認中..."
+            return "已更新好 \(tasksToUpdate.count) 個任務更新"
 
         } catch {
             print("解析參數時發生錯誤：\(error)")

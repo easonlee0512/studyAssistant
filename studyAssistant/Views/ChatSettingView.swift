@@ -54,12 +54,7 @@ struct ChatSettingView: View {
             ZStack {
                 backgroundColor.ignoresSafeArea()
 
-                if viewModel.isLoadingSettings || isLoading {
-                    ProgressView("載入中...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .padding()
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
-                } else if let error = viewModel.settingsError ?? errorMessage {
+                if let error = viewModel.settingsError ?? errorMessage {
                     VStack {
                         Text("發生錯誤")
                             .font(.headline)
@@ -85,7 +80,14 @@ struct ChatSettingView: View {
                             // GPT 語氣設定
                             settingCard(title: "助手語氣設定") {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    TextField("請輸入助手語氣...", text: $tone)
+                                    TextField("請輸入助手語氣...", text: Binding(
+                                        get: { tone },
+                                        set: { newValue in
+                                            tone = newValue
+                                            // 當語氣設定改變時自動儲存
+                                            autoSaveSettings()
+                                        }
+                                    ))
                                         .font(.system(size: 18))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
@@ -117,6 +119,8 @@ struct ChatSettingView: View {
                                             set: { newValue in
                                                 isStudyTimePreferenceEnabled = newValue
                                                 tempSettings?.isStudyTimePreferenceEnabled = newValue
+                                                // 當開關狀態改變時自動儲存
+                                                autoSaveSettings()
                                             }
                                         )) {
                                             Text("啟用讀書時間偏好")
@@ -132,7 +136,11 @@ struct ChatSettingView: View {
                                             Slider(
                                                 value: Binding(
                                                     get: { settings.studyDuration },
-                                                    set: { tempSettings?.studyDuration = $0 }
+                                                    set: { newValue in
+                                                        tempSettings?.studyDuration = newValue
+                                                        // 當讀書時間改變時自動儲存
+                                                        autoSaveSettings()
+                                                    }
                                                 ), in: 15...240, step: 15
                                             )
                                             .accentColor(accentColor)
@@ -148,6 +156,8 @@ struct ChatSettingView: View {
                                             set: { newValue in
                                                 isStudyDatePreferenceEnabled = newValue
                                                 tempSettings?.isStudyDatePreferenceEnabled = newValue
+                                                // 當開關狀態改變時自動儲存
+                                                autoSaveSettings()
                                             }
                                         )) {
                                             Text("啟用讀書日期偏好")
@@ -280,19 +290,10 @@ struct ChatSettingView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") {
+                    Button("返回") {
                         dismiss()
                     }
                     .foregroundColor(accentColor)
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("儲存") {
-                        saveSettings()
-                    }
-                    .foregroundColor(accentColor)
-                    .fontWeight(.bold)
-                    .disabled(viewModel.isLoadingSettings || isLoading)
                 }
             }
             .onAppear {
@@ -332,19 +333,18 @@ struct ChatSettingView: View {
                 Button(action: {
                     if selectedDaysSet.contains(day) {
                         selectedDaysSet.remove(day)
-                        // 如果移除了當前選擇的日子，選擇另一個
                         if selectedDayForTimeSettings == day {
                             selectedDayForTimeSettings = selectedDaysSet.min() ?? 1
                         }
                     } else {
                         selectedDaysSet.insert(day)
-                        // 如果是第一個選擇的日子，設為當前
                         if selectedDaysSet.count == 1 {
                             selectedDayForTimeSettings = day
                         }
                     }
-                    // 更新臨時設定
                     tempSettings?.selectedDays = Array(selectedDaysSet)
+                    // 當選擇的日子改變時自動儲存
+                    autoSaveSettings()
                 }) {
                     Text(weekdaySymbol(for: day))
                         .font(.system(size: 18, weight: .bold))
@@ -374,9 +374,9 @@ struct ChatSettingView: View {
             // 複製設定，創建可變副本
             self.tempSettings = settings
             
-            // 從本地讀取偏好設定的狀態
-            self.tempSettings?.isStudyTimePreferenceEnabled = isStudyTimePreferenceEnabled
-            self.tempSettings?.isStudyDatePreferenceEnabled = isStudyDatePreferenceEnabled
+            // 從設定中讀取偏好設定的狀態，而不是從本地
+            isStudyTimePreferenceEnabled = settings.isStudyTimePreferenceEnabled
+            isStudyDatePreferenceEnabled = settings.isStudyDatePreferenceEnabled
             
             self.selectedDaysSet = Set(settings.selectedDays)
             self.studyDuration = settings.studyDuration
@@ -417,7 +417,7 @@ struct ChatSettingView: View {
     // 更新臨時設定中的時間
     private func updateTempSettingsTime() {
         guard var settings = tempSettings else { return }
-
+        
         // 更新所有日子的時間設定
         for day in 1...7 {
             if let startTime = dailyStartTimes[day] {
@@ -427,51 +427,45 @@ struct ChatSettingView: View {
                 settings.setEndTimeForDay(day, date: endTime)
             }
         }
-
+        
         self.tempSettings = settings
+        
+        // 自動儲存更新後的設定
+        autoSaveSettings()
     }
 
-    // 儲存設定
-    private func saveSettings() {
-        guard var settingsToSave = tempSettings else {
-            errorMessage = "無法儲存設定，設定資料不完整"
-            showErrorAlert = true
-            return
-        }
-
+    // 修改自動儲存方法，移除載入狀態
+    private func autoSaveSettings() {
+        guard var settingsToSave = tempSettings else { return }
+        
         // 更新語氣設定
         settingsToSave.tone = tone
-
+        
         // 確保選擇的日子已更新
         settingsToSave.selectedDays = Array(selectedDaysSet)
         
         // 使用本地儲存的偏好設定
         settingsToSave.isStudyTimePreferenceEnabled = isStudyTimePreferenceEnabled
         settingsToSave.isStudyDatePreferenceEnabled = isStudyDatePreferenceEnabled
-
-        // 顯示載入狀態
-        isLoading = true
-
-        // 同步到Firestore
+        
+        // 在背景執行儲存
         Task {
             do {
                 await viewModel.updateStudySettings(settingsToSave)
-
-                // 如果成功，關閉設定畫面
-                if viewModel.settingsError == nil {
-                    dismiss()
-                } else {
-                    // 顯示錯誤
-                    errorMessage = viewModel.settingsError
-                    showErrorAlert = true
+                
+                // 只在發生錯誤時顯示提示
+                if let error = viewModel.settingsError {
+                    await MainActor.run {
+                        errorMessage = error
+                        showErrorAlert = true
+                    }
                 }
             } catch {
-                // 處理錯誤
-                errorMessage = error.localizedDescription
-                showErrorAlert = true
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showErrorAlert = true
+                }
             }
-
-            isLoading = false
         }
     }
 }

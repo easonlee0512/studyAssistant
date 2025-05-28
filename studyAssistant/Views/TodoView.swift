@@ -170,15 +170,12 @@ struct TodoView: View {
                         .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
                     }
                     
-                    // 載入指示器 - 絕對定位在中央
-                    if isLoading {
+                    // 載入指示器 - 放在 TodoList 下方
+                    if viewModel.isLoading {
                         ProgressView()
                             .scaleEffect(1.5)
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .frame(width: 60, height: 60)
-                            .background(Color.white.opacity(0.2))
-                            .cornerRadius(10)
-                            .position(x: geometry.size.width / 2, y: geometry.size.height / 3)
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.gray.opacity(0.8)))
+                            .position(x: geometry.size.width / 2, y: geometry.size.height - 200)  // 調整 y 位置到底部
                     }
                 }
                 
@@ -514,7 +511,7 @@ struct TodoItemView: View {
         .padding(.horizontal, 14)
         .background(Color.hex(hex: "FEECD8"))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.09), radius: 10, x: 3, y: 3)
+        .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 2)
         .padding(.horizontal, 3) // 添加水平間距，確保陰影不被裁剪
         .padding(.vertical, 2) // 添加垂直間距，確保陰影不被裁剪
         .contentShape(Rectangle())
@@ -602,7 +599,7 @@ struct WeekPagerView: View {
             .frame(width: availableWidth, height: 90) // 確保整個 ZStack 居中
             .background(Color.hex(hex: "FEECD8"))
             .cornerRadius(20)
-            .shadow(color: .black.opacity(0.04), radius: 6, x: 1, y: 1)
+            .shadow(color: .black.opacity(0.02), radius: 4, x: 0, y: 1)
         }
         .frame(height: 90)
         // 當分頁變動時，更新選中日期
@@ -736,14 +733,20 @@ struct DayPagerView: View {
     
     var body: some View {
         TabView(selection: $pageIndex) {
-            ForEach(dayDates.indices, id: \.self) { idx in
-                DayContent(
-                    date: dayDates[idx],
-                    viewModel: viewModel,
-                    onTaskSelected: onTaskSelected,
-                    onError: onError,
-                    isLoading: isLoading
-                )
+            ForEach(dayDates.indices, id: \._self) { idx in
+                ZStack {
+                    if !isLoading {
+                        DayContent(
+                            date: dayDates[idx],
+                            viewModel: viewModel,
+                            onTaskSelected: onTaskSelected,
+                            onError: onError,
+                            isLoading: isLoading
+                        )
+                    } else {
+                        Color.clear // 載入時不顯示內容
+                    }
+                }
                 .tag(idx)
             }
         }
