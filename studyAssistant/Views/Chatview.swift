@@ -32,6 +32,7 @@ struct ChatDemoDynamicView: View {
     @State private var isConversationEnded = false  // 追蹤對話是否已結束
     @State private var textEditorHeight: CGFloat = 40
     @FocusState private var isInputFocused: Bool
+    @State private var bottomInset: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -88,6 +89,11 @@ struct ChatDemoDynamicView: View {
             }
         }
         .onAppear {
+            if let win = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .flatMap({ $0.windows }).first {
+                bottomInset = win.safeAreaInsets.bottom
+            }
             // 添加鍵盤通知觀察者
             NotificationCenter.default.addObserver(
                 forName: UIResponder.keyboardWillShowNotification,
@@ -143,7 +149,7 @@ struct ChatDemoDynamicView: View {
             Color.hex(hex: "FEECD8")
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
         )
-        .ignoresSafeArea(.all, edges: .bottom)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     // MARK: Header
@@ -1087,13 +1093,12 @@ struct ChatDemoDynamicView: View {
                     if inputText.isEmpty {
                         Text("輸入訊息...")
                             .foregroundColor(textColor.opacity(0.4))
-                            .padding(.vertical, 14)
-                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
                     }
                     TextEditor(text: $inputText)
                         .font(.system(size: 18))
-                        .padding(10)
-                        .frame(height: isInputFocused ? min(max(textEditorHeight, 46), 46*4) : 46)
+                        .padding(.vertical, 10)
+                        .frame(height: isInputFocused ? min(max(textEditorHeight, 43), 43*4) : 43)
                         .background(midBubbleColor)
                         .cornerRadius(12)
                         .foregroundColor(textColor)
@@ -1103,9 +1108,8 @@ struct ChatDemoDynamicView: View {
                         .onChange(of: isInputFocused) { focused in
                             if !focused {
                                 withAnimation(.easeOut(duration: 0.2)) {
-                                    textEditorHeight = 46
+                                    textEditorHeight = 43
                                 }
-                                // 當失去焦點時，延遲一下再滾動到底部
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     scrollTextToBottom()
                                 }
@@ -1114,9 +1118,8 @@ struct ChatDemoDynamicView: View {
                 }
                 .overlay(
                     Text(inputText)
-                        .font(.system(size: 18))
+                        .font(.system(size: 20))
                         .padding(.vertical, 8)
-                        .padding(.horizontal, 10)
                         .background(Color.clear)
                         .opacity(0)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1169,16 +1172,9 @@ struct ChatDemoDynamicView: View {
                         .foregroundColor(.black.opacity(0.2))
                 }
             )
-            
-            if isInputFocused {
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(height: viewModel.keyboardHeight)
-                    .transition(.opacity)
-            }
         }
-        .animation(.easeOut(duration: 0.2), value: isInputFocused)
-        .padding(.bottom, 2) // 增加與 TabView 之間的間距
+        .padding(.bottom, max(viewModel.keyboardHeight - bottomInset, 0))
+        .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
     }
 
     // MARK: Sidebar
