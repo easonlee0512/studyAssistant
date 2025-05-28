@@ -30,6 +30,8 @@ struct ChatDemoDynamicView: View {
     @State private var isGenerating = false   // 追蹤 GPT 是否正在生成回覆
     @State private var isUserScrolling = false  // 追蹤使用者是否正在滑動
     @State private var isConversationEnded = false  // 追蹤對話是否已結束
+    @State private var textEditorHeight: CGFloat = 40
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         ZStack {
@@ -55,6 +57,18 @@ struct ChatDemoDynamicView: View {
                     .foregroundColor(.black.opacity(0.2))  // 線條顏色
                 messageList
                 inputBar
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // 點擊聊天區域收起鍵盤並結束輸入
+                if isEditingTitle {
+                    if !editingTitleText.isEmpty {
+                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                    }
+                    isEditingTitle = false
+                    isTitleFocused = false
+                }
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
             .offset(x: showSidebar ? 250 : 0) // 側邊欄的偏移量
             
@@ -1069,51 +1083,102 @@ struct ChatDemoDynamicView: View {
     private var inputBar: some View {
         VStack(spacing: 0) {
             HStack {
-                TextField("輸入訊息...", text: $inputText)
-                    .font(.system(size: 18))
-                    .padding(16)
-                    .frame(height: 55)
-                    .background(midBubbleColor)
-                    .cornerRadius(12)
-                    .foregroundColor(textColor)
-                    .disabled(isGenerating)  // 在生成過程中禁用輸入框
+                ZStack(alignment: .topLeading) {
+                    if inputText.isEmpty {
+                        Text("輸入訊息...")
+                            .foregroundColor(textColor.opacity(0.4))
+                            .padding(.vertical, 14)
+                            .padding(.horizontal, 16)
+                    }
+                    TextEditor(text: $inputText)
+                        .font(.system(size: 18))
+                        .padding(10)
+                        .frame(height: isInputFocused ? min(max(textEditorHeight, 46), 46*4) : 46)
+                        .background(midBubbleColor)
+                        .cornerRadius(12)
+                        .foregroundColor(textColor)
+                        .disabled(isGenerating)
+                        .scrollContentBackground(.hidden)
+                        .focused($isInputFocused)
+                        .onChange(of: isInputFocused) { focused in
+                            if !focused {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    textEditorHeight = 46
+                                }
+                                // 當失去焦點時，延遲一下再滾動到底部
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    scrollTextToBottom()
+                                }
+                            }
+                        }
+                }
+                .overlay(
+                    Text(inputText)
+                        .font(.system(size: 18))
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background(Color.clear)
+                        .opacity(0)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .allowsHitTesting(false)
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: ViewHeightKey.self,
+                                    value: geometry.size.height
+                                )
+                            }
+                        )
+                )
+                .onPreferenceChange(ViewHeightKey.self) { height in
+                    textEditorHeight = height
+                }
 
                 if isGenerating {
-                    // 取消按鈕
                     Button(action: cancelGeneration) {
                         Image(systemName: "stop.circle")
                             .font(.system(size: 28))
                             .foregroundColor(.black.opacity(0.5))
                     }
-                    .frame(width: 44, height: 44)  // 改回原本的大小
+                    .frame(width: 44, height: 44)
                 } else {
-                    // 發送按鈕
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrowshape.up")
-                            .font(.system(size: 28))
+                    Button(action: {}) {
+                        Image(systemName: "mic")
+                            .font(.system(size: 20))
                             .foregroundColor(textColor)
                     }
-                    .frame(width: 44, height: 44)  // 改回原本的大小
+                    .frame(width: 32, height: 32)
+                    .padding(.trailing, 2)
+                    
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrowshape.up")
+                            .font(.system(size: 20))
+                            .foregroundColor(textColor)
+                    }
+                    .frame(width: 32, height: 32)
                     .disabled(inputText.isEmpty)
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8) // 從12減少到8，讓底部輸入欄往上移
-            .padding(.top, 6) // 從8減少到6，讓底部輸入欄往上移
-            .background( // 背景與邊框包在一起
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
                 ZStack(alignment: .top) {
                     backgroundColor
                     Rectangle()
-                        .frame(height: 0.2) // 線條粗細
+                        .frame(height: 0.2)
                         .foregroundColor(.black.opacity(0.2))
                 }
             )
             
-            // 添加鍵盤空間
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: viewModel.keyboardHeight)
+            if isInputFocused {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(height: viewModel.keyboardHeight)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: isInputFocused)
+        .padding(.bottom, 2) // 增加與 TabView 之間的間距
     }
 
     // MARK: Sidebar
@@ -1271,10 +1336,54 @@ struct ChatDemoDynamicView: View {
             }
         }
     }
+
+    // 添加這個輔助方法到 ChatDemoDynamicView 結構體中
+    private func scrollTextToBottom() {
+        guard let textView = UITextView.findFirstResponder() else { return }
+        let bottom = NSRange(location: textView.text.count - 1, length: 1)
+        textView.scrollRangeToVisible(bottom)
+    }
 }
 
 // MARK: - Preview
 #Preview {
     ChatDemoDynamicView()
+}
+
+// 添加這個 PreferenceKey 到檔案頂部的其他結構定義附近
+private struct ViewHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// 添加這個 UITextView 擴展到檔案底部
+extension UITextView {
+    static func findFirstResponder() -> UITextView? {
+        let windows = UIApplication.shared.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+        
+        for window in windows {
+            if let textView = findFirstResponder(in: window) {
+                return textView
+            }
+        }
+        return nil
+    }
+    
+    private static func findFirstResponder(in view: UIView) -> UITextView? {
+        for subview in view.subviews {
+            if let textView = subview as? UITextView {
+                return textView
+            }
+            if let found = findFirstResponder(in: subview) {
+                return found
+            }
+        }
+        return nil
+    }
 }
 
