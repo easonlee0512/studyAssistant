@@ -175,7 +175,7 @@ struct TodoView: View {
                         ProgressView()
                             .scaleEffect(1.5)
                             .progressViewStyle(CircularProgressViewStyle(tint: Color.gray.opacity(0.8)))
-                            .position(x: geometry.size.width / 2, y: geometry.size.height - 200)  // 調整 y 位置到底部
+                            .position(x: geometry.size.width / 2, y: geometry.size.height / 2.15)  // 微調往下
                     }
                 }
                 
@@ -733,7 +733,7 @@ struct DayPagerView: View {
     
     var body: some View {
         TabView(selection: $pageIndex) {
-            ForEach(dayDates.indices, id: \._self) { idx in
+            ForEach(Array(dayDates.indices), id: \.self) { idx in
                 ZStack {
                     if !isLoading {
                         DayContent(
@@ -805,58 +805,60 @@ struct DayContent: View {
     
     var body: some View {
         ScrollView {
-            LazyVStack() {
-                ForEach(viewModel.sortedTasksWithCompletionStatus(by: date)) { task in
-                    // 獲取該任務在當前日期的實例
-                    let instances = viewModel.getInstancesForDate(date, task: task)
-                    
-                    if !instances.isEmpty {
-                        // 如果有實例，顯示每個實例
-                        ForEach(instances) { instance in
+            if !isLoading {
+                LazyVStack() {
+                    ForEach(viewModel.sortedTasksWithCompletionStatus(by: date)) { task in
+                        // 獲取該任務在當前日期的實例
+                        let instances = viewModel.getInstancesForDate(date, task: task)
+                        
+                        if !instances.isEmpty {
+                            // 如果有實例，顯示每個實例
+                            ForEach(instances) { instance in
+                                TodoItemView(
+                                    task: task,
+                                    isExample: false,
+                                    instance: instance,  // 傳遞實例
+                                    onUpdate: { _ in
+                                        Task {
+                                            do {
+                                                // 切換任務實例的完成狀態
+                                                try await viewModel.toggleInstanceCompletion(instance, in: task)
+                                            } catch {
+                                                onError(error)
+                                            }
+                                        }
+                                    },
+                                    onTaskSelected: onTaskSelected
+                                )
+                            }
+                        } else {
+                            // 如果沒有實例，表示這是非重複性任務
                             TodoItemView(
                                 task: task,
                                 isExample: false,
-                                instance: instance,  // 傳遞實例
                                 onUpdate: { _ in
                                     Task {
-                                        do {
-                                            // 切換任務實例的完成狀態
-                                            try await viewModel.toggleInstanceCompletion(instance, in: task)
-                                        } catch {
-                                            onError(error)
-                                        }
+                                        // 直接切換任務的完成狀態
+                                        await viewModel.toggleTaskCompletion(task)
                                     }
                                 },
                                 onTaskSelected: onTaskSelected
                             )
                         }
-                    } else {
-                        // 如果沒有實例，表示這是非重複性任務
-                        TodoItemView(
-                            task: task,
-                            isExample: false,
-                            onUpdate: { _ in
-                                Task {
-                                    // 直接切換任務的完成狀態
-                                    await viewModel.toggleTaskCompletion(task)
-                                }
-                            },
-                            onTaskSelected: onTaskSelected
-                        )
                     }
+                    
+                    if viewModel.sortedTasksWithCompletionStatus(by: date).isEmpty {
+                        Text("目前沒有任務")
+                            .foregroundColor(.gray)
+                            .padding()
+                    }
+                    
+                    // 底部空間 - 確保有足夠的滾動空間
+                    Color.clear.frame(height: 20)
                 }
-                
-                if viewModel.sortedTasksWithCompletionStatus(by: date).isEmpty {
-                    Text("目前沒有任務")
-                        .foregroundColor(.gray)
-                        .padding()
-                }
-                
-                // 底部空間 - 確保有足夠的滾動空間
-                Color.clear.frame(height: 20)
+                .padding(.horizontal)
+                .padding(.top, 10)
             }
-            .padding(.horizontal)
-            .padding(.top, 10)
         }
     }
 }
