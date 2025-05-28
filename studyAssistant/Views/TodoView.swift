@@ -60,7 +60,7 @@ struct TodoView: View {
     
     init() {
         // 從 UserDefaults 加載緩存的標語
-        _cachedUserGoal = State(initialValue: UserDefaults.standard.string(forKey: userGoalKey) ?? "")
+        _cachedUserGoal = State(initialValue: "")  // 改為空字串
     }
     
     var body: some View {
