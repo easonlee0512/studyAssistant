@@ -56,6 +56,9 @@ class TodoViewModel: ObservableObject {
     // 添加一個變數來保存監聽器
     private var tasksListener: ListenerRegistration?
     
+    // 添加一個變數來追蹤是否正在載入
+    private var isLoadingTasks = false
+    
     // 添加一個佇列來處理待更新的任務
     private var pendingUpdates: [String: TodoTask] = [:]
     private var updateTimer: Timer?
@@ -163,16 +166,11 @@ class TodoViewModel: ObservableObject {
                     
                     Task {
                         do {
-                            // 直接重新載入所有任務，包括實例
-                            let updatedTasks = try await self.firebaseService.fetchTodoTasks()
+                            // 直接重新載入所有任務
+                            try await self.forceReloadTasks()
                             
-                            // 在主線程更新 UI
-                            await MainActor.run {
-                                self.tasks = updatedTasks
-                                self.lastTasksLoadTime = Date()
-                                // 發送資料變更通知
-                                NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
-                            }
+                            // 發送資料變更通知
+                            NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
                         } catch {
                             print("Error reloading tasks: \(error)")
                         }
@@ -305,7 +303,25 @@ class TodoViewModel: ObservableObject {
             return
         }
         
-        // 強制重新載入資料
+        // 檢查是否需要重新載入
+        let now = Date()
+        if let lastLoad = lastTasksLoadTime,
+           now.timeIntervalSince(lastLoad) < cacheTimeInterval,
+           !tasks.isEmpty {
+            // 如果在快取時間內且已有資料，直接返回
+            print("使用快取的任務數據，距離上次載入: \(now.timeIntervalSince(lastLoad))秒")
+            return
+        }
+        
+        // 避免重複載入
+        guard !isLoadingTasks else {
+            print("任務正在載入中，跳過重複載入")
+            return
+        }
+        
+        isLoadingTasks = true
+        defer { isLoadingTasks = false }
+        
         isLoading = true
         defer { isLoading = false }
         
@@ -322,13 +338,19 @@ class TodoViewModel: ObservableObject {
         
         // 載入任務
         tasks = try await firebaseService.fetchTodoTasks()
-        lastTasksLoadTime = Date()
+        lastTasksLoadTime = now
         print("從Firebase重新載入任務數據")
         
         // 設置監聽器（如果還沒有設置）
         if tasksListener == nil {
             setupFirestoreListener()
         }
+    }
+    
+    // 強制重新載入任務（忽略快取）
+    func forceReloadTasks() async throws {
+        lastTasksLoadTime = nil
+        try await loadTasks()
     }
     
     // 刪除任務

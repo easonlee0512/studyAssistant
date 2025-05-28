@@ -156,33 +156,42 @@ struct studyAssistantApp: App {
                         do {
                             try await todoViewModel.loadTasks()
                             await staticViewModel.fetchStatistics()
+                            await settingsViewModel.loadData()
                         } catch {
-                            print("Error loading tasks: \(error)")
+                            print("Error loading initial data: \(error)")
                         }
                     }
-                    .onReceive(NotificationCenter.default.publisher(for: .userDidLogin)) { _ in
-                        // 當使用者登入時遷移舊數據並重新載入資料
-                        Task {
-                            do {
-                                let firebaseService = FirebaseService.shared
-                                try await firebaseService.migrateTasksToUserCollection()
-                                try await todoViewModel.loadTasks()
-                                // 同時也重新載入使用者設定
-                                await settingsViewModel.loadData()
-                                // 載入統計數據
-                                await staticViewModel.fetchStatistics()
-                                // 發送通知以更新所有依賴使用者設定的視圖
-                                NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
-                            } catch {
-                                print("Error loading tasks after login: \(error)")
+                    .onChange(of: scenePhase) { newPhase in
+                        switch newPhase {
+                        case .active:
+                            // 應用回到前景，重新載入資料
+                            Task {
+                                do {
+                                    // 強制重新載入任務，忽略快取
+                                    try await todoViewModel.forceReloadTasks()
+                                    // 同時也重新載入使用者設定
+                                    await settingsViewModel.loadData()
+                                    // 載入統計數據
+                                    await staticViewModel.fetchStatistics()
+                                    // 發送通知以更新所有依賴使用者設定的視圖
+                                    NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
+                                } catch {
+                                    print("Error reloading data in foreground: \(error)")
+                                }
                             }
+                            timerManager.appWillEnterForeground()
+                            
+                        case .background:
+                            // 應用進入背景，清理資源
+                            timerManager.appDidEnterBackground()
+                            
+                        case .inactive:
+                            // 應用非活動狀態（例如收到電話）
+                            break
+                            
+                        @unknown default:
+                            break
                         }
-                    }
-                    // 處理從 URL 打開應用的事件
-                    .onOpenURL { url in
-                        print("應用通過 URL 打開: \(url)")
-                        // 讓 Google Sign In 處理 URL
-                        GIDSignIn.sharedInstance.handle(url)
                     }
             } else {
                 LoginView()
@@ -193,34 +202,6 @@ struct studyAssistantApp: App {
                         // 讓 Google Sign In 處理 URL
                         GIDSignIn.sharedInstance.handle(url)
                     }
-            }
-        }
-        .onChange(of: scenePhase) { newPhase in
-            switch newPhase {
-            case .active:
-                // 應用回到前景，重新載入資料
-                Task {
-                    do {
-                        try await todoViewModel.loadTasks()
-                        // 同時也重新載入使用者設定
-                        await settingsViewModel.loadData()
-                        // 載入統計數據
-                        await staticViewModel.fetchStatistics()
-                        // 發送通知以更新所有依賴使用者設定的視圖
-                        NotificationCenter.default.post(name: Notification.Name.userProfileDidChange, object: nil)
-                    } catch {
-                        print("Error reloading tasks: \(error)")
-                    }
-                }
-                timerManager.appWillEnterForeground()
-            case .background:
-                // 應用進入背景
-                timerManager.appDidEnterBackground()
-            case .inactive:
-                // 應用非活動狀態（例如收到電話）
-                break
-            @unknown default:
-                break
             }
         }
     }

@@ -58,6 +58,12 @@ struct TodoView: View {
     @State private var lastUserProfileLoadTime: Date? = nil
     @State private var cachedUserGoal: String = ""
     
+    // 新增：用於追蹤應用程式狀態
+    @Environment(\.scenePhase) private var scenePhase
+    
+    // 新增：重新載入間隔（5分鐘）
+    private let reloadInterval: TimeInterval = 300
+    
     init() {
         // 從 UserDefaults 加載緩存的標語
         _cachedUserGoal = State(initialValue: "")  // 改為空字串
@@ -263,6 +269,10 @@ struct TodoView: View {
             
             if !isInitialized {
                 isInitialized = true
+                // 首次初始化時載入資料
+                Task {
+                    await loadTasks(showLoadingIndicator: true)
+                }
             }
         }
         .task {
@@ -280,17 +290,7 @@ struct TodoView: View {
                 }
             }
             
-            // 只在必要時載入任務數據
-            let currentTime = Date()
-            let needsReload = lastLoadTime == nil || 
-                             currentTime.timeIntervalSince(lastLoadTime!) > 300 // 5分鐘刷新一次
-            
-            if needsReload {
-                await loadTasks(showLoadingIndicator: lastLoadTime == nil)
-                lastLoadTime = Date()
-            }
-            
-            // 設置通知監聽器
+            // 監聽任務數據變化
             NotificationCenter.default.addObserver(
                 forName: .todoDataDidChange,
                 object: nil,
@@ -298,14 +298,30 @@ struct TodoView: View {
             ) { _ in
                 Task {
                     await loadTasks(showLoadingIndicator: false)
-                    lastLoadTime = Date()
                 }
+            }
+            
+            // 檢查是否需要重新載入
+            let currentTime = Date()
+            let needsReload = lastLoadTime == nil || 
+                            currentTime.timeIntervalSince(lastLoadTime!) > reloadInterval
+            
+            if needsReload {
+                await loadTasks(showLoadingIndicator: lastLoadTime == nil)
             }
         }
         .onChange(of: selectedDate) { newDate in
             // 當選擇的日期改變時，重新載入任務
             Task {
                 await loadTasks(showLoadingIndicator: false)
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                // 從背景回到前景時重新載入
+                Task {
+                    await loadTasks(showLoadingIndicator: false)
+                }
             }
         }
         .onDisappear {
@@ -316,6 +332,10 @@ struct TodoView: View {
             Button("確定", role: .cancel) { }
         } message: {
             Text(errorMessage)
+        }
+        // 新增：下拉刷新功能
+        .refreshable {
+            await loadTasks(showLoadingIndicator: true)
         }
     }
     
@@ -341,8 +361,11 @@ struct TodoView: View {
         do {
             try await viewModel.loadTasks()
             loadUserProfile()
+            lastLoadTime = Date()
         } catch {
             print("Error loading tasks: \(error)")
+            errorMessage = "載入任務失敗：\(error.localizedDescription)"
+            showError = true
         }
         
         if showLoadingIndicator {
