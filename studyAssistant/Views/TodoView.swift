@@ -89,11 +89,13 @@ struct TodoView: View {
                             if !cachedUserGoal.isEmpty {
                                 Text(cachedUserGoal)
                                     .font(.system(size: 30, weight: .bold))
+                                    .foregroundColor(Color.black)
                             } else {
                                 // 顯示距離目標日期的倒數，使用 targetDate 的日期名稱
                                 if daysRemaining >= 0 {
                                     Text("考試倒數 \(daysRemaining) 天")
                                         .font(.system(size: 30, weight: .bold))
+                                        .foregroundColor(Color.black)
                                 } else {
                                     Text("\(formattedTargetDate) 已過期 \(abs(daysRemaining)) 天")
                                         .font(.system(size: 30, weight: .bold))
@@ -105,6 +107,7 @@ struct TodoView: View {
                                 HStack {
                             Text(formattedDate)
                                 .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(Color.black)
                                     
                                     Spacer()
                                     
@@ -134,6 +137,7 @@ struct TodoView: View {
                         HStack {
                             Text("To Do List")
                                 .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(Color.black)
                             Spacer()
                             Button(action: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -849,7 +853,7 @@ struct DayContent: View {
                     
                     if viewModel.sortedTasksWithCompletionStatus(by: date).isEmpty {
                         Text("目前沒有任務")
-                            .foregroundColor(.gray)
+                            .foregroundColor(Color.black)
                             .padding()
                     }
                     

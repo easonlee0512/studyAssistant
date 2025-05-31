@@ -36,14 +36,14 @@ struct SettingsView: View {
                                     let remainingDays = Calendar.current.dateComponents([.day], from: Date(), to: viewModel.userProfile.targetDate).day ?? 0
                                     Text("\(viewModel.userProfile.targetDate.formatted(date: .numeric, time: .omitted))到期")
                                         .font(.custom("Arial", size: 16))
-                                        .foregroundColor(Color.black.opacity(0.5))
+                                        .foregroundColor(Color.black)
                                 }.padding(.leading, 30)
 
                                 
                                 Spacer()
                                 
                                 Image(systemName: "chevron.right")
-                                    .foregroundColor(.black.opacity(0.5))
+                                    .foregroundColor(Color.black)
                                     .padding(.trailing, 20)
                             }
                         }
@@ -53,6 +53,7 @@ struct SettingsView: View {
                         HStack {
                             Text("統計資料")
                                 .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Color.black)
                                 .padding(.leading, 20)
                             Spacer()
                         }
@@ -88,6 +89,7 @@ struct SettingsView: View {
                         HStack {
                             Text("一般設定")
                                 .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Color.black)
                                 .padding(.leading, 20)
                             Spacer()
                         }
@@ -120,6 +122,7 @@ struct SettingsView: View {
                         HStack {
                             Text("關於")
                                 .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Color.black)
                                 .padding(.leading, 20)
                             Spacer()
                         }
@@ -132,7 +135,7 @@ struct SettingsView: View {
                             )
                             
                             Divider()
-                                .background(Color.black.opacity(0.1))
+                                .background(Color.black)
                                 .padding(.horizontal, 15)
                             
                             SettingRowText(
@@ -141,7 +144,7 @@ struct SettingsView: View {
                             )
                             
                             Divider()
-                                .background(Color.black.opacity(0.1))
+                                .background(Color.black)
                                 .padding(.horizontal, 15)
                             
                             SettingRowText(
@@ -168,9 +171,9 @@ struct SettingsView: View {
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )) {
-                Button("確定", role: .cancel) {}
+                Button("確定", role: .cancel) {}.foregroundColor(Color.black)
             } message: {
-                Text(viewModel.errorMessage ?? "")
+                Text(viewModel.errorMessage ?? "").foregroundColor(Color.black)
             }
         }
     }

@@ -205,6 +205,7 @@ struct TodoEditView: View {
             
             Text("編輯任務")
                 .font(.system(size: 20, weight: .bold))
+                .foregroundColor(Color.black)
             
             Spacer()
             
@@ -233,8 +234,10 @@ struct TodoEditView: View {
         VStack(spacing: 0) {
             TextField("標題", text: $title)
                 .font(.system(size: 24, weight: .medium))
+                .foregroundColor(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 15)
+                .environment(\.colorScheme, .light)
             
             Divider()
                 .background(dividerColor)
@@ -242,8 +245,10 @@ struct TodoEditView: View {
             
             TextField("備註", text: $note)
                 .font(.system(size: 18))
+                .foregroundColor(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 15)
+                .environment(\.colorScheme, .light)
             
             Divider()
                 .background(dividerColor)
@@ -259,6 +264,7 @@ struct TodoEditView: View {
             HStack {
                 Text("整天")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
@@ -285,15 +291,20 @@ struct TodoEditView: View {
             HStack {
                 Text("開始")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 if isAllDay {
                     DatePicker("", selection: $startDate, displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)
                 } else {
                     DatePicker("", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)
                 }
             }
             .padding(.horizontal, 15)
@@ -306,15 +317,20 @@ struct TodoEditView: View {
             HStack {
                 Text("結束")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 if isAllDay {
                     DatePicker("", selection: $endDate, displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)
                 } else {
                     DatePicker("", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)
                 }
             }
             .padding(.horizontal, 15)
@@ -339,12 +355,15 @@ struct TodoEditView: View {
             HStack {
                 Text("類別")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 TextField("類別", text: $category)
                     .multilineTextAlignment(.trailing)
+                    .foregroundColor(Color.black)
                     .frame(maxWidth: 150)
+                    .environment(\.colorScheme, .light)
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 12)
@@ -363,6 +382,7 @@ struct TodoEditView: View {
             HStack(spacing: 0) {
                 Text("重複")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 50, alignment: .leading)
@@ -410,6 +430,7 @@ struct TodoEditView: View {
                 HStack {
                     Text("重複結束")
                         .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(Color.black)
                     
                     Spacer()
                     
@@ -418,6 +439,8 @@ struct TodoEditView: View {
                         set: { repeatEndDate = $0 }
                     ), displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)
                 }
                 .padding(.horizontal, 15)
                 .padding(.vertical, 12)
@@ -577,6 +600,7 @@ private struct ColorPickerView: View {
             HStack(spacing: 20) {
                 Text("顏色")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                     .frame(width: 48, alignment: .leading)
                 Spacer()
                 HStack(spacing: 20) {

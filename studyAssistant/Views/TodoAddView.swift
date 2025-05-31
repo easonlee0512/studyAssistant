@@ -197,12 +197,13 @@ struct TodoAddView: View {
                 dismissWithAnimation()
             }
             .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.blue)
+            .foregroundColor(Color.black)
             
             Spacer()
             
             Text("新增任務")
                 .font(.system(size: 20, weight: .bold))
+                .foregroundColor(Color.black)
             
             Spacer()
             
@@ -223,8 +224,10 @@ struct TodoAddView: View {
         VStack(spacing: 0) {
             TextField("標題", text: $viewModel.newTaskTitle)
                 .font(.system(size: 24, weight: .medium))
+                .foregroundColor(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 15)
+                .environment(\.colorScheme, .light)  
             
             Divider()
                 .background(dividerColor)
@@ -232,9 +235,10 @@ struct TodoAddView: View {
             
             TextField("備註", text: $viewModel.newTaskNote)
                 .font(.system(size: 18))
+                .foregroundColor(Color.black)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 15)
-            
+                .environment(\.colorScheme, .light)  
             Divider()
                 .background(dividerColor)
                 .padding(.horizontal, 5)
@@ -249,6 +253,7 @@ struct TodoAddView: View {
             HStack {
                 Text("整天")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
@@ -275,15 +280,20 @@ struct TodoAddView: View {
             HStack {
                 Text("開始")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 if viewModel.newTaskIsAllDay {
                     DatePicker("", selection: $viewModel.newTaskStartDate, displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)  // 強制使用淺色模式顯示
                 } else {
                     DatePicker("", selection: $viewModel.newTaskStartDate, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)  // 強制使用淺色模式顯示
                 }
             }
             .padding(.horizontal, 15)
@@ -296,15 +306,20 @@ struct TodoAddView: View {
             HStack {
                 Text("結束")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 if viewModel.newTaskIsAllDay {
                     DatePicker("", selection: $viewModel.newTaskEndDate, displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)  // 強制使用淺色模式顯示
                 } else {
                     DatePicker("", selection: $viewModel.newTaskEndDate, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)  // 強制使用淺色模式顯示
                 }
             }
             .padding(.horizontal, 15)
@@ -329,11 +344,13 @@ struct TodoAddView: View {
             HStack {
                 Text("類別")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                 
                 Spacer()
                 
                 TextField("類別", text: $viewModel.newTaskCategory)
                     .multilineTextAlignment(.trailing)
+                    .foregroundColor(Color.black)
                     .frame(maxWidth: 150)
             }
             .padding(.horizontal, 15)
@@ -353,6 +370,7 @@ struct TodoAddView: View {
             HStack(spacing: 0) {
                 Text("重複")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 50, alignment: .leading)
@@ -403,6 +421,7 @@ struct TodoAddView: View {
                 HStack {
                     Text("重複結束")
                         .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(Color.black)
                     
                     Spacer()
                     
@@ -411,6 +430,8 @@ struct TodoAddView: View {
                         set: { viewModel.newTaskRepeatEndDate = $0 }
                     ), displayedComponents: .date)
                         .labelsHidden()
+                        .accentColor(Color.black)
+                        .colorScheme(.light)  // 強制使用淺色模式顯示
                 }
                 .padding(.horizontal, 15)
                 .padding(.vertical, 12)
@@ -638,6 +659,7 @@ private struct ColorPickerView: View {
             HStack(spacing: 20) {
                 Text("顏色")
                     .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Color.black)
                     .frame(width: 48, alignment: .leading)
                 Spacer()
                 HStack(spacing: 20) {

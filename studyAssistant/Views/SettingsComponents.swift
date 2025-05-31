@@ -12,7 +12,7 @@ struct VIPFeatureText: View {
     var body: some View {
         Text(text)
             .font(.system(size: 16))
-            .foregroundColor(.white)
+            .foregroundColor(Color.black)
     }
 }
 

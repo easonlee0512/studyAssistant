@@ -350,7 +350,7 @@ struct ChatDemoDynamicView: View {
                 .font(.system(size: 20))
                 .padding(16)
                 .background(darkBubbleColor)
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .cornerRadius(12)
                 .shadow(color: .black.opacity(0.08), radius: 6, x: 1, y: 2)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.6, alignment: .trailing)
@@ -399,7 +399,7 @@ struct ChatDemoDynamicView: View {
                                 ].messages[messageIndex].currentExecutingFunction
                             {
                                 Text("正在執行：\(functionName)")
-                                    .foregroundColor(textColor.opacity(0.7))
+                                    .foregroundColor(Color.black.opacity(0.7))
                                     .font(.system(size: 16))
                                         .id(UUID()) // 確保文字也會更新
                                 }
@@ -424,6 +424,7 @@ struct ChatDemoDynamicView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
                                     .font(.headline)
+                                    .foregroundColor(Color.black)
 
                                 // 使用滾動視圖限制最大高度
                                 if isExpanded && tasks.count > 3 {
@@ -455,7 +456,7 @@ struct ChatDemoDynamicView: View {
                                             Text(isExpanded ? "收起" : "展開全部 (\(tasks.count) 個任務)")
                                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                         }
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.black)
                                         .opacity(0.8)
                                         .padding(.vertical, 8)
                                     }
@@ -512,7 +513,7 @@ struct ChatDemoDynamicView: View {
                                                         : "")
                                                 : "新增任務失敗"
                                         )
-                                        .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+                                        .foregroundColor(Color.black.opacity(0.6))
 
                                     }
                                 }
@@ -535,6 +536,7 @@ struct ChatDemoDynamicView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(message.isDeleteConfirmed ? "已刪除的任務：" : "待刪除的任務：")
                                     .font(.headline)
+                                    .foregroundColor(Color.black)
                                 
                                 // 使用滾動視圖限制最大高度
                                 if isExpanded && tasksToDelete.count > 3 {
@@ -566,7 +568,7 @@ struct ChatDemoDynamicView: View {
                                             Text(isExpanded ? "收起" : "展開全部 (\(tasksToDelete.count) 個任務)")
                                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                         }
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(Color.black)
                                         .opacity(0.8)
                                         .padding(.vertical, 8)
                                     }
@@ -622,7 +624,7 @@ struct ChatDemoDynamicView: View {
                                                     : "")
                                             : "刪除任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+                                    .foregroundColor(Color.black.opacity(0.6))
 
                                 }
                             }
@@ -642,6 +644,7 @@ struct ChatDemoDynamicView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(message.isUpdateConfirmed ? "已修改的任務：" : "待修改的任務：")
                                     .font(.headline)
+                                    .foregroundColor(Color.black)
                                 
                                 // 使用一個通用函數來格式化原始和更新後的任務數據
                                 if let updateDataList = message.pendingUpdateTasks {
@@ -681,7 +684,7 @@ struct ChatDemoDynamicView: View {
                                                 Text(isExpanded ? "收起" : "展開全部 (\(updateDataList.count) 個任務)")
                                                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                             }
-                                            .foregroundColor(.blue)
+                                            .foregroundColor(Color.black)
                                             .opacity(0.8)
                                             .padding(.vertical, 8)
                                         }
@@ -739,7 +742,7 @@ struct ChatDemoDynamicView: View {
                                                     : "")
                                             : "修改任務失敗"
                                     )
-                                    .foregroundColor(message.successCount > 0 ? .gray.opacity(0.6) : .red.opacity(0.6))
+                                    .foregroundColor(Color.black.opacity(0.6))
 
                                 }
                             }
@@ -827,7 +830,7 @@ struct ChatDemoDynamicView: View {
             if total > 1 {
                 Text("任務 \(index + 1) / \(total)")
                     .font(.system(size: taskCountSize))
-                    .foregroundColor(.blue.opacity(0.8))
+                    .foregroundColor(Color.black)
                     .padding(.bottom, 2)
             }
             
@@ -836,28 +839,35 @@ struct ChatDemoDynamicView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("原始資料")
                         .font(.system(size: taskHeaderSize, weight: .semibold))
-                        .foregroundColor(.gray)
+                        .foregroundColor(Color.black)
                         .padding(.bottom, 2)
                         
                     Text("標題: " + updateData.original.title)
                         .font(.system(size: taskTitleSize, weight: .medium))
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("備註: " + updateData.original.note)
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("類別: " + updateData.original.category)
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("開始時間: " + formatDate(updateData.original.startDate, isAllDay: updateData.original.isAllDay))
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("結束時間: " + formatDate(updateData.original.endDate, isAllDay: updateData.original.isAllDay))
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("全天: " + (updateData.original.isAllDay ? "是" : "否"))
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                     Text("已完成: " + (updateData.original.isCompleted ? "是" : "否"))
                         .font(.system(size: taskContentSize))
+                        .foregroundColor(Color.black)
                 }
                 .padding()
                 .background(Color.gray.opacity(0.1))
@@ -873,35 +883,35 @@ struct ChatDemoDynamicView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("更新後資料")
                         .font(.system(size: taskHeaderSize, weight: .semibold))
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color.black)
                         .padding(.bottom, 2)
                         
                     Text("標題: " + updateData.updated.title)
                         .font(.system(size: taskTitleSize, weight: .medium))
-                        .foregroundColor(updateData.original.title != updateData.updated.title ? .blue : .primary)
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("備註: " + updateData.updated.note)
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.note != updateData.updated.note ? .blue : .primary)
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("類別: " + updateData.updated.category)
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.category != updateData.updated.category ? .blue : .primary)
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("開始時間: " + formatDate(updateData.updated.startDate, isAllDay: updateData.updated.isAllDay))
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.startDate != updateData.updated.startDate ? .blue : .primary)
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("結束時間: " + formatDate(updateData.updated.endDate, isAllDay: updateData.updated.isAllDay))
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.endDate != updateData.updated.endDate ? .blue : .primary)
+                        .foregroundColor(Color.black)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("全天: " + (updateData.updated.isAllDay ? "是" : "否"))
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.isAllDay != updateData.updated.isAllDay ? .blue : .primary)
+                        .foregroundColor(Color.black)
                     Text("已完成: " + (updateData.updated.isCompleted ? "是" : "否"))
                         .font(.system(size: taskContentSize))
-                        .foregroundColor(updateData.original.isCompleted != updateData.updated.isCompleted ? .blue : .primary)
+                        .foregroundColor(Color.black)
                 }
                 .padding()
                 .background(Color.blue.opacity(0.1))
@@ -1000,7 +1010,7 @@ struct ChatDemoDynamicView: View {
 
         init(_ text: String, textColor: Color) {
             self.text = text
-            self.textColor = textColor
+            self.textColor = Color.black
         }
 
         // 解析粗體文字
@@ -1021,6 +1031,7 @@ struct ChatDemoDynamicView: View {
                             result
                             + Text(currentText).font(
                                 .system(size: 20, weight: isBold ? .bold : .regular))
+                                .foregroundColor(Color.black)
                         currentText = ""
                     }
                     isBold.toggle()
@@ -1036,6 +1047,7 @@ struct ChatDemoDynamicView: View {
                 result =
                     result
                     + Text(currentText).font(.system(size: 20, weight: isBold ? .bold : .regular))
+                        .foregroundColor(Color.black)
             }
 
             return result
@@ -1049,29 +1061,35 @@ struct ChatDemoDynamicView: View {
                     if line.hasPrefix("#### ") {
                         parseText(String(line.dropFirst(5)))
                             .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(Color.black)
                     } else if line.hasPrefix("### ") {
                         parseText(String(line.dropFirst(4)))
                             .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(Color.black)
                     } else if line.hasPrefix("## ") {
                         parseText(String(line.dropFirst(3)))
                             .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(Color.black)
                     } else if line.hasPrefix("# ") {
                         parseText(String(line.dropFirst(2)))
                             .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(Color.black)
                     } else if line.hasPrefix("- ") {
                         HStack(alignment: .top, spacing: 8) {
                             Text("•")
                                 .font(.system(size: 20))
-                                .foregroundColor(textColor)
+                                .foregroundColor(Color.black)
                                 .frame(width: 20, alignment: .center)
                             parseText(
                                 String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
                             )
                             .font(.system(size: 20))
+                            .foregroundColor(Color.black)
                         }
                         .padding(.leading, 4)
                     } else {
                         parseText(line)
+                            .foregroundColor(Color.black)
                     }
                 }
             }
@@ -1092,7 +1110,7 @@ struct ChatDemoDynamicView: View {
                 ZStack(alignment: .topLeading) {
                     if inputText.isEmpty {
                         Text("輸入訊息...")
-                            .foregroundColor(textColor.opacity(0.4))
+                            .foregroundColor(Color.black.opacity(0.4))
                             .padding(.vertical, 8)
                     }
                     TextEditor(text: $inputText)
@@ -1101,7 +1119,7 @@ struct ChatDemoDynamicView: View {
                         .frame(height: isInputFocused ? min(max(textEditorHeight, 43), 43*4) : 43)
                         .background(midBubbleColor)
                         .cornerRadius(12)
-                        .foregroundColor(textColor)
+                        .foregroundColor(Color.black)
                         .disabled(isGenerating)
                         .scrollContentBackground(.hidden)
                         .focused($isInputFocused)
@@ -1148,7 +1166,7 @@ struct ChatDemoDynamicView: View {
                     Button(action: {}) {
                         Image(systemName: "mic")
                             .font(.system(size: 20))
-                            .foregroundColor(textColor)
+                            .foregroundColor(Color.black)
                     }
                     .frame(width: 32, height: 32)
                     .padding(.trailing, 2)
@@ -1156,7 +1174,7 @@ struct ChatDemoDynamicView: View {
                     Button(action: sendMessage) {
                         Image(systemName: "arrowshape.up")
                             .font(.system(size: 20))
-                            .foregroundColor(textColor)
+                            .foregroundColor(Color.black)
                     }
                     .frame(width: 32, height: 32)
                     .disabled(inputText.isEmpty)
@@ -1185,7 +1203,7 @@ struct ChatDemoDynamicView: View {
                     Spacer().frame(height: 3)
                     Text("聊天室列表")
                         .font(.title2).fontWeight(.bold)
-                        .foregroundColor(textColor)
+                        .foregroundColor(Color.black)
                         .padding(.vertical, 10)
                         .padding(.leading, 20)
                     ScrollView {
@@ -1199,7 +1217,7 @@ struct ChatDemoDynamicView: View {
                                 } label: {
                                     Text(room.name)
                                         .font(.title3)
-                                        .foregroundColor(textColor)
+                                        .foregroundColor(Color.black)
                                         .lineLimit(1)
                                         .truncationMode(.tail)
                                         .padding(.vertical, 12)

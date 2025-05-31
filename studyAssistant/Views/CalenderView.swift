@@ -387,6 +387,7 @@ struct CalendarMonthWithWeekdaysView: View {
                 ForEach(weekDays, id: \.self) { day in
                     Text(day)
                         .font(.system(size: 13))
+                        .foregroundColor(Color.black)
                         .frame(width: geometry.size.width / 7)
                         .padding(.bottom, 5)
                 }

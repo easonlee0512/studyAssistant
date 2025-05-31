@@ -86,6 +86,7 @@ struct StatisticsView: View {
                     Text("統計")
                         .font(.title2)
                         .fontWeight(.bold)
+                        .foregroundColor(Color.black)
                     
                     Spacer()
                     
@@ -108,6 +109,8 @@ struct StatisticsView: View {
                 .onChange(of: timeRange) { _ in
                     loadData()
                 }
+                .colorScheme(.light)
+                .accentColor(.black)
                 
                 // 顯示同步指示器
                 if isSyncing {
@@ -369,7 +372,7 @@ struct StatisticsView: View {
                 VStack(spacing: 5) {
                     Text("總學習時間")
                         .font(.title3)
-                        .foregroundColor(.black)
+                        .foregroundColor(Color.black)
                     
                     Text(formatDuration(getTotalFocusTime()))
                         .font(.system(size: 60, weight: .bold))
@@ -492,6 +495,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 15) {
                 Text("任務完成情況")
                     .font(.headline)
+                    .foregroundColor(.black)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
                 VStack(spacing: 20) {
@@ -499,7 +503,7 @@ struct StatisticsView: View {
                     
                     if taskCompletionRates.isEmpty {
                         Text("暫無任務數據")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.black)
                             .frame(maxWidth: .infinity, minHeight: 100)
                     } else {
                         ForEach(Array(taskCompletionRates.keys.sorted()), id: \.self) { category in
@@ -514,12 +518,14 @@ struct StatisticsView: View {
                                         .font(.headline)
                                         .lineLimit(1)
                                         .frame(width: 80, alignment: .leading)
+                                        .foregroundColor(Color.black)
                                     
                                     Spacer()
                                     
                                     Text("\(completedTasks)/\(totalTasks)")
                                         .font(.subheadline)
                                         .background(Color.hex(hex: "F5F5F5"))
+                                        .foregroundColor(Color.black)
                                 }
                                 
                                 // 修改進度條和百分比顯示
@@ -603,7 +609,7 @@ struct StatisticsView: View {
                 VStack(spacing: 15) {
                     if categoryTimes.isEmpty {
                         Text("暫無分類數據")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.black)
                             .frame(maxWidth: .infinity, minHeight: 100)
                             .background(Color.hex(hex: "F5F5F5"))
                             .cornerRadius(12)
@@ -618,6 +624,7 @@ struct StatisticsView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(category)
                                         .font(.headline)
+                                        .foregroundColor(.black)
                                 }
                                 
                                 Spacer()
@@ -625,6 +632,7 @@ struct StatisticsView: View {
                                 Text("\(hours)小時\(mins)分鐘")
                                     .font(.title3)
                                     .bold()
+                                    .foregroundColor(.black)
                             }
                             .padding()
                             .background(Color.hex(hex: "F5F5F5"))
@@ -666,7 +674,7 @@ struct StatisticsView: View {
                     VStack(spacing: 15) {
                         Text("最後更新：")
                             .font(.title3)
-                            .foregroundColor(.black)
+                            .foregroundColor(Color.black)
                         
                         Text(lastUpdateTimeFormatter.string(from: staticViewModel.tokenUsage.lastUpdated))
                             .font(.system(size: 25, weight: .bold))
@@ -683,7 +691,7 @@ struct StatisticsView: View {
                 VStack(spacing: 15) {
                     if staticViewModel.tokenUsage.modelUsage.isEmpty {
                         Text("暫無模型使用數據")
-                            .foregroundColor(.gray)
+                            .foregroundColor(Color.black)
                             .frame(maxWidth: .infinity, minHeight: 100)
                             .background(Color.hex(hex: "F5F5F5"))
                             .cornerRadius(12)
@@ -697,6 +705,7 @@ struct StatisticsView: View {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(model)
                                             .font(.headline)
+                                            .foregroundColor(Color.black)
                                     }
                                     
                                     Spacer()
@@ -704,6 +713,7 @@ struct StatisticsView: View {
                                     Text("\(modelUsage.total) tokens")
                                         .font(.title3)
                                         .bold()
+                                        .foregroundColor(.black)
                                 }
                                 
                                 // 顯示詳細的提示詞和回應tokens
@@ -717,6 +727,7 @@ struct StatisticsView: View {
                                             Text("\(promptTokens) tokens")
                                                 .font(.caption)
                                                 .bold()
+                                                .foregroundColor(.black)
                                         }
                                         .padding(.vertical, 4)
                                         .padding(.horizontal, 8)
@@ -733,6 +744,7 @@ struct StatisticsView: View {
                                             Text("\(completionTokens) tokens")
                                                 .font(.caption)
                                                 .bold()
+                                                .foregroundColor(.black)
                                         }
                                         .padding(.vertical, 4)
                                         .padding(.horizontal, 8)

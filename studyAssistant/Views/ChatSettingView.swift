@@ -13,7 +13,7 @@ struct ChatSettingView: View {
     private let backgroundColor = Color.hex(hex: "F3D4B7")
     private let accentColor = Color.hex(hex: "E27844")
     private let cardColor = Color.hex(hex: "FEECD8")
-    private let textColor = Color.black.opacity(0.8)
+    private let textColor = Color.black
 
     // UserDefaults keys
     private let studyTimePreferenceKey = "isStudyTimePreferenceEnabled"
@@ -58,8 +58,10 @@ struct ChatSettingView: View {
                     VStack {
                         Text("發生錯誤")
                             .font(.headline)
+                            .foregroundColor(Color.black)
                         Text(error)
                             .font(.body)
+                            .foregroundColor(Color.black)
                             .multilineTextAlignment(.center)
                             .padding()
                         Button("重試") {
@@ -89,23 +91,22 @@ struct ChatSettingView: View {
                                         }
                                     ))
                                         .font(.system(size: 18))
+                                        .foregroundColor(Color.black)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
                                         .background(
-                                            Color.hex(hex: "F3CAA6")
-                                                .opacity(0.15)
-                                                .background(.ultraThinMaterial)
+                                            Color.hex(hex: "FEECD8")
                                         )
                                         .cornerRadius(8)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                                .stroke(Color.black.opacity(0.1), lineWidth: 1)
                                         )
                                         .padding(.top, 2)
 
                                     Text("提示：可以設定為「多拉A夢」、「女朋友」等")
                                         .font(.system(size: 16))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(Color.black)
                                         .padding(.horizontal, 4)
                                         .padding(.top, 2)
                                 }
@@ -125,6 +126,7 @@ struct ChatSettingView: View {
                                         )) {
                                             Text("啟用讀書時間偏好")
                                                 .font(.system(size: 18))
+                                                .foregroundColor(Color.black)
                                         }
                                         .tint(accentColor)
                                         .padding(.bottom, 5)
@@ -132,6 +134,7 @@ struct ChatSettingView: View {
                                         if isStudyTimePreferenceEnabled {
                                             Text("每次讀書時間：\(Int(settings.studyDuration)) 分鐘")
                                                 .font(.system(size: 18))
+                                                .foregroundColor(Color.black)
 
                                             Slider(
                                                 value: Binding(
@@ -162,6 +165,7 @@ struct ChatSettingView: View {
                                         )) {
                                             Text("啟用讀書日期偏好")
                                                 .font(.system(size: 18))
+                                                .foregroundColor(Color.black)
                                         }
                                         .tint(accentColor)
                                         .padding(.bottom, 5)
@@ -169,6 +173,7 @@ struct ChatSettingView: View {
                                         if isStudyDatePreferenceEnabled {
                                             Text("選擇習慣讀書的日子：")
                                                 .font(.system(size: 18))
+                                                .foregroundColor(Color.black)
 
                                             weekdaysSelector
 
@@ -178,6 +183,7 @@ struct ChatSettingView: View {
 
                                                 Text("選擇要設定時間的日子：")
                                                     .font(.system(size: 18))
+                                                    .foregroundColor(Color.black)
                                                     .padding(.bottom, 5)
 
                                                 // 選擇要設定時間的日子
@@ -201,7 +207,7 @@ struct ChatSettingView: View {
                                                                     )
                                                                     .foregroundColor(
                                                                         selectedDayForTimeSettings
-                                                                            == day ? .white : textColor
+                                                                            == day ? .white : Color.black
                                                                     )
                                                                     .cornerRadius(20)
                                                                     .overlay(
@@ -224,10 +230,11 @@ struct ChatSettingView: View {
                                                             "星期\(weekdaySymbol(for: selectedDayForTimeSettings))偏好時間："
                                                         )
                                                         .font(.system(size: 18, weight: .bold))
-                                                        .foregroundColor(accentColor)
+                                                        .foregroundColor(Color.black)
 
                                                         Text("偏好開始時間：")
                                                             .font(.system(size: 18))
+                                                            .foregroundColor(Color.black)
 
                                                         DatePicker(
                                                             "",
@@ -247,9 +254,12 @@ struct ChatSettingView: View {
                                                         .datePickerStyle(.wheel)
                                                         .labelsHidden()
                                                         .frame(maxHeight: 150)
+                                                        .colorScheme(.light)
+                                                        .accentColor(Color.black)
 
                                                         Text("偏好結束時間：")
                                                             .font(.system(size: 18))
+                                                            .foregroundColor(Color.black)
 
                                                         DatePicker(
                                                             "",
@@ -269,6 +279,8 @@ struct ChatSettingView: View {
                                                         .datePickerStyle(.wheel)
                                                         .labelsHidden()
                                                         .frame(maxHeight: 150)
+                                                        .colorScheme(.light)
+                                                        .accentColor(Color.black)
                                                     }
                                                     .padding(.horizontal, 5)
                                                     .padding(.vertical, 10)
@@ -288,22 +300,34 @@ struct ChatSettingView: View {
             }
             .navigationTitle("讀書習慣設定")
             .navigationBarTitleDisplayMode(.inline)
+            .foregroundColor(Color.black)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("返回") {
                         dismiss()
                     }
-                    .foregroundColor(accentColor)
+                    .foregroundColor(Color.black)
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    Text("讀書習慣設定")
+                        .font(.headline)
+                        .foregroundColor(Color.black)
                 }
             }
+            .toolbarBackground(backgroundColor, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .onAppear {
                 loadSettingsFromViewModel()
             }
             .alert(isPresented: $showErrorAlert) {
                 Alert(
-                    title: Text("儲存失敗"),
-                    message: Text(errorMessage ?? "未知錯誤"),
-                    dismissButton: .default(Text("確定"))
+                    title: Text("儲存失敗")
+                        .foregroundColor(Color.black),
+                    message: Text(errorMessage ?? "未知錯誤")
+                        .foregroundColor(Color.black),
+                    dismissButton: .default(Text("確定")
+                        .foregroundColor(Color.black))
                 )
             }
         }
@@ -316,7 +340,7 @@ struct ChatSettingView: View {
         VStack(alignment: .leading, spacing: 15) {
             Text(title)
                 .font(.system(size: 22, weight: .bold))
-                .foregroundColor(accentColor)
+                .foregroundColor(Color.black)
 
             content()
         }
@@ -350,7 +374,7 @@ struct ChatSettingView: View {
                         .font(.system(size: 18, weight: .bold))
                         .frame(width: 40, height: 40)
                         .background(selectedDaysSet.contains(day) ? accentColor : Color.white)
-                        .foregroundColor(selectedDaysSet.contains(day) ? .white : textColor)
+                        .foregroundColor(selectedDaysSet.contains(day) ? .white : Color.black)
                         .cornerRadius(20)
                         .overlay(
                             Circle()

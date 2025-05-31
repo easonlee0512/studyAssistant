@@ -71,6 +71,7 @@ struct ProfileSettingView: View {
                     Text("個人資料設定")
                         .font(.title2)
                         .fontWeight(.bold)
+                        .foregroundColor(Color.black)
                     
                     Spacer()
                     
@@ -122,6 +123,8 @@ struct ProfileSettingView: View {
                         
                                 DatePicker("", selection: $targetDate, displayedComponents: .date)
                                     .labelsHidden()
+                                    .accentColor(Color.black)
+                                    .colorScheme(.light)
                             }
                             .padding()
                             .background(cardColor)
@@ -142,9 +145,12 @@ struct ProfileSettingView: View {
                                 Picker("", selection: $selectedStage) {
                                     ForEach(learningStages, id: \.self) { stage in
                                         Text(stage).tag(stage)
+                                            .foregroundColor(Color.black)
                                     }
                                 }
                                 .pickerStyle(MenuPickerStyle())
+                                .accentColor(Color.black)
+                                .colorScheme(.light)
                             }
                             .padding()
                             .background(cardColor)
@@ -233,6 +239,7 @@ struct ProfileSettingView: View {
                     
                     Text("載入中...")
                         .font(.caption)
+                        .foregroundColor(Color.black)
                         .padding(.top, 5)
                 }
                 .padding()
@@ -265,6 +272,7 @@ struct ProfileSettingView: View {
             
             TextField("", text: text)
                 .multilineTextAlignment(.trailing)
+                .foregroundColor(Color.black)
                 .frame(maxWidth: 150)
         }
         .padding()
