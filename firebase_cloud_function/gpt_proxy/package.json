@@ -1,0 +1,18 @@
+{
+  "name": "gpt-proxy",
+  "version": "1.0.0",
+  "description": "GPT API Proxy using Firebase Cloud Functions",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=chatProxy",
+    "deploy": "firebase deploy --only functions:gptProxy"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "node-fetch": "^3.3.2",
+    "cors": "^2.8.5"
+  }
+}

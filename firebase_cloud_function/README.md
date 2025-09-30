@@ -1,0 +1,1 @@
+# firebase_cloud_function放各種cloud function或是firebase的服務

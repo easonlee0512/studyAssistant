@@ -401,8 +401,7 @@ struct PendingTask: Identifiable, Codable {
 // MARK: - 與 GPT 通訊的 View-Model
 @MainActor
 final class ChatViewModel: ObservableObject {
-    private let proxyURL = URL(string: "https://gpt-proxy-api.studyassistant.workers.dev")!
-    private let proxyToken = "my-secret-token"
+    private let proxyURL = URL(string: "https://asia-east1-studyassistant-f7172.cloudfunctions.net/chatProxy")!
     private let chatRoomsKey = "local_chat_rooms"
     
     @Published var staticViewModel: StaticViewModel?
@@ -1157,7 +1156,6 @@ final class ChatViewModel: ObservableObject {
 
             var req = URLRequest(url: proxyURL)
             req.httpMethod = "POST"
-            req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
             req.addValue("application/json", forHTTPHeaderField: "Content-Type")
             req.addValue("text/event-stream", forHTTPHeaderField: "Accept")
             req.httpBody = data
@@ -1576,7 +1574,6 @@ final class ChatViewModel: ObservableObject {
         guard let data = try? encoder.encode(body) else { return nil }
         var req = URLRequest(url: proxyURL)
         req.httpMethod = "POST"
-        req.addValue(proxyToken, forHTTPHeaderField: "x-api-token")
         req.addValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = data
         do {
@@ -2274,7 +2271,7 @@ final class ChatViewModel: ObservableObject {
             ]
             
             // 更新模型使用量
-            let modelKey = model.replacingOccurrences(of: ".", with: "-")  // 將 4.1 改為 4-1
+            let modelKey = model  // 直接使用模型名稱
             updateData["modelUsage.\(modelKey).total"] = FieldValue.increment(Int64(tokenCount))
             
             if let promptTokens = promptTokens {
