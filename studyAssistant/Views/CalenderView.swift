@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftUICore
 // 添加 Date 擴展的引用
 
 // 添加全域常數
@@ -142,6 +141,7 @@ struct CalendarView: View {
                 .frame(maxHeight: .infinity)
                 .padding(.top, 20)
                 .padding(.horizontal, 1)
+                .padding(.bottom, 80) // 底部留適當間距
             }
             .background(backgroundColor)
             .ignoresSafeArea()

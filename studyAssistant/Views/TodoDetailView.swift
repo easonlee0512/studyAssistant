@@ -5,7 +5,6 @@
 //  Created by 李翊辰 on 2025/4/30.
 //
 import SwiftUI
-import SwiftUICore
 import FirebaseFirestore
 import FirebaseAuth
 // 添加 Date 擴展的引用

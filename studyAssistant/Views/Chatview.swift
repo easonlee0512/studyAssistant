@@ -30,7 +30,7 @@ struct ChatDemoDynamicView: View {
     @State private var isGenerating = false   // 追蹤 GPT 是否正在生成回覆
     @State private var isUserScrolling = false  // 追蹤使用者是否正在滑動
     @State private var isConversationEnded = false  // 追蹤對話是否已結束
-    @State private var textEditorHeight: CGFloat = 40
+    @State private var textEditorHeight: CGFloat = 36
     @FocusState private var isInputFocused: Bool
     @State private var bottomInset: CGFloat = 0
 
@@ -272,7 +272,7 @@ struct ChatDemoDynamicView: View {
                     }
                 }
                 .padding(.top, 8)
-                .padding(.bottom, 15)
+                .padding(.bottom, 20) // 貼齊輸入框
                 .id("messageBottom")  // 添加一個 ID 用於滾動
             }
             .onChange(of: expandedTaskMessages) { newValue in
@@ -949,9 +949,9 @@ struct ChatDemoDynamicView: View {
                             .padding(.vertical, 8)
                     }
                     TextEditor(text: $inputText)
-                        .font(.system(size: 18))
-                        .padding(.vertical, 10)
-                        .frame(height: isInputFocused ? min(max(textEditorHeight, 43), 43*4) : 43)
+                        .font(.system(size: 16))
+                        .padding(.vertical, 8)
+                        .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
                         .background(midBubbleColor)
                         .cornerRadius(12)
                         .foregroundColor(Color.black)
@@ -961,7 +961,7 @@ struct ChatDemoDynamicView: View {
                         .onChange(of: isInputFocused) { focused in
                             if !focused {
                                 withAnimation(.easeOut(duration: 0.2)) {
-                                    textEditorHeight = 43
+                                    textEditorHeight = 36
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     scrollTextToBottom()

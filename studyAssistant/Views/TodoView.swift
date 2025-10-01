@@ -5,7 +5,6 @@
 //  Created by 李翊辰 on 2025/4/30.
 //
 import SwiftUI
-import SwiftUICore
 import FirebaseFirestore
 import FirebaseAuth
 import Foundation // 確保可以訪問 NotificationConstants
@@ -171,9 +170,11 @@ struct TodoView: View {
                             },
                             isLoading: isLoading
                         )
+                        .frame(maxHeight: .infinity) // 讓 TabView 延伸到螢幕底部
                         .opacity(isLoading ? 0.3 : 1) // 載入時降低透明度
                     }
-                    
+                    .frame(maxHeight: .infinity, alignment: .top) // 讓 VStack 延伸到螢幕底部
+
                     // 載入指示器 - 放在 TodoList 下方
                     if viewModel.isLoading {
                         ProgressView()
@@ -810,7 +811,7 @@ struct DayContent: View {
     var body: some View {
         ScrollView {
             if !isLoading {
-                LazyVStack() {
+                LazyVStack(spacing: 0) {
                     ForEach(viewModel.sortedTasksWithCompletionStatus(by: date)) { task in
                         // 獲取該任務在當前日期的實例
                         let instances = viewModel.getInstancesForDate(date, task: task)
@@ -856,14 +857,15 @@ struct DayContent: View {
                             .foregroundColor(Color.black)
                             .padding()
                     }
-                    
-                    // 底部空間 - 確保有足夠的滾動空間
-                    Color.clear.frame(height: 20)
+
+                    // 底部空間 - 確保有足夠的滾動空間避開底部導航欄
+                    Color.clear.frame(height: 40)
                 }
                 .padding(.horizontal)
                 .padding(.top, 10)
             }
         }
+        .ignoresSafeArea(edges: .bottom) // 忽略底部安全區域，讓 ScrollView 延伸到螢幕底部
     }
 }
 
