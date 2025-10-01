@@ -226,21 +226,15 @@ struct ChatMessage: Identifiable, Codable {
     var text: String
     let isMe: Bool
     var pendingTasks: [PendingTask]?
-    var pendingDeleteTasks: [TodoTask]?  // 新增：待刪除的任務
-    
+    var pendingDeleteTasks: [TodoTask]?
+
     // 修改為陣列以支援批量修改
     var pendingUpdateTasksOriginal: [TodoTask]?
     var pendingUpdateTasksUpdated: [PendingTask]?
-    
-    var isTaskConfirmed: Bool
-    var isDeleteConfirmed: Bool  // 新增：是否確認刪除
-    var isUpdateConfirmed: Bool  // 新增：是否確認修改
-    var isProcessing: Bool
-    var successCount: Int
-    var failureCount: Int
-    var isWaitingFunction: Bool  // 新增：等待函數執行的標記
+
+    var isWaitingFunction: Bool  // 等待函數執行的標記
     var currentExecutingFunction: String?
-    var executingFunctions: [String]?  // 新增：追踪多個正在執行的函數名稱
+    var executingFunctions: [String]?  // 追踪多個正在執行的函數名稱
 
     // 計算屬性，返回元組陣列
     var pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]? {
@@ -281,17 +275,11 @@ struct ChatMessage: Identifiable, Codable {
 
     init(
         text: String, isMe: Bool, pendingTasks: [PendingTask]? = nil,
-        pendingDeleteTasks: [TodoTask]? = nil,  // 新增參數
-        pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]? = nil,  // 修改為多個任務
-        isTaskConfirmed: Bool = false,
-        isDeleteConfirmed: Bool = false,  // 新增參數
-        isUpdateConfirmed: Bool = false,  // 新增參數
-        isProcessing: Bool = false,
-        successCount: Int = 0,
-        failureCount: Int = 0,
+        pendingDeleteTasks: [TodoTask]? = nil,
+        pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]? = nil,
         isWaitingFunction: Bool = false,
         currentExecutingFunction: String? = nil,
-        executingFunctions: [String]? = nil  // 新增參數
+        executingFunctions: [String]? = nil
     ) {
         self.text = text
         self.isMe = isMe
@@ -299,12 +287,6 @@ struct ChatMessage: Identifiable, Codable {
         self.pendingDeleteTasks = pendingDeleteTasks
         self.pendingUpdateTasksOriginal = pendingUpdateTasks?.map { $0.original }
         self.pendingUpdateTasksUpdated = pendingUpdateTasks?.map { $0.updated }
-        self.isTaskConfirmed = isTaskConfirmed
-        self.isDeleteConfirmed = isDeleteConfirmed
-        self.isUpdateConfirmed = isUpdateConfirmed
-        self.isProcessing = isProcessing
-        self.successCount = successCount
-        self.failureCount = failureCount
         self.isWaitingFunction = isWaitingFunction
         self.currentExecutingFunction = currentExecutingFunction
         self.executingFunctions = executingFunctions
@@ -314,8 +296,6 @@ struct ChatMessage: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, isMe, pendingTasks, pendingDeleteTasks
         case pendingUpdateTasksOriginal, pendingUpdateTasksUpdated
-        case isTaskConfirmed, isDeleteConfirmed, isUpdateConfirmed
-        case isProcessing, successCount, failureCount
         case isWaitingFunction, currentExecutingFunction, executingFunctions
     }
 }
@@ -797,11 +777,7 @@ final class ChatViewModel: ObservableObject {
         currentFunction = "saveTask"
         defer { currentFunction = nil }
 
-        // 檢查當前訊息是否已有待確認的任務
         let currentMessageIndex = chatRooms[selectedRoomIndex].messages.count - 1
-        if chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingTasks != nil {
-            return "任務已經安排好了"
-        }
 
         // 解析參數
         struct TaskArgs: Codable {
@@ -892,15 +868,18 @@ final class ChatViewModel: ObservableObject {
                 return nil
             }
 
-            // 解析所有任務
+            // 解析並直接保存所有任務
             var pendingTasks: [PendingTask] = []
+            var successCount = 0
+            var failureCount = 0
 
             for task in args.tasks {
                 guard let startDate = parseDate(task.startDate),
                     let endDate = parseDate(task.endDate)
                 else {
                     print("日期格式無效：startDate=\(task.startDate), endDate=\(task.endDate)")
-                    return "日期格式無效"
+                    failureCount += 1
+                    continue
                 }
 
                 let isAllDayBool = task.resolvedIsAllDay.lowercased() == "true"
@@ -921,15 +900,40 @@ final class ChatViewModel: ObservableObject {
                 // 檢查並創建類別統計
                 await checkAndCreateStatisticsForCategory(task.resolvedCategory)
 
-                pendingTasks.append(pendingTask)
+                // 直接保存任務到資料庫
+                do {
+                    let todoTask = TodoTask(
+                        title: task.title,
+                        note: task.note,
+                        color: taskColor,
+                        focusTime: 0,
+                        category: task.resolvedCategory,
+                        isAllDay: isAllDayBool,
+                        isCompleted: isCompletedBool,
+                        repeatType: .none,
+                        startDate: startDate,
+                        endDate: endDate,
+                        userId: ""
+                    )
+
+                    await todoViewModel.addTask(todoTask)
+                    successCount += 1
+                    pendingTasks.append(pendingTask)
+                } catch {
+                    print("保存任務失敗: \(error)")
+                    failureCount += 1
+                }
             }
 
-            // 將待確認的任務存儲到當前訊息中
+            // 將已保存的任務存儲到訊息中（用於顯示）
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingTasks = pendingTasks
 
-            // 返回確認消息
-            let taskCount = pendingTasks.count
-            return "已創建 \(taskCount) 個任務"
+            // 返回結果消息
+            if successCount > 0 {
+                return "已成功新增 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務新增失敗" : "")
+            } else {
+                return "任務新增失敗"
+            }
 
         } catch {
             print("解析參數時發生錯誤：\(error)")
@@ -938,78 +942,6 @@ final class ChatViewModel: ObservableObject {
     }
 
     // 確認並保存任務
-    func confirmAndSaveTask(for messageId: UUID) async {
-        guard
-            let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: {
-                $0.id == messageId
-            }),
-            let tasks = chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks,
-            !chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed
-        else {
-            return
-        }
-
-        // 標記任務為處理中
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = true
-
-        var successCount = 0
-        var failureCount = 0
-
-        // 保存每個任務
-        for task in tasks {
-            do {
-                let todoTask = TodoTask(
-                    title: task.title,
-                    note: task.note,
-                    color: task.color,  // 使用任務的顏色
-                    focusTime: 0,
-                    category: task.category,
-                    isAllDay: task.isAllDay,
-                    isCompleted: task.isCompleted,
-                    repeatType: .none,
-                    startDate: task.startDate,
-                    endDate: task.endDate,
-                    userId: ""
-                )
-
-                // 檢查並創建類別統計
-                await checkAndCreateStatisticsForCategory(task.category)
-
-                // 保存任務
-                await todoViewModel.addTask(todoTask)
-                successCount += 1
-            } catch {
-                print("Error saving task: \(error)")
-                failureCount += 1
-            }
-        }
-
-        // 更新成功/失敗計數
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = successCount
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = failureCount
-
-        // 完成處理並標記為已確認
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = false
-        chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed = true
-    }
-
-    // 拒絕任務
-    func rejectTask(for messageId: UUID) {
-        guard
-            let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: {
-                $0.id == messageId
-            })
-        else { return }
-
-        // 標記訊息為已確認，並設置失敗狀態
-        chatRooms[selectedRoomIndex].messages[messageIndex].isTaskConfirmed = true
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = 0
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount =
-            chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks?.count ?? 0
-
-        // 不清除待確認任務，保留顯示
-        // chatRooms[selectedRoomIndex].messages[messageIndex].pendingTasks = nil
-    }
 
     // 執行 end_conversation 函數
     private func executeEndConversation() -> String {
@@ -1895,11 +1827,7 @@ final class ChatViewModel: ObservableObject {
         currentFunction = "deleteTask"
         defer { currentFunction = nil }
 
-        // 檢查當前訊息是否已有待確認的刪除任務
         let currentMessageIndex = chatRooms[selectedRoomIndex].messages.count - 1
-        if chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingDeleteTasks != nil {
-            return "已有待確認的刪除任務，請等待用戶處理。"
-        }
 
         // 解析參數
         struct DeleteTaskArgs: Codable {
@@ -1915,13 +1843,23 @@ final class ChatViewModel: ObservableObject {
             let args = try JSONDecoder().decode(DeleteTaskArgs.self, from: jsonData)
             print("成功解析參數，準備刪除 \(args.taskIds.count) 個任務")
 
-            // 獲取要刪除的任務資訊
+            // 獲取要刪除的任務資訊並直接刪除
             var tasksToDelete: [TodoTask] = []
-            let allTasks = todoViewModel.tasks  // 直接使用 tasks 屬性
-            
+            let allTasks = todoViewModel.tasks
+            var successCount = 0
+            var failureCount = 0
+
             for taskId in args.taskIds {
                 if let task = allTasks.first(where: { $0.id == taskId }) {
                     tasksToDelete.append(task)
+                    // 直接刪除任務
+                    do {
+                        try await todoViewModel.deleteTask(task)
+                        successCount += 1
+                    } catch {
+                        print("刪除任務失敗: \(error)")
+                        failureCount += 1
+                    }
                 }
             }
 
@@ -1929,11 +1867,15 @@ final class ChatViewModel: ObservableObject {
                 return "找不到指定的任務"
             }
 
-            // 將待刪除的任務存儲到當前訊息中
+            // 將已刪除的任務存儲到訊息中（用於顯示）
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingDeleteTasks = tasksToDelete
 
-            // 返回確認消息
-            return "已刪除 \(tasksToDelete.count) 個待刪除任務"
+            // 返回結果消息
+            if successCount > 0 {
+                return "已成功刪除 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務刪除失敗" : "")
+            } else {
+                return "任務刪除失敗"
+            }
 
         } catch {
             print("解析參數時發生錯誤：\(error)")
@@ -1946,11 +1888,7 @@ final class ChatViewModel: ObservableObject {
         currentFunction = "updateTask"
         defer { currentFunction = nil }
 
-        // 檢查當前訊息是否已有待更新的任務
         let currentMessageIndex = chatRooms[selectedRoomIndex].messages.count - 1
-        if chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks != nil {
-            return "已有待確認的任務更新，請等待用戶處理。"
-        }
 
         // 解析參數
         struct UpdateTaskArg: Codable {
@@ -1964,7 +1902,7 @@ final class ChatViewModel: ObservableObject {
             let isCompleted: String?
             let color: String?
         }
-        
+
         struct UpdateTasksArgs: Codable {
             let tasks: [UpdateTaskArg]
         }
@@ -1977,23 +1915,25 @@ final class ChatViewModel: ObservableObject {
 
             let args = try JSONDecoder().decode(UpdateTasksArgs.self, from: jsonData)
             print("成功解析參數，準備更新 \(args.tasks.count) 個任務")
-            
+
             if args.tasks.isEmpty {
                 return "未提供任何要更新的任務"
             }
 
-            // 獲取所有任務
+            // 獲取所有任務並直接更新
             let allTasks = todoViewModel.tasks
-            
-            // 儲存待更新的任務
             var tasksToUpdate: [(original: TodoTask, updated: PendingTask)] = []
-            
+            var successCount = 0
+            var failureCount = 0
+
             for taskArg in args.tasks {
                 // 查找原任務
                 guard let originalTask = allTasks.first(where: { $0.id == taskArg.taskId }) else {
-                    return "找不到 ID 為 \(taskArg.taskId) 的任務"
+                    print("找不到 ID 為 \(taskArg.taskId) 的任務")
+                    failureCount += 1
+                    continue
                 }
-                
+
                 // 創建新的 PendingTask，保留未修改的值
                 let updatedTask = PendingTask(
                     title: taskArg.title ?? originalTask.title,
@@ -2007,14 +1947,37 @@ final class ChatViewModel: ObservableObject {
                                (taskArg.isCompleted?.lowercased() == "false" ? false : originalTask.isCompleted),
                     color: parseColor(taskArg.color) ?? originalTask.color
                 )
-                
-                tasksToUpdate.append((original: originalTask, updated: updatedTask))
+
+                // 直接更新任務
+                do {
+                    var updatedTodoTask = originalTask
+                    updatedTodoTask.title = updatedTask.title
+                    updatedTodoTask.note = updatedTask.note
+                    updatedTodoTask.category = updatedTask.category
+                    updatedTodoTask.startDate = updatedTask.startDate
+                    updatedTodoTask.endDate = updatedTask.endDate
+                    updatedTodoTask.isAllDay = updatedTask.isAllDay
+                    updatedTodoTask.isCompleted = updatedTask.isCompleted
+                    updatedTodoTask.color = updatedTask.color
+
+                    try await todoViewModel.updateTask(updatedTodoTask)
+                    successCount += 1
+                    tasksToUpdate.append((original: originalTask, updated: updatedTask))
+                } catch {
+                    print("更新任務失敗: \(error)")
+                    failureCount += 1
+                }
             }
-            
-            // 儲存待更新的任務到當前訊息
+
+            // 將已更新的任務存儲到訊息中（用於顯示）
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks = tasksToUpdate
 
-            return "已更新好 \(tasksToUpdate.count) 個任務更新"
+            // 返回結果消息
+            if successCount > 0 {
+                return "已成功更新 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務更新失敗" : "")
+            } else {
+                return "任務更新失敗"
+            }
 
         } catch {
             print("解析參數時發生錯誤：\(error)")
@@ -2069,146 +2032,6 @@ final class ChatViewModel: ObservableObject {
         return Color(red: components[0], green: components[1], blue: components[2]).opacity(components[3])
     }
 
-    // 確認並更新任務
-    func confirmAndUpdateTask(for messageId: UUID) async {
-        guard
-            let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }),
-            let updateDataList = chatRooms[selectedRoomIndex].messages[messageIndex].pendingUpdateTasks,
-            !chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed
-        else {
-            return
-        }
-
-        // 標記為處理中
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = true
-
-        var successCount = 0
-        var failureCount = 0
-        
-        // 逐一處理每個任務更新
-        for updateData in updateDataList {
-            do {
-                // 創建更新後的 TodoTask
-                var updatedTask = updateData.original
-                updatedTask.title = updateData.updated.title
-                updatedTask.note = updateData.updated.note
-                updatedTask.color = updateData.updated.color
-                updatedTask.category = updateData.updated.category
-                updatedTask.isAllDay = updateData.updated.isAllDay
-                updatedTask.isCompleted = updateData.updated.isCompleted
-                updatedTask.startDate = updateData.updated.startDate
-                updatedTask.endDate = updateData.updated.endDate
-
-                // 檢查並創建類別統計（如果類別已更改）
-                if updateData.original.category != updatedTask.category {
-                    await checkAndCreateStatisticsForCategory(updatedTask.category)
-                }
-
-                // 保存更新的任務
-                try await todoViewModel.updateTask(updatedTask)
-                successCount += 1
-            } catch {
-                print("Error updating task: \(error)")
-                failureCount += 1
-            }
-        }
-
-        // 更新成功/失敗計數
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = successCount
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = failureCount
-
-        // 完成處理並標記為已確認
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = false
-        chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed = true
-    }
-
-    // 拒絕更新任務
-    func rejectUpdateTask(for messageId: UUID) {
-        guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId })
-        else { return }
-
-        // 標記訊息為已確認，並設置失敗狀態
-        chatRooms[selectedRoomIndex].messages[messageIndex].isUpdateConfirmed = true
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = 0
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = 1
-    }
-
-    // 確認刪除任務的函數
-    func confirmAndDeleteTask(for messageId: UUID) async {
-        guard
-            let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId }),
-            let tasks = chatRooms[selectedRoomIndex].messages[messageIndex].pendingDeleteTasks,
-            !chatRooms[selectedRoomIndex].messages[messageIndex].isDeleteConfirmed
-        else {
-            return
-        }
-
-        // 標記為處理中
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = true
-
-        var successCount = 0
-        var failureCount = 0
-
-        // 按類別分組任務，用於後續更新統計
-        var tasksByCategory: [String: [TodoTask]] = [:]
-
-        // 刪除每個任務
-        for task in tasks {
-            do {
-                // 收集任務的類別信息
-                if !task.category.isEmpty && task.category != "未分類" {
-                    tasksByCategory[task.category, default: []].append(task)
-                }
-                
-                try await todoViewModel.deleteTask(task)  // 直接傳遞 TodoTask 物件
-                successCount += 1
-            } catch {
-                print("Error deleting task: \(error)")
-                failureCount += 1
-            }
-        }
-        
-        // 更新統計類別
-        if let staticViewModel = staticViewModel {
-            for (category, categoryTasks) in tasksByCategory {
-                // 查找是否還有該類別的任務
-                let remainingTasksCount = todoViewModel.tasks.filter { $0.category == category }.count - categoryTasks.count
-                
-                if remainingTasksCount <= 0 {
-                    // 如果沒有剩餘任務，刪除該統計類別
-                    if let statistic = staticViewModel.statistics.first(where: { $0.category == category }),
-                       let statisticId = statistic.id {
-                        // 使用 id 刪除該統計類別
-                        await staticViewModel.deleteStatistic(statisticId)
-                    }
-                } else {
-                    // 更新該類別的任務計數
-                    let completedCount = todoViewModel.tasks.filter { $0.category == category && $0.isCompleted }.count - categoryTasks.filter { $0.isCompleted }.count
-                    await staticViewModel.updateCategoryTaskStats(category: category, completedCount: completedCount, totalCount: remainingTasksCount)
-                }
-            }
-        }
-
-        // 更新成功/失敗計數
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = successCount
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount = failureCount
-
-        // 完成處理並標記為已確認
-        chatRooms[selectedRoomIndex].messages[messageIndex].isProcessing = false
-        chatRooms[selectedRoomIndex].messages[messageIndex].isDeleteConfirmed = true
-    }
-
-    // 拒絕刪除任務的函數
-    func rejectDeleteTask(for messageId: UUID) {
-        guard let messageIndex = chatRooms[selectedRoomIndex].messages.firstIndex(where: { $0.id == messageId })
-        else { return }
-
-        // 標記訊息為已確認，並設置失敗狀態
-        chatRooms[selectedRoomIndex].messages[messageIndex].isDeleteConfirmed = true
-        chatRooms[selectedRoomIndex].messages[messageIndex].successCount = 0
-        chatRooms[selectedRoomIndex].messages[messageIndex].failureCount =
-            chatRooms[selectedRoomIndex].messages[messageIndex].pendingDeleteTasks?.count ?? 0
-    }
 
     // 添加到 cases 中
     private func handleToolCall(functionName: String, arguments: String) async -> String {

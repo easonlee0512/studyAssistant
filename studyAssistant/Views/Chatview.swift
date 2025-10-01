@@ -422,7 +422,7 @@ struct ChatDemoDynamicView: View {
                                 .padding(.vertical, 4)
 
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(message.isTaskConfirmed ? "已新增的任務：" : "待新增的任務：")
+                                Text("已新增的任務：")
                                     .font(.headline)
                                     .foregroundColor(Color.black)
 
@@ -461,62 +461,6 @@ struct ChatDemoDynamicView: View {
                                         .padding(.vertical, 8)
                                     }
                                 }
-
-                                // 只在任務未確認時顯示確認和取消按鈕
-                                if !message.isTaskConfirmed {
-                                    HStack {
-                                        Button(action: {
-                                            Task {
-                                                await viewModel.confirmAndSaveTask(for: messageId)
-                                            }
-                                        }) {
-                                            Text("確認新增")
-                                                .foregroundColor( .white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.hex(hex: "74C3AF")
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-
-                                        Button(action: {
-                                            viewModel.rejectTask(for: messageId)
-                                        }) {
-                                            Text("取消")
-                                                .foregroundColor(.white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.hex(hex: "F1A154")
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-                                    }
-                                    .padding(.top, 8)
-                                } else {
-                                    // 顯示任務新增結果
-                                    if message.isTaskConfirmed {
-                                        Text(
-                                            message.successCount > 0
-                                                ? " \(message.successCount) 個任務已成功新增"
-                                                    + (message.failureCount > 0
-                                                        ? "\n\(message.failureCount) 個任務新增失敗"
-                                                        : "")
-                                                : "新增任務失敗"
-                                        )
-                                        .foregroundColor(Color.black.opacity(0.6))
-
-                                    }
-                                }
                             }
                             .padding(8)
                             .background(Color.gray.opacity(0.05))
@@ -534,10 +478,10 @@ struct ChatDemoDynamicView: View {
                                 .padding(.vertical, 4)
                             
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(message.isDeleteConfirmed ? "已刪除的任務：" : "待刪除的任務：")
+                                Text("已刪除的任務：")
                                     .font(.headline)
                                     .foregroundColor(Color.black)
-                                
+
                                 // 使用滾動視圖限制最大高度
                                 if isExpanded && tasksToDelete.count > 3 {
                                     ScrollView {
@@ -553,7 +497,7 @@ struct ChatDemoDynamicView: View {
                                         taskDeleteItemView(task: task)
                                     }
                                 }
-                                
+
                                 if tasksToDelete.count > 1 {
                                     Button(action: {
                                         withAnimation {
@@ -573,60 +517,6 @@ struct ChatDemoDynamicView: View {
                                         .padding(.vertical, 8)
                                     }
                                 }
-
-                                // 只在任務未確認時顯示確認和取消按鈕
-                                if !message.isDeleteConfirmed {
-                                    HStack {
-                                        Button(action: {
-                                            Task {
-                                                await viewModel.confirmAndDeleteTask(for: messageId)
-                                            }
-                                        }) {
-                                            Text("確認刪除")
-                                                .foregroundColor(.white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.red.opacity(0.8)
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-                                        
-                                        Button(action: {
-                                            viewModel.rejectDeleteTask(for: messageId)
-                                        }) {
-                                            Text("取消")
-                                                .foregroundColor(.white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.hex(hex: "F1A154")
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-                                    }
-                                    .padding(.top, 8)
-                                } else {
-                                    // 顯示刪除結果
-                                    Text(
-                                        message.successCount > 0
-                                            ? "\(message.successCount) 個任務已成功刪除"
-                                                + (message.failureCount > 0
-                                                    ? "\n\(message.failureCount) 個任務刪除失敗"
-                                                    : "")
-                                            : "刪除任務失敗"
-                                    )
-                                    .foregroundColor(Color.black.opacity(0.6))
-
-                                }
                             }
                             .padding(8)
                             .background(Color.gray.opacity(0.05))
@@ -642,21 +532,21 @@ struct ChatDemoDynamicView: View {
                                 .padding(.vertical, 4)
                             
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(message.isUpdateConfirmed ? "已修改的任務：" : "待修改的任務：")
+                                Text("已修改的任務：")
                                     .font(.headline)
                                     .foregroundColor(Color.black)
-                                
+
                                 // 使用一個通用函數來格式化原始和更新後的任務數據
                                 if let updateDataList = message.pendingUpdateTasks {
                                     let isExpanded = expandedTaskMessages.contains(messageId)
                                     let displayTasks = isExpanded ? updateDataList : Array(updateDataList.prefix(1))
-                                    
+
                                     // 使用滾動視圖限制最大高度
                                     if isExpanded && updateDataList.count > 3 {
                                         ScrollView {
                                             LazyVStack(alignment: .leading, spacing: 10) {
                                                 ForEach(0..<displayTasks.count, id: \.self) { index in
-                                                    taskUpdateItemView(updateData: displayTasks[index], 
+                                                    taskUpdateItemView(updateData: displayTasks[index],
                                                                      index: index, total: updateDataList.count)
                                                 }
                                             }
@@ -664,11 +554,11 @@ struct ChatDemoDynamicView: View {
                                         .frame(maxHeight: min(CGFloat(updateDataList.count) * 250, 800))  // 修改更新任務的高度限制，因為有兩個卡片
                                     } else {
                                         ForEach(0..<displayTasks.count, id: \.self) { index in
-                                            taskUpdateItemView(updateData: displayTasks[index], 
+                                            taskUpdateItemView(updateData: displayTasks[index],
                                                              index: index, total: updateDataList.count)
                                         }
                                     }
-                                    
+
                                     // 如果有多個任務，添加展開/收起按鈕
                                     if updateDataList.count > 1 {
                                         Button(action: {
@@ -689,61 +579,6 @@ struct ChatDemoDynamicView: View {
                                             .padding(.vertical, 8)
                                         }
                                     }
-                                }
-
-                                // 只在任務未確認時顯示確認和取消按鈕
-                                if !message.isUpdateConfirmed {
-                                    HStack {
-                                        Button(action: {
-                                            Task {
-                                                await viewModel.confirmAndUpdateTask(for: messageId)
-                                            }
-                                        }) {
-                                            Text("確認修改")
-                                                .foregroundColor(.white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.blue.opacity(0.8)
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-                                        
-                                        Button(action: {
-                                            viewModel.rejectUpdateTask(for: messageId)
-                                        }) {
-                                            Text("取消")
-                                                .foregroundColor(.white)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 20)
-                                                .padding(.vertical, 10)
-                                                .background(
-                                                    message.isProcessing
-                                                        ? Color.gray.opacity(0.4)
-                                                        : Color.hex(hex: "F1A154")
-                                                )
-                                                .cornerRadius(8)
-                                        }
-                                        .disabled(message.isProcessing)
-                                    }
-                                    .padding(.top, 8)
-                                } else {
-                                    // 顯示更新結果
-                                    let totalTasks = message.successCount + message.failureCount
-                                    Text(
-                                        message.successCount > 0
-                                            ? "\(message.successCount)/\(totalTasks) 個任務已成功修改"
-                                                + (message.failureCount > 0
-                                                    ? "\n\(message.failureCount) 個任務修改失敗"
-                                                    : "")
-                                            : "修改任務失敗"
-                                    )
-                                    .foregroundColor(Color.black.opacity(0.6))
-
                                 }
                             }
                             .padding(8)
