@@ -51,13 +51,18 @@ struct ChatDemoDynamicView: View {
                                                  to: nil, from: nil, for: nil)
                 }
             
-            VStack(spacing: 0) {
-                header
-                Rectangle()  // 添加分隔線
-                    .frame(height: 0.2)  // 線條粗細
-                    .foregroundColor(.black.opacity(0.2))  // 線條顏色
+            ZStack(alignment: .top) {
                 messageList
-                inputBar
+
+                VStack(spacing: 0) {
+                    header
+                    Spacer()
+                }
+
+                VStack(spacing: 0) {
+                    Spacer()
+                    inputBar
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -155,80 +160,78 @@ struct ChatDemoDynamicView: View {
     // MARK: Header
     private var header: some View {
         ZStack {
-            // 底層按鈕
-            HStack {
-                Button {
-                    // 打開側邊欄時取消生成並收起鍵盤
-                    if isGenerating {
-                        cancelGeneration()
+            // 底層按鈕 - 使用 GlassEffectContainer 協調玻璃效果
+            GlassEffectContainer {
+                HStack {
+                    Button {
+                        // 打開側邊欄時取消生成並收起鍵盤
+                        if isGenerating {
+                            cancelGeneration()
+                        }
+                        // 收起鍵盤
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                 to: nil, from: nil, for: nil)
+                        withAnimation { showSidebar.toggle() }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
                     }
-                    // 收起鍵盤
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                             to: nil, from: nil, for: nil)
-                    withAnimation { showSidebar.toggle() }
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(Color.hex(hex: "E27844"))
-                }
-                .frame(width: 40, height: 44)  // 改回原本的大小
-                .padding(.leading, 8)
-                Spacer()
-                
-                // 設定圖示
-                Button(action: { 
-                    isEditingTitle = false  // 打開設定時取消編輯狀態
-                    // 收起鍵盤
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                             to: nil, from: nil, for: nil)
-                    showSettings = true 
-                }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(Color.hex(hex: "E27844"))
-                }
-                .frame(width: 28, height: 44)  // 改回原本的大小
-                .padding(.trailing, 8)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                    .clipShape(Rectangle())
+                    .padding(.leading, 8)
 
-                Button(action: {
-                    // 創建新聊天室時取消生成並收起鍵盤
-                    if isGenerating {
-                        cancelGeneration()
+                    Spacer()
+
+                    Button(action: {
+                        // 創建新聊天室時取消生成並收起鍵盤
+                        if isGenerating {
+                            cancelGeneration()
+                        }
+                        // 收起鍵盤
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                 to: nil, from: nil, for: nil)
+                        isEditingTitle = false  // 創建新聊天室時取消編輯狀態
+                        viewModel.createNewChatRoom()
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
                     }
-                    // 收起鍵盤
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                             to: nil, from: nil, for: nil)
-                    isEditingTitle = false  // 創建新聊天室時取消編輯狀態
-                    viewModel.createNewChatRoom()
-                }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(Color.hex(hex: "E27844"))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                    .clipShape(Rectangle())
+                    .disabled(!viewModel.canCreateNewChatRoom)
+                    .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
                 }
-                .frame(width: 28, height: 44)  // 改回原本的大小
-                .disabled(!viewModel.canCreateNewChatRoom)
-                .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
             
-            // 中間層標題
+            // 中間層標題 - 使用 Liquid Glass 效果
             if !isEditingTitle {
-                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ? 
-                     viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." : 
+                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ?
+                     viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." :
                      viewModel.chatRooms[viewModel.selectedRoomIndex].name)
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(titleColor)
+                    .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.5, alignment: .center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
+                    .glassEffect(.regular.tint(titleColor.opacity(0.8)))
+                    .clipShape(Rectangle())
+                    .padding(.vertical, 4)
+                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
                     .onTapGesture {
                         editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
                         isEditingTitle = true
                     }
             }
             
-            // 最上層編輯框
+            // 最上層編輯框 - 使用 Liquid Glass 效果
             if isEditingTitle {
                 TextField("聊天室名稱", text: $editingTitleText, onCommit: {
                     if !editingTitleText.isEmpty {
@@ -239,12 +242,15 @@ struct ChatDemoDynamicView: View {
                 })
                 .focused($isTitleFocused)
                 .font(.system(size: 28, weight: .bold))
-                .foregroundColor(titleColor)
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
-                .padding(.horizontal, 10)
-                .background(Color.hex(hex: "F3D4B8").opacity(0.7))
-                .cornerRadius(8)
+                .glassEffect(.regular.tint(Color.hex(hex: "F3D4B8").opacity(0.6)).interactive())
+                .clipShape(Rectangle())
+                .padding(.vertical, 4)
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
                 .onAppear {
                     // 顯示輸入框時自動獲取焦點
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -254,7 +260,7 @@ struct ChatDemoDynamicView: View {
             }
         }
         .padding(.top, 4) // 從8減少到4，讓標題條往上移
-        .padding(.bottom, 8) // 從12減少到8，讓標題條往上移
+        .padding(.bottom, 16) // 增加底部空間讓陰影顯示
     }
 
     // MARK: Message List
@@ -271,8 +277,8 @@ struct ChatDemoDynamicView: View {
                         }
                     }
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 20) // 貼齊輸入框
+                .padding(.top, 70) // 頂部空間，讓訊息可以滾動到 header 下方
+                .padding(.bottom, 80) // 底部空間，讓訊息可以滾動到輸入框下方
                 .id("messageBottom")  // 添加一個 ID 用於滾動
             }
             .onChange(of: expandedTaskMessages) { newValue in
@@ -938,104 +944,126 @@ struct ChatDemoDynamicView: View {
         }
     }
 
-    // MARK: Input Bar
+    // MARK: Input Bar - 使用 Liquid Glass 效果
     private var inputBar: some View {
         VStack(spacing: 0) {
-            HStack {
-                ZStack(alignment: .topLeading) {
-                    if inputText.isEmpty {
-                        Text("輸入訊息...")
-                            .foregroundColor(Color.black.opacity(0.4))
-                            .padding(.vertical, 8)
-                    }
-                    TextEditor(text: $inputText)
-                        .font(.system(size: 16))
-                        .padding(.vertical, 8)
-                        .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
-                        .background(midBubbleColor)
-                        .cornerRadius(12)
-                        .foregroundColor(Color.black)
-                        .disabled(isGenerating)
-                        .scrollContentBackground(.hidden)
-                        .focused($isInputFocused)
-                        .onChange(of: isInputFocused) { focused in
-                            if !focused {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    textEditorHeight = 36
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    scrollTextToBottom()
-                                }
-                            }
+            GlassEffectContainer {
+                HStack {
+                    ZStack(alignment: .topLeading) {
+                        if inputText.isEmpty {
+                            Text("輸入訊息...")
+                                .foregroundColor(Color.black.opacity(0.4))
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 4)
                         }
-                }
-                .overlay(
-                    Text(inputText)
-                        .font(.system(size: 20))
-                        .padding(.vertical, 8)
-                        .background(Color.clear)
-                        .opacity(0)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .allowsHitTesting(false)
-                        .background(
-                            GeometryReader { geometry in
-                                Color.clear.preference(
-                                    key: ViewHeightKey.self,
-                                    value: geometry.size.height
-                                )
+                        TextEditor(text: $inputText)
+                            .font(.system(size: 16))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 4)
+                            .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
+                            .foregroundColor(Color.black)
+                            .disabled(isGenerating)
+                            .scrollContentBackground(.hidden)
+                            .focused($isInputFocused)
+                            .onChange(of: isInputFocused) { focused in
+                                if !focused {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        textEditorHeight = 36
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        scrollTextToBottom()
+                                    }
+                                }
                             }
-                        )
-                )
-                .onPreferenceChange(ViewHeightKey.self) { height in
-                    textEditorHeight = height
-                }
+                    }
+                    .glassEffect(.regular.tint(midBubbleColor.opacity(0.6)).interactive())
+                    .clipShape(Rectangle())
+                    .overlay(
+                        Text(inputText)
+                            .font(.system(size: 20))
+                            .padding(.vertical, 8)
+                            .background(Color.clear)
+                            .opacity(0)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .allowsHitTesting(false)
+                            .background(
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: ViewHeightKey.self,
+                                        value: geometry.size.height
+                                    )
+                                }
+                            )
+                    )
+                    .onPreferenceChange(ViewHeightKey.self) { height in
+                        textEditorHeight = height
+                    }
 
-                if isGenerating {
-                    Button(action: cancelGeneration) {
-                        Image(systemName: "stop.circle")
-                            .font(.system(size: 28))
-                            .foregroundColor(.black.opacity(0.5))
+                    if isGenerating {
+                        Button(action: cancelGeneration) {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.tint(Color.red.opacity(0.6)).interactive())
+                        .clipShape(Rectangle())
+                    } else {
+                        Button(action: {}) {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.tint(darkBubbleColor.opacity(0.7)).interactive())
+                        .clipShape(Rectangle())
+                        .padding(.trailing, 4)
+
+                        Button(action: sendMessage) {
+                            Image(systemName: "arrowshape.up.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.tint(darkBubbleColor.opacity(0.7)).interactive())
+                        .clipShape(Rectangle())
+                        .disabled(inputText.isEmpty)
+                        .opacity(inputText.isEmpty ? 0.5 : 1.0)
                     }
-                    .frame(width: 44, height: 44)
-                } else {
-                    Button(action: {}) {
-                        Image(systemName: "mic")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color.black)
-                    }
-                    .frame(width: 32, height: 32)
-                    .padding(.trailing, 2)
-                    
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrowshape.up")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color.black)
-                    }
-                    .frame(width: 32, height: 32)
-                    .disabled(inputText.isEmpty)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(
-                ZStack(alignment: .top) {
-                    backgroundColor
-                    Rectangle()
-                        .frame(height: 0.2)
-                        .foregroundColor(.black.opacity(0.2))
-                }
-            )
         }
+        .offset(y: -2)
         .padding(.bottom, max(viewModel.keyboardHeight - bottomInset, 0))
         .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
     }
 
-    // MARK: Sidebar
+    // MARK: Sidebar - 設定按鈕在左上角
     private var sidebarOverlay: some View {
         GeometryReader { _ in
             HStack(spacing: 0) {
-                VStack(alignment: .leading) {
-                    Spacer().frame(height: 3)
+                VStack(alignment: .leading, spacing: 0) {
+                    // 設定按鈕在左上角
+                    HStack {
+                        Button(action: {
+                            // 收起鍵盤
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                     to: nil, from: nil, for: nil)
+                            showSettings = true
+                            withAnimation { showSidebar = false }
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(Color.hex(hex: "E27844"))
+                        }
+                        .padding(.leading, 16)
+                        .padding(.top, 10)
+
+                        Spacer()
+                    }
+
                     Text("聊天室列表")
                         .font(.title2).fontWeight(.bold)
                         .foregroundColor(Color.black)
