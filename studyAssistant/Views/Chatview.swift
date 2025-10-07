@@ -33,6 +33,9 @@ struct ChatDemoDynamicView: View {
     @State private var textEditorHeight: CGFloat = 36
     @FocusState private var isInputFocused: Bool
     @State private var bottomInset: CGFloat = 0
+    // 【改動】新增狀態
+    @State private var showManageSheet = false      // 是否顯示「管理聊天室」畫面
+    @State private var selectedRoomIDs = Set<UUID>()// 已選取要刪除的聊天室 ID
 
     var body: some View {
         ZStack {
@@ -135,6 +138,85 @@ struct ChatDemoDynamicView: View {
             ChatSettingView()
                 .environmentObject(viewModel)
         }
+        // 【改動】新增一個管理聊天室的 sheet
+        .sheet(isPresented: $showManageSheet) {
+            ZStack {
+                // 使用與主畫面相同的背景色
+                backgroundColor.ignoresSafeArea()
+                
+                NavigationView {
+                    // 多選清單
+                    List(selection: $selectedRoomIDs) {
+                        ForEach(viewModel.chatRooms) { room in
+                            HStack {
+                                Text(room.name)
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundColor(textColor)
+                                    .lineLimit(1)
+                                Spacer()
+                                // 顯示目前選取中的聊天室
+                                if let idx = viewModel.chatRooms.firstIndex(where: { $0.id == room.id }),
+                                   idx == viewModel.selectedRoomIndex {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(Color.hex(hex: "E27945"))
+                                }
+                            }
+                            .padding(.vertical, 1)
+                            .listRowBackground(
+                                lightBubbleColor.opacity(0.6)
+                            )
+                            .tag(room.id) // 關鍵：讓 List(selection:) 能識別
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                    // 讓 List 直接進入多選模式
+                    .environment(\.editMode, .constant(.active))
+                    .navigationTitle("管理聊天室")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbarBackground(backgroundColor, for: .navigationBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("關閉") { 
+                                showManageSheet = false
+                                selectedRoomIDs.removeAll()
+                            }
+                            .foregroundColor(textColor)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("刪除(\(selectedRoomIDs.count))", role: .destructive) {
+                                // 批次刪除邏輯
+                                let idsToDelete = selectedRoomIDs
+                                selectedRoomIDs.removeAll()
+                                
+                                // 依 ID 找 index 刪除（由後往前較安全，避免索引位移）
+                                let indices = viewModel.chatRooms.enumerated()
+                                    .filter { idsToDelete.contains($0.element.id) }
+                                    .map { $0.offset }
+                                    .sorted(by: >)
+                                for idx in indices {
+                                    viewModel.deleteChatRoom(at: idx)
+                                }
+                                
+                                // 調整目前選中的聊天室 index，避免越界
+                                if viewModel.chatRooms.isEmpty {
+                                    // 視你的 ViewModel 規則決定是否自動新增一個聊天室
+                                    // viewModel.createNewChatRoom()
+                                    viewModel.selectedRoomIndex = 0
+                                } else {
+                                    viewModel.selectedRoomIndex = min(viewModel.selectedRoomIndex, viewModel.chatRooms.count - 1)
+                                }
+                                
+                                showManageSheet = false
+                            }
+                            .foregroundColor(Color.hex(hex: "E28A5F"))
+                            .disabled(selectedRoomIDs.isEmpty)
+                            .opacity(selectedRoomIDs.isEmpty ? 0.3 : 1.0)
+                        }
+                    }
+                }
+            }
+        }
         .background(
             Color.hex(hex: "FEECD8")
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
@@ -146,9 +228,18 @@ struct ChatDemoDynamicView: View {
     private var header: some View {
         ZStack {
             // 底層按鈕 - 使用 GlassEffectContainer 協調玻璃效果
-            GlassEffectContainer {
+            CompatibleGlassEffectContainer {
                 HStack {
                     Menu {
+                        // 【改動】在 Menu 內新增一個入口
+                        Button {
+                            showManageSheet = true
+                        } label: {
+                            Label("管理聊天室…", systemImage: "checklist")
+                        }
+                        
+                        Divider()
+                        
                         // 設定按鈕
                         Button(action: {
                             isEditingTitle = false
@@ -158,9 +249,6 @@ struct ChatDemoDynamicView: View {
                         }) {
                             Label("設定", systemImage: "gearshape")
                         }
-
-                        Divider()
-
                         // 聊天室列表
                         ForEach(Array(viewModel.chatRooms.enumerated().reversed()), id: \.element.id) { idx, room in
                             Button(action: {
@@ -185,7 +273,7 @@ struct ChatDemoDynamicView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                    .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                     .clipShape(Rectangle())
                     .padding(.leading, 4)
 
@@ -208,7 +296,7 @@ struct ChatDemoDynamicView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                    .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                     .clipShape(Rectangle())
                     .disabled(!viewModel.canCreateNewChatRoom)
                     .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
@@ -230,7 +318,7 @@ struct ChatDemoDynamicView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
-                    .glassEffect(.regular.tint(.clear))
+                    .compatibleGlassEffect(color: .clear, opacity: 0.1)
                     .padding(.vertical, 4)
                     .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
                     .onTapGesture {
@@ -255,7 +343,7 @@ struct ChatDemoDynamicView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
-                .glassEffect(.regular.tint(Color.hex(hex: "F3D4B8").opacity(0.6)).interactive())
+                .compatibleGlassEffect(color: Color.hex(hex: "F3D4B8"), opacity: 0.6)
                 .padding(.vertical, 4)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
                 .onAppear {
@@ -954,14 +1042,14 @@ struct ChatDemoDynamicView: View {
     // MARK: Input Bar - 使用 Liquid Glass 效果
     private var inputBar: some View {
         VStack(spacing: 0) {
-            GlassEffectContainer {
+            CompatibleGlassEffectContainer {
                 HStack {
                     ZStack(alignment: .topLeading) {
                         if inputText.isEmpty {
                             Text("輸入訊息...")
                                 .foregroundColor(Color.black.opacity(0.4))
                                 .padding(.vertical, 8)
-                                .padding(.horizontal, 4)
+                                .padding(.horizontal, 10)
                         }
                         TextEditor(text: $inputText)
                             .font(.system(size: 16))
@@ -983,7 +1071,7 @@ struct ChatDemoDynamicView: View {
                                 }
                             }
                     }
-                    .glassEffect(.regular.tint(midBubbleColor.opacity(0.6)).interactive())
+                    .compatibleGlassEffect(color: midBubbleColor, opacity: 0.6)
                     .clipShape(Rectangle())
                     .overlay(
                         Text(inputText)
@@ -1013,7 +1101,7 @@ struct ChatDemoDynamicView: View {
                                 .foregroundColor(.white)
                         }
                         .frame(width: 44, height: 44)
-                        .glassEffect(.regular.tint(Color.red.opacity(0.6)).interactive())
+                        .compatibleGlassEffect(color: Color.red, opacity: 0.6)
                         .clipShape(Rectangle())
                     } else {
                         Button(action: {}) {
@@ -1022,7 +1110,7 @@ struct ChatDemoDynamicView: View {
                                 .foregroundColor(.white)
                         }
                         .frame(width: 40, height: 40)
-                        .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                        .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                         .clipShape(Rectangle())
                         .padding(.trailing, 4)
 
@@ -1032,7 +1120,7 @@ struct ChatDemoDynamicView: View {
                                 .foregroundColor(.white)
                         }
                         .frame(width: 40, height: 40)
-                        .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                        .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                         .clipShape(Rectangle())
                         .disabled(inputText.isEmpty)
                         .opacity(inputText.isEmpty ? 0.5 : 1.0)
@@ -1268,6 +1356,63 @@ extension UITextView {
             }
         }
         return nil
+    }
+}
+
+// MARK: - 版本兼容性擴展
+extension View {
+    /// 兼容版本的玻璃效果修飾符
+    @ViewBuilder
+    func compatibleGlassEffect(color: Color, opacity: Double = 0.8) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.tint(color.opacity(opacity)).interactive())
+        } else {
+            // iOS 26.0 以下使用替代的視覺效果
+            self
+                .background(
+                    ZStack {
+                        // 毛玻璃效果的替代方案
+                        color.opacity(opacity * 0.7)
+                        
+                        // 添加輕微的模糊和光澤效果
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.15),
+                                Color.clear,
+                                Color.black.opacity(0.05)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    }
+                    .cornerRadius(8)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
+    }
+}
+
+/// 兼容版本的 GlassEffectContainer
+struct CompatibleGlassEffectContainer<Content: View>: View {
+    let content: Content
+    
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+    
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer {
+                content
+            }
+        } else {
+            // iOS 26.0 以下使用替代容器
+            content
+        }
     }
 }
 
