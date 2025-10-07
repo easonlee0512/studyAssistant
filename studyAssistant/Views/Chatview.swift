@@ -76,22 +76,7 @@ struct ChatDemoDynamicView: View {
                 }
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
-            .offset(x: showSidebar ? 250 : 0) // 側邊欄的偏移量
             
-            if showSidebar { sidebarOverlay }
-            
-            if showSidebar {  // 側邊欄的遮罩
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation {
-                            showSidebar = false
-                        }
-                        // 收起鍵盤
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                                     to: nil, from: nil, for: nil)
-                    }
-            }
         }
         .onAppear {
             if let win = UIApplication.shared.connectedScenes
@@ -163,24 +148,46 @@ struct ChatDemoDynamicView: View {
             // 底層按鈕 - 使用 GlassEffectContainer 協調玻璃效果
             GlassEffectContainer {
                 HStack {
-                    Button {
-                        // 打開側邊欄時取消生成並收起鍵盤
-                        if isGenerating {
-                            cancelGeneration()
+                    Menu {
+                        // 設定按鈕
+                        Button(action: {
+                            isEditingTitle = false
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                     to: nil, from: nil, for: nil)
+                            showSettings = true
+                        }) {
+                            Label("設定", systemImage: "gearshape")
                         }
-                        // 收起鍵盤
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                                 to: nil, from: nil, for: nil)
-                        withAnimation { showSidebar.toggle() }
+
+                        Divider()
+
+                        // 聊天室列表
+                        ForEach(Array(viewModel.chatRooms.enumerated().reversed()), id: \.element.id) { idx, room in
+                            Button(action: {
+                                viewModel.selectedRoomIndex = idx
+                                if isGenerating {
+                                    cancelGeneration()
+                                }
+                            }) {
+                                HStack {
+                                    Text(room.name)
+                                    Spacer()
+                                    if idx == viewModel.selectedRoomIndex {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
                     } label: {
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 44, height: 44)
                     .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
                     .clipShape(Rectangle())
-                    .padding(.leading, 8)
+                    .padding(.leading, 4)
 
                     Spacer()
 
@@ -198,14 +205,16 @@ struct ChatDemoDynamicView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 44, height: 44)
                     .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
                     .clipShape(Rectangle())
                     .disabled(!viewModel.canCreateNewChatRoom)
                     .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
+                    .padding(.trailing, 4)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 4)
             }
             
             // 中間層標題 - 使用 Liquid Glass 效果
@@ -214,17 +223,16 @@ struct ChatDemoDynamicView: View {
                      viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." :
                      viewModel.chatRooms[viewModel.selectedRoomIndex].name)
                     .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.black.opacity(0.6))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
-                    .glassEffect(.regular.tint(titleColor.opacity(0.8)))
-                    .clipShape(Rectangle())
+                    .glassEffect(.regular.tint(.clear))
                     .padding(.vertical, 4)
-                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
                     .onTapGesture {
                         editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
                         isEditingTitle = true
@@ -248,7 +256,6 @@ struct ChatDemoDynamicView: View {
                 .padding(.vertical, 8)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
                 .glassEffect(.regular.tint(Color.hex(hex: "F3D4B8").opacity(0.6)).interactive())
-                .clipShape(Rectangle())
                 .padding(.vertical, 4)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
                 .onAppear {
@@ -1015,7 +1022,7 @@ struct ChatDemoDynamicView: View {
                                 .foregroundColor(.white)
                         }
                         .frame(width: 40, height: 40)
-                        .glassEffect(.regular.tint(darkBubbleColor.opacity(0.7)).interactive())
+                        .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
                         .clipShape(Rectangle())
                         .padding(.trailing, 4)
 
@@ -1025,7 +1032,7 @@ struct ChatDemoDynamicView: View {
                                 .foregroundColor(.white)
                         }
                         .frame(width: 40, height: 40)
-                        .glassEffect(.regular.tint(darkBubbleColor.opacity(0.7)).interactive())
+                        .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
                         .clipShape(Rectangle())
                         .disabled(inputText.isEmpty)
                         .opacity(inputText.isEmpty ? 0.5 : 1.0)
@@ -1040,7 +1047,7 @@ struct ChatDemoDynamicView: View {
         .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
     }
 
-    // MARK: Sidebar - 設定按鈕在左上角
+    // MARK: Sidebar
     private var sidebarOverlay: some View {
         GeometryReader { _ in
             HStack(spacing: 0) {
