@@ -1,5 +1,15 @@
 import SwiftUI
 
+// MARK: - iOS Version Detection
+extension ChatDemoDynamicView {
+    private var isIOS26OrLater: Bool {
+        if #available(iOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+}
+
 // MARK: - 主要畫面
 struct ChatDemoDynamicView: View {
     // 色票
@@ -38,48 +48,14 @@ struct ChatDemoDynamicView: View {
     @State private var selectedRoomIDs = Set<UUID>()// 已選取要刪除的聊天室 ID
 
     var body: some View {
-        ZStack {
-            backgroundColor.ignoresSafeArea()
-                .onTapGesture {
-                    // 點擊背景時取消編輯狀態並收起鍵盤
-                    if isEditingTitle {
-                        if !editingTitleText.isEmpty {
-                            viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
-                        }
-                        isEditingTitle = false
-                        isTitleFocused = false
-                    }
-                    // 收起鍵盤
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                                 to: nil, from: nil, for: nil)
-                }
-            
-            ZStack(alignment: .top) {
-                messageList
-
-                VStack(spacing: 0) {
-                    header
-                    Spacer()
-                }
-
-                VStack(spacing: 0) {
-                    Spacer()
-                    inputBar
-                }
+        Group {
+            if isIOS26OrLater {
+                // iOS 26+ 使用目前的原生樣式
+                ios26PlusView
+            } else {
+                // iOS 25 及以下使用自定義樣式
+                ios25MinusView
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                // 點擊聊天區域收起鍵盤並結束輸入
-                if isEditingTitle {
-                    if !editingTitleText.isEmpty {
-                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
-                    }
-                    isEditingTitle = false
-                    isTitleFocused = false
-                }
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
-            
         }
         .onAppear {
             if let win = UIApplication.shared.connectedScenes
@@ -222,6 +198,364 @@ struct ChatDemoDynamicView: View {
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
         )
         .ignoresSafeArea(.keyboard, edges: .bottom)
+    }
+
+    // MARK: - iOS 26+ View (原生樣式)
+    private var ios26PlusView: some View {
+        ZStack {
+            backgroundColor.ignoresSafeArea()
+                .onTapGesture {
+                    // 點擊背景時取消編輯狀態並收起鍵盤
+                    if isEditingTitle {
+                        if !editingTitleText.isEmpty {
+                            viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                        }
+                        isEditingTitle = false
+                        isTitleFocused = false
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                 to: nil, from: nil, for: nil)
+                }
+
+            ZStack(alignment: .top) {
+                messageList
+
+                VStack(spacing: 0) {
+                    header
+                    Spacer()
+                }
+
+                VStack(spacing: 0) {
+                    Spacer()
+                    inputBar
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // 點擊聊天區域收起鍵盤並結束輸入
+                if isEditingTitle {
+                    if !editingTitleText.isEmpty {
+                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                    }
+                    isEditingTitle = false
+                    isTitleFocused = false
+                }
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+    }
+
+    // MARK: - iOS 25- View (自定義樣式)
+    private var ios25MinusView: some View {
+        ZStack {
+            backgroundColor.ignoresSafeArea()
+                .onTapGesture {
+                    // 點擊背景時取消編輯狀態並收起鍵盤
+                    if isEditingTitle {
+                        if !editingTitleText.isEmpty {
+                            viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                        }
+                        isEditingTitle = false
+                        isTitleFocused = false
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                 to: nil, from: nil, for: nil)
+                }
+
+            VStack(spacing: 0) {
+                ios25Header
+                Rectangle()  // 添加分隔線
+                    .frame(height: 0.2)  // 線條粗細
+                    .foregroundColor(.black.opacity(0.2))  // 線條顏色
+                messageList
+                ios25InputBar
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // 點擊聊天區域收起鍵盤並結束輸入
+                if isEditingTitle {
+                    if !editingTitleText.isEmpty {
+                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                    }
+                    isEditingTitle = false
+                    isTitleFocused = false
+                }
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+            .offset(x: showSidebar ? 250 : 0) // 側邊欄的偏移量
+
+            if showSidebar { ios25Sidebar }
+
+            if showSidebar {  // 側邊欄的遮罩
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation {
+                            showSidebar = false
+                        }
+                        // 收起鍵盤
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                     to: nil, from: nil, for: nil)
+                    }
+            }
+        }
+    }
+
+    // MARK: - iOS 25- Header
+    private var ios25Header: some View {
+        ZStack {
+            // 底層按鈕
+            HStack {
+                Button {
+                    // 打開側邊欄時取消生成並收起鍵盤
+                    if isGenerating {
+                        cancelGeneration()
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
+                    withAnimation { showSidebar.toggle() }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 40, height: 44)
+                .padding(.leading, 8)
+                Spacer()
+
+                // 設定圖示
+                Button(action: {
+                    isEditingTitle = false  // 打開設定時取消編輯狀態
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
+                    showSettings = true
+                }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 28, height: 44)
+                .padding(.trailing, 8)
+
+                Button(action: {
+                    // 創建新聊天室時取消生成並收起鍵盤
+                    if isGenerating {
+                        cancelGeneration()
+                    }
+                    // 收起鍵盤
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                             to: nil, from: nil, for: nil)
+                    isEditingTitle = false  // 創建新聊天室時取消編輯狀態
+                    viewModel.createNewChatRoom()
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.hex(hex: "E27844"))
+                }
+                .frame(width: 28, height: 44)
+                .disabled(!viewModel.canCreateNewChatRoom)
+                .opacity(viewModel.canCreateNewChatRoom ? 1.0 : 0.3)
+            }
+            .padding(.horizontal)
+
+            // 中間層標題
+            if !isEditingTitle {
+                Text(viewModel.chatRooms[viewModel.selectedRoomIndex].name.count > 7 ?
+                     viewModel.chatRooms[viewModel.selectedRoomIndex].name.prefix(7) + "..." :
+                     viewModel.chatRooms[viewModel.selectedRoomIndex].name)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(titleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.5, alignment: .center)
+                    .onTapGesture {
+                        editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
+                        isEditingTitle = true
+                    }
+            }
+
+            // 最上層編輯框
+            if isEditingTitle {
+                TextField("聊天室名稱", text: $editingTitleText, onCommit: {
+                    if !editingTitleText.isEmpty {
+                        viewModel.chatRooms[viewModel.selectedRoomIndex].name = editingTitleText
+                    }
+                    isEditingTitle = false
+                    isTitleFocused = false
+                })
+                .focused($isTitleFocused)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(titleColor)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
+                .padding(.horizontal, 10)
+                .background(Color.hex(hex: "F3D4B8").opacity(0.7))
+                .cornerRadius(8)
+                .onAppear {
+                    // 顯示輸入框時自動獲取焦點
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isTitleFocused = true
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    // MARK: - iOS 25- Sidebar
+    private var ios25Sidebar: some View {
+        GeometryReader { _ in
+            HStack(spacing: 0) {
+                VStack(alignment: .leading) {
+                    Spacer().frame(height: 3)
+                    Text("聊天室列表")
+                        .font(.title2).fontWeight(.bold)
+                        .foregroundColor(Color.black)
+                        .padding(.vertical, 10)
+                        .padding(.leading, 20)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(
+                                Array(viewModel.chatRooms.enumerated().reversed()), id: \.element.id
+                            ) { idx, room in
+                                Button {
+                                    viewModel.selectedRoomIndex = idx
+                                    withAnimation { showSidebar = false }
+                                } label: {
+                                    Text(room.name)
+                                        .font(.title3)
+                                        .foregroundColor(Color.black)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(
+                                            idx == viewModel.selectedRoomIndex
+                                                ? midBubbleColor : Color.clear
+                                        )
+                                        .cornerRadius(8)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        viewModel.deleteChatRoom(at: idx)
+                                    } label: {
+                                        Label("刪除聊天室", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+                .frame(width: 250)
+                .background(sidebarColor)
+                Spacer()
+            }
+        }
+        .zIndex(1)
+        .transition(.move(edge: .leading))
+        .background(Color.clear)
+    }
+
+    // MARK: - iOS 25- Input Bar (無玻璃效果)
+    private var ios25InputBar: some View {
+        VStack(spacing: 0) {
+            HStack {
+                ZStack(alignment: .topLeading) {
+                    if inputText.isEmpty {
+                        Text("輸入訊息...")
+                            .foregroundColor(Color.black.opacity(0.4))
+                            .padding(.vertical, 8)
+                    }
+                    TextEditor(text: $inputText)
+                        .font(.system(size: 16))
+                        .padding(.vertical, 8)
+                        .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
+                        .background(midBubbleColor)
+                        .cornerRadius(12)
+                        .foregroundColor(Color.black)
+                        .disabled(isGenerating)
+                        .scrollContentBackground(.hidden)
+                        .focused($isInputFocused)
+                        .onChange(of: isInputFocused) { focused in
+                            if !focused {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    textEditorHeight = 36
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    scrollTextToBottom()
+                                }
+                            }
+                        }
+                }
+                .overlay(
+                    Text(inputText)
+                        .font(.system(size: 20))
+                        .padding(.vertical, 8)
+                        .background(Color.clear)
+                        .opacity(0)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .allowsHitTesting(false)
+                        .background(
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: ViewHeightKey.self,
+                                    value: geometry.size.height
+                                )
+                            }
+                        )
+                )
+                .onPreferenceChange(ViewHeightKey.self) { height in
+                    textEditorHeight = height
+                }
+
+                if isGenerating {
+                    Button(action: cancelGeneration) {
+                        Image(systemName: "stop.circle")
+                            .font(.system(size: 28))
+                            .foregroundColor(.black.opacity(0.5))
+                    }
+                    .frame(width: 44, height: 44)
+                } else {
+                    Button(action: {}) {
+                        Image(systemName: "mic")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color.black)
+                    }
+                    .frame(width: 32, height: 32)
+                    .padding(.trailing, 2)
+
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrowshape.up")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color.black)
+                    }
+                    .frame(width: 32, height: 32)
+                    .disabled(inputText.isEmpty)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                ZStack(alignment: .top) {
+                    backgroundColor
+                    Rectangle()
+                        .frame(height: 0.2)
+                        .foregroundColor(.black.opacity(0.2))
+                }
+            )
+        }
+        .padding(.bottom, max(viewModel.keyboardHeight - bottomInset, 0))
+        .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
     }
 
     // MARK: Header
