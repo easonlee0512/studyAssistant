@@ -9,12 +9,46 @@ struct OpenAIMessage: Codable {
     let content: String
     let name: String?
     let tool_calls: [ToolCall]?
+    let tool_call_id: String?
 
-    init(role: String, content: String, name: String? = nil, tool_calls: [ToolCall]? = nil) {
+    init(
+        role: String,
+        content: String? = nil,
+        name: String? = nil,
+        tool_calls: [ToolCall]? = nil,
+        tool_call_id: String? = nil
+    ) {
         self.role = role
-        self.content = content
+        self.content = content ?? ""
         self.name = name
         self.tool_calls = tool_calls
+        self.tool_call_id = tool_call_id
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case role
+        case content
+        case name
+        case tool_calls
+        case tool_call_id
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        role = try container.decode(String.self, forKey: .role)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        tool_calls = try container.decodeIfPresent([ToolCall].self, forKey: .tool_calls)
+        tool_call_id = try container.decodeIfPresent(String.self, forKey: .tool_call_id)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(role, forKey: .role)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(tool_calls, forKey: .tool_calls)
+        try container.encodeIfPresent(tool_call_id, forKey: .tool_call_id)
     }
 }
 

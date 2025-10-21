@@ -245,21 +245,12 @@ struct CalendarView: View {
                             }
                         }
 
-                    VStack {
-                        HStack {
-                            CalendarAssistantPopupView(isPresented: $showingAssistantPopup)
-                                .padding(.top, 160) // 避開標題列
-                                .padding(.leading, 20)
-                                .transition(.scale(scale: 0.8).combined(with: .opacity))
-                                .onTapGesture {
-                                    // 阻止事件冒泡，點擊彈窗內部不會關閉
-                                }
-
-                            Spacer()
+                    // 居中显示弹窗
+                    CalendarAssistantPopupView(isPresented: $showingAssistantPopup)
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        .onTapGesture {
+                            // 阻止事件冒泡，點擊彈窗內部不會關閉
                         }
-
-                        Spacer()
-                    }
                 }
                 .zIndex(2)
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showingAssistantPopup)
