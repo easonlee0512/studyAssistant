@@ -107,7 +107,25 @@ struct CalendarView: View {
             VStack(spacing: 0) {
                 // 標題列
                 HStack {
-                    Spacer(minLength: 45)
+                    Button(action: {
+                        Task {
+                            await loadTasks()
+                        }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.hex(hex: "E28A5F"))
+                                .frame(width: 30, height: 30)
+
+                            Image("cloud_desync")
+                                .resizable()
+                                .renderingMode(.template)
+                                .frame(width: 22, height: 22)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .padding(.bottom, 5)
+                    .frame(width: 55)
 
                     Text(monthYearString)
                         .font(.system(size: 24, weight: .medium))
@@ -115,16 +133,23 @@ struct CalendarView: View {
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .animation(nil, value: currentDate)
+                        .padding(.bottom, 5)
 
                     Button(action: {
                         showingAddTask = true
                     }) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(Color.hex(hex: "E28A5F"))
+                        ZStack {
+                            Circle()
+                                .fill(Color.hex(hex: "E28A5F"))
+                                .frame(width: 30, height: 30)
+
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.white)
+                        }
                     }
-                    .padding(.trailing, 15)
-                    .frame(width: 45)
+                    .padding(.bottom, 5)
+                    .frame(width: 55)
                 }
                 .padding(.top, 110)
                 .padding(.bottom, 35)

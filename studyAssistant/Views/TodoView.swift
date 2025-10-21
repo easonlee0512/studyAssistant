@@ -143,9 +143,15 @@ struct TodoView: View {
                                     showingAddTask = true
                                 }
                             }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(Color.hex(hex: "E28A5F"))
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.hex(hex: "E28A5F"))
+                                        .frame(width: 30, height: 30)
+
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.white)
+                                }
                             }
                         }
                         .padding(.horizontal)
