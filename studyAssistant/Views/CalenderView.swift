@@ -84,6 +84,7 @@ struct CalendarView: View {
     @State private var currentDate = Date()   // 顯示的當前月份
     @State private var showingAddTask = false // 控制添加任務視圖顯示
     @State private var showingTodoDetail = false // 控制待辦詳情視圖顯示
+    @State private var showingAssistantPopup = false // 控制日曆助手彈窗顯示
     @State private var offsetX: CGFloat = 0   // 統一位移控制
     @State private var isDragging = false
     @State private var selectedDateId: String? = nil  // 用於追踪選中的日期
@@ -108,8 +109,8 @@ struct CalendarView: View {
                 // 標題列
                 HStack {
                     Button(action: {
-                        Task {
-                            await loadTasks()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showingAssistantPopup = true
                         }
                     }) {
                         ZStack {
@@ -219,7 +220,7 @@ struct CalendarView: View {
                                 showingTodoDetail = false
                             }
                         }
-                    
+
                     TodoDetailView(
                         viewModel: viewModel,
                         date: selectedDate,
@@ -230,6 +231,38 @@ struct CalendarView: View {
                 }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.3), value: showingTodoDetail)
+            }
+
+            // 日曆助手彈窗 - 放在左上角，點擊外部關閉
+            if showingAssistantPopup {
+                ZStack {
+                    // 透明背景層，用於檢測點擊外部
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                showingAssistantPopup = false
+                            }
+                        }
+
+                    VStack {
+                        HStack {
+                            CalendarAssistantPopupView(isPresented: $showingAssistantPopup)
+                                .padding(.top, 160) // 避開標題列
+                                .padding(.leading, 20)
+                                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                                .onTapGesture {
+                                    // 阻止事件冒泡，點擊彈窗內部不會關閉
+                                }
+
+                            Spacer()
+                        }
+
+                        Spacer()
+                    }
+                }
+                .zIndex(2)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showingAssistantPopup)
             }
         }
         .background(backgroundColor)
