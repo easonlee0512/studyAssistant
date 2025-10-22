@@ -13,10 +13,13 @@ import SwiftUI
 
 @MainActor
 final class CalendarAssistantViewModel: ObservableObject {
+    // 單例模式 - 確保在背景執行不會被中斷
+    static let shared = CalendarAssistantViewModel()
+
     private let proxyURL = URL(string: "https://asia-east1-studyassistant-f7172.cloudfunctions.net/chatProxy")!
 
     @Published var staticViewModel: StaticViewModel?
-    @Published var todoViewModel = TodoViewModel()
+    @Published var todoViewModel: TodoViewModel?
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -26,10 +29,41 @@ final class CalendarAssistantViewModel: ObservableObject {
     @Published var updateError: String?
     @Published var currentStatus: String = ""  // 當前狀態描述
 
-    // 任務變動追蹤
+    // 任務變動追蹤（當前更新）
     @Published var addedTasks: [PendingTask] = []
     @Published var deletedTasks: [TodoTask] = []
     @Published var updatedTasks: [(original: TodoTask, updated: PendingTask)] = []
+
+    // 上一次更新的任務記錄（持久化）
+    @Published var lastAddedTasks: [PendingTask] = []
+    @Published var lastDeletedTasks: [TodoTask] = []
+    @Published var lastUpdatedTasks: [(original: TodoTask, updated: PendingTask)] = []
+
+    // UserDefaults keys
+    private let lastUpdateStatusKey = "CalendarAssistant_LastUpdateStatus"
+    private let lastUpdateDateKey = "CalendarAssistant_LastUpdateDate"
+    private let autoUpdateEnabledKey = "CalendarAssistant_AutoUpdateEnabled"
+    private let autoUpdateInputKey = "CalendarAssistant_AutoUpdateInput"
+
+    // 每日自動更新設定
+    @Published var autoUpdateEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(autoUpdateEnabled, forKey: autoUpdateEnabledKey)
+        }
+    }
+    @Published var autoUpdateInput: String = "" {
+        didSet {
+            UserDefaults.standard.set(autoUpdateInput, forKey: autoUpdateInputKey)
+        }
+    }
+    private var lastUpdateDate: Date? {
+        get {
+            UserDefaults.standard.object(forKey: lastUpdateDateKey) as? Date
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: lastUpdateDateKey)
+        }
+    }
 
     // Firestore 相關
     private let db = Firestore.firestore()
@@ -190,10 +224,109 @@ final class CalendarAssistantViewModel: ObservableObject {
         )
     )
 
-    init() {
+    private init() {
+        loadLastUpdateStatus()
+        loadAutoUpdateSettings()
         Task {
             await loadStudySettingsFromFirestore()
         }
+    }
+
+    /// 載入自動更新設定
+    private func loadAutoUpdateSettings() {
+        autoUpdateEnabled = UserDefaults.standard.bool(forKey: autoUpdateEnabledKey)
+        autoUpdateInput = UserDefaults.standard.string(forKey: autoUpdateInputKey) ?? ""
+    }
+
+    // MARK: - 每日自動更新
+
+    /// 取得當前日期（支援測試模式）
+    private func getCurrentDate() -> Date {
+        // 檢查是否有設定測試用的日期
+        if let fakeNowISO = ProcessInfo.processInfo.environment["FAKE_NOW_ISO8601"] {
+            let formatter = ISO8601DateFormatter()
+            if let fakeDate = formatter.date(from: fakeNowISO) {
+                print("⚠️ 使用測試日期：\(fakeDate)")
+                return fakeDate
+            }
+        }
+        return Date()
+    }
+
+    /// 檢查今天是否已經更新過
+    func hasUpdatedToday() -> Bool {
+        guard let lastDate = lastUpdateDate else {
+            return false
+        }
+
+        let calendar = Calendar.current
+        let currentDate = getCurrentDate()
+
+        // 檢查 lastDate 是否與當前日期在同一天
+        return calendar.isDate(lastDate, inSameDayAs: currentDate)
+    }
+
+    /// 執行每日自動更新（如果需要）
+    func performDailyAutoUpdateIfNeeded() async {
+        // 檢查是否開啟自動更新
+        guard autoUpdateEnabled else {
+            print("每日自動更新未開啟")
+            return
+        }
+
+        // 檢查是否有設定更新指令
+        guard !autoUpdateInput.isEmpty else {
+            print("每日自動更新：未設定更新指令")
+            return
+        }
+
+        // 檢查今天是否已更新過
+        if hasUpdatedToday() {
+            print("今日已執行過自動更新，跳過")
+            return
+        }
+
+        print("開始執行每日自動更新...")
+        await startUpdate(userInput: autoUpdateInput)
+
+        // 記錄更新時間（使用當前日期，支援測試模式）
+        let currentDate = getCurrentDate()
+        lastUpdateDate = currentDate
+        print("每日自動更新完成，記錄時間：\(currentDate)")
+    }
+
+    // MARK: - 持久化相關
+
+    /// 載入上一次的更新記錄
+    private func loadLastUpdateStatus() {
+        guard let data = UserDefaults.standard.data(forKey: lastUpdateStatusKey),
+              let decoded = try? JSONDecoder().decode(LastUpdateStatus.self, from: data) else {
+            return
+        }
+
+        lastAddedTasks = decoded.addedTasks
+        lastDeletedTasks = decoded.deletedTasks
+        lastUpdatedTasks = decoded.updatedTasks
+    }
+
+    /// 儲存當前更新記錄到本地端
+    private func saveLastUpdateStatus() {
+        let status = LastUpdateStatus(
+            addedTasks: addedTasks,
+            deletedTasks: deletedTasks,
+            updatedTasks: updatedTasks
+        )
+
+        if let encoded = try? JSONEncoder().encode(status) {
+            UserDefaults.standard.set(encoded, forKey: lastUpdateStatusKey)
+        }
+    }
+
+    /// 清除上一次的記錄（當開始新的更新時）
+    private func clearLastUpdateStatus() {
+        lastAddedTasks = []
+        lastDeletedTasks = []
+        lastUpdatedTasks = []
     }
 
     // MARK: - 主要更新方法
@@ -204,10 +337,13 @@ final class CalendarAssistantViewModel: ObservableObject {
         updateError = nil
         currentStatus = "正在初始化..."
 
-        // 清空之前的結果
+        // 清空當前更新的結果
         addedTasks = []
         deletedTasks = []
         updatedTasks = []
+
+        // 清除上一次的記錄（開始新的更新）
+        clearLastUpdateStatus()
 
         // 建構系統提示
         let systemPrompt = buildSystemPrompt()
@@ -258,13 +394,14 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
-                model: "gpt-4.1",
+                model: "gpt-5-mini",
                 messages: messages,
-                temperature: 0.7,
+                temperature: 1.0,  // GPT-5 只支援 temperature = 1.0
                 stream: false,
                 tools: [getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
                 tool_choice: roundCount == 1 ? "required" : "auto",
-                stream_options: nil
+                stream_options: nil,
+                reasoning_effort: "minimal"  // 使用最小推理程度以獲得最快回應
             )
 
             guard let data = try? encoder.encode(reqBody) else {
@@ -385,7 +522,24 @@ final class CalendarAssistantViewModel: ObservableObject {
             currentStatus = "已達到最大處理輪次"
         } else {
             print("✅ 處理完成")
-            currentStatus = "處理完成"
+
+            // 檢查是否有任何任務被更新
+            let hasUpdates = !addedTasks.isEmpty || !deletedTasks.isEmpty || !updatedTasks.isEmpty
+
+            if hasUpdates {
+                // 有更新：保存當前記錄到本地端，並將其設為上一次記錄
+                saveLastUpdateStatus()
+                lastAddedTasks = addedTasks
+                lastDeletedTasks = deletedTasks
+                lastUpdatedTasks = updatedTasks
+                currentStatus = "處理完成"
+
+                // 記錄更新時間（用於每日自動更新檢查，支援測試模式）
+                lastUpdateDate = getCurrentDate()
+            } else {
+                // 沒有更新：顯示「無任務被更新」，並保留上一次的記錄（如果有的話）
+                currentStatus = "無任務被更新"
+            }
         }
 
         print(String(repeating: "=", count: 80))
@@ -546,7 +700,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                         userId: ""
                     )
 
-                    await todoViewModel.addTask(todoTask)
+                    await todoViewModel?.addTask(todoTask)
 
                     // 立即更新追蹤列表並觸發 UI 更新
                     await MainActor.run {
@@ -586,7 +740,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             let args = try JSONDecoder().decode(DeleteTaskArgs.self, from: jsonData)
             var tasksToDelete: [TodoTask] = []
-            let allTasks = todoViewModel.tasks
+            let allTasks = todoViewModel?.tasks ?? []
             var successCount = 0
             var failureCount = 0
 
@@ -594,7 +748,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                 if let task = allTasks.first(where: { $0.id == taskId }) {
                     tasksToDelete.append(task)
                     do {
-                        try await todoViewModel.deleteTask(task)
+                        try await todoViewModel?.deleteTask(task)
 
                         // 立即更新狀態
                         await MainActor.run {
@@ -656,7 +810,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                 return "未提供任何要更新的任務"
             }
 
-            let allTasks = todoViewModel.tasks
+            let allTasks = todoViewModel?.tasks ?? []
             var successCount = 0
             var failureCount = 0
 
@@ -691,7 +845,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                     updatedTodoTask.isCompleted = updatedTask.isCompleted
                     updatedTodoTask.color = updatedTask.color
 
-                    try await todoViewModel.updateTask(updatedTodoTask)
+                    try await todoViewModel?.updateTask(updatedTodoTask)
 
                     // 立即更新狀態
                     await MainActor.run {
@@ -814,28 +968,38 @@ final class CalendarAssistantViewModel: ObservableObject {
     }
 
     private func buildSystemPrompt() -> String {
-        let tone = studySettings?.tone ?? "沉著穩重的專家"
-        let currentTimeString = formatCurrentTime()
+        let tone = studySettings?.tone ?? "Calm and composed expert"
+        let currentTimeString = getCurrentDate()
         var prompt = """
-            你是一位日曆安排助手，會根據使用者的需求自動調整日曆任務。語氣為：\(tone)
+            You are a calendar scheduling assistant that automatically adjusts calendar tasks based on user requirements. Your tone is: \(tone)
 
             \(formatStudySettings())
 
-            目前系統時間：\(currentTimeString)
+            Current system time: \(currentTimeString)
 
-            你的目標是：
-            1. 根據需求新增、刪除或修改任務
-            2. 完成所有操作後立即呼叫 end_conversation
+            Your goals are:
+            1. Add, delete, or modify tasks based on requirements
+            2. Call end_conversation immediately after completing all operations(if there are no tasks to add/delete/update, call end_conversation directly to end the conversation)
 
-            重要規則：
-            1. **最多執行 15 輪操作**
-            2. 如果使用者沒有指定特別時段，安排任務時間時必須遵守以下規則：
-                - 只能在使用者設定的可讀書日期和時間內安排任務
-                - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
-                - 不要在設定的時間範圍外安排任務
-                - 不要與原有的任務時間重疊
-            3. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），必須遵從使用者的需求一次安排完成。
-            4. 沒有指定時間即為現在。
+            Important rules:
+            1. If there are no tasks to add/delete/update, call end_conversation directly to end the conversation.
+            2. Do not make unnecessary updates. Use common sense to determine what is "unnecessary":
+                - Tasks with no actual changes do not need to be updated
+                - When user asks to "update tasks to today", ONLY update tasks that are significantly outdated (e.g., from yesterday or earlier dates)
+                - Tasks scheduled for today (even if a few minutes or hours in the past) generally do NOT need to be updated unless they are clearly outdated
+                - Example: If current time is 14:30 and a task is scheduled for 13:00 today, this does NOT need updating
+                - Example: If current time is 14:30 and a task is scheduled for yesterday, this DOES need updating
+                - Use practical judgment: minor time differences within the same day are acceptable and do not require updates
+            3. If the user has not specified a particular time period, when scheduling tasks you must follow these rules:
+                - Tasks can only be scheduled within the user's configured study dates and times
+                - Each task's duration should be the configured study time (\(studySettings?.studyDuration ?? 60) minutes)
+                - Do not schedule tasks outside the configured time ranges
+                - Do not overlap with existing task times
+            4. When scheduling tasks, if the user requests many tasks (e.g., one or two hundred tasks), you must fulfill the user's request and schedule them all at once.
+            5. If no time is specified, it means now.
+            6. If time changes are not requested, do not modify times (e.g., when user hasn't asked to change times).
+            7. You must fully follow the user's instructions without adding extra rules or assumptions.
+            8. Respond in the user's language (e.g., respond in Chinese if using Chinese, respond in English if using English).
             """
 
         let existingTasksInfo = formatExistingTasks()
@@ -903,8 +1067,8 @@ final class CalendarAssistantViewModel: ObservableObject {
     }
 
     private func formatExistingTasks() -> String {
-        let tasks = todoViewModel.tasks
-        guard !tasks.isEmpty else { return "目前沒有任何既有任務。" }
+        let tasks = todoViewModel?.tasks ?? []
+        guard !tasks.isEmpty else { return "There are currently no existing tasks." }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/MM/dd HH:mm"
@@ -1026,4 +1190,53 @@ final class CalendarAssistantViewModel: ObservableObject {
 
         throw lastError ?? URLError(.timedOut)
     }
+}
+
+// MARK: - 持久化結構定義
+
+/// 用於保存上一次更新狀態的結構
+struct LastUpdateStatus: Codable {
+    let addedTasks: [PendingTask]
+    let deletedTasks: [TodoTask]
+    let updatedTasks: [(original: TodoTask, updated: PendingTask)]
+
+    enum CodingKeys: String, CodingKey {
+        case addedTasks
+        case deletedTasks
+        case updatedTasks
+    }
+
+    init(addedTasks: [PendingTask], deletedTasks: [TodoTask], updatedTasks: [(original: TodoTask, updated: PendingTask)]) {
+        self.addedTasks = addedTasks
+        self.deletedTasks = deletedTasks
+        self.updatedTasks = updatedTasks
+    }
+
+    // 自訂編碼，因為 tuple 不支援 Codable
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(addedTasks, forKey: .addedTasks)
+        try container.encode(deletedTasks, forKey: .deletedTasks)
+
+        // 將 tuple 轉換為可編碼的結構
+        let updatedTaskPairs = updatedTasks.map { UpdatedTaskPair(original: $0.original, updated: $0.updated) }
+        try container.encode(updatedTaskPairs, forKey: .updatedTasks)
+    }
+
+    // 自訂解碼
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        addedTasks = try container.decode([PendingTask].self, forKey: .addedTasks)
+        deletedTasks = try container.decode([TodoTask].self, forKey: .deletedTasks)
+
+        // 將可解碼的結構轉換回 tuple
+        let updatedTaskPairs = try container.decode([UpdatedTaskPair].self, forKey: .updatedTasks)
+        updatedTasks = updatedTaskPairs.map { (original: $0.original, updated: $0.updated) }
+    }
+}
+
+/// 用於編碼 updatedTasks 的輔助結構
+private struct UpdatedTaskPair: Codable {
+    let original: TodoTask
+    let updated: PendingTask
 }

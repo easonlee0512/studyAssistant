@@ -190,6 +190,7 @@ struct OpenAIRequest: Codable {
     let tools: [Tool]?
     let tool_choice: String?
     let stream_options: [String: Bool]?  // 新增: 支援stream_options參數
+    let reasoning_effort: String?  // 新增: GPT-5 推理程度參數 (minimal, low, medium, high)
 }
 
 // 非串流回傳格式（給 generateTitle 用）
@@ -1110,7 +1111,8 @@ final class ChatViewModel: ObservableObject {
                         getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction,
                 ],
                 tool_choice: toolChoice,
-                stream_options: ["include_usage": true]  // 啟用token計數
+                stream_options: ["include_usage": true],  // 啟用token計數
+                reasoning_effort: nil  // GPT-4.1 不需要此參數
             )
 
             print("請求內容：\(String(describing: try? JSONEncoder().encode(reqBody)))")
@@ -1526,7 +1528,8 @@ final class ChatViewModel: ObservableObject {
             stream: false,
             tools: nil,
             tool_choice: nil,
-            stream_options: nil
+            stream_options: nil,
+            reasoning_effort: nil  // GPT-4.1-mini 不需要此參數
         )
         let result = await callOpenAIOnce(with: body)
         

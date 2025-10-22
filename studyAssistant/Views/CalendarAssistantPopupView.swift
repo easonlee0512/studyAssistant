@@ -3,15 +3,13 @@ import SwiftUI
 struct CalendarAssistantPopupView: View {
     // MARK: - State Variables
     @Binding var isPresented: Bool
-    @State private var inputText: String = ""
-    @State private var autoUpdateEnabled: Bool = false
     @State private var showTaskCards: Bool = false
     @State private var expandedSections: Set<String> = [] // "added", "deleted", "updated"
 
     // MARK: - Environment Objects
     @EnvironmentObject var todoViewModel: TodoViewModel
     @EnvironmentObject var staticViewModel: StaticViewModel
-    @StateObject private var assistantViewModel = CalendarAssistantViewModel()
+    @EnvironmentObject var assistantViewModel: CalendarAssistantViewModel
 
     // MARK: - Constants - 參考 ChatSettingView 的配色
     private let backgroundColor = Color.hex(hex: "F3D4B7")
@@ -23,10 +21,6 @@ struct CalendarAssistantPopupView: View {
     private let taskContentSize: CGFloat = 14
     private let taskHeaderSize: CGFloat = 17
     private let taskCountSize: CGFloat = 15
-
-    // MARK: - UserDefaults Keys
-    private let inputTextKey = "calendarAssistant_inputText"
-    private let autoUpdateKey = "calendarAssistant_autoUpdate"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,7 +59,7 @@ struct CalendarAssistantPopupView: View {
 
                 ZStack(alignment: .topLeading) {
                     // 淡灰色背景的 TextEditor
-                    TextEditor(text: $inputText)
+                    TextEditor(text: $assistantViewModel.autoUpdateInput)
                         .font(.system(size: 16))
                         .foregroundColor(.black)
                         .padding(12)
@@ -78,13 +72,9 @@ struct CalendarAssistantPopupView: View {
                         .frame(height: 120) // 縮小以留出空間給任務卡片
                         .scrollContentBackground(.hidden)
                         .disabled(assistantViewModel.isUpdating)
-                        .onChange(of: inputText) { newValue in
-                            // 儲存輸入文字到本地
-                            saveInputText(newValue)
-                        }
 
                     // 占位符提示文字
-                    if inputText.isEmpty {
+                    if assistantViewModel.autoUpdateInput.isEmpty {
                         Text("可以輸入希望助手每日如何自動調整日曆")
                             .font(.system(size: 16))
                             .foregroundColor(.gray.opacity(0.6))
@@ -99,17 +89,13 @@ struct CalendarAssistantPopupView: View {
 
             // 每日自動更新 Toggle（參考 ChatSettingView 的 Toggle 樣式）
             VStack(alignment: .leading, spacing: 15) {
-                Toggle(isOn: $autoUpdateEnabled) {
+                Toggle(isOn: $assistantViewModel.autoUpdateEnabled) {
                     Text("每日自動更新")
                         .font(.system(size: 18))
                         .foregroundColor(.black)
                 }
                 .tint(accentColor)
                 .disabled(assistantViewModel.isUpdating)
-                .onChange(of: autoUpdateEnabled) { newValue in
-                    // 儲存自動更新設定到本地
-                    saveAutoUpdate(newValue)
-                }
             }
             .padding()
             .background(cardColor)
@@ -123,62 +109,62 @@ struct CalendarAssistantPopupView: View {
             if showTaskCards {
                 ScrollView {
                     VStack(spacing: 12) {
-                        // 新增任務區域
-                        if !assistantViewModel.addedTasks.isEmpty {
+                        // 新增任務區域 - 使用 lastAddedTasks 持久化顯示
+                        if !assistantViewModel.lastAddedTasks.isEmpty {
                             taskSection(
-                                title: "已新增的任務 (\(assistantViewModel.addedTasks.count))",
+                                title: "已新增的任務 (\(assistantViewModel.lastAddedTasks.count))",
                                 sectionId: "added",
                                 color: .green
                             ) {
                                 let isExpanded = expandedSections.contains("added")
-                                let displayTasks = isExpanded ? assistantViewModel.addedTasks : Array(assistantViewModel.addedTasks.prefix(1))
+                                let displayTasks = isExpanded ? assistantViewModel.lastAddedTasks : Array(assistantViewModel.lastAddedTasks.prefix(1))
 
                                 ForEach(displayTasks) { task in
                                     taskAddItemView(task: task)
                                 }
 
-                                if assistantViewModel.addedTasks.count > 1 {
-                                    expandButton(sectionId: "added", totalCount: assistantViewModel.addedTasks.count)
+                                if assistantViewModel.lastAddedTasks.count > 1 {
+                                    expandButton(sectionId: "added", totalCount: assistantViewModel.lastAddedTasks.count)
                                 }
                             }
                         }
 
-                        // 刪除任務區域
-                        if !assistantViewModel.deletedTasks.isEmpty {
+                        // 刪除任務區域 - 使用 lastDeletedTasks 持久化顯示
+                        if !assistantViewModel.lastDeletedTasks.isEmpty {
                             taskSection(
-                                title: "已刪除的任務 (\(assistantViewModel.deletedTasks.count))",
+                                title: "已刪除的任務 (\(assistantViewModel.lastDeletedTasks.count))",
                                 sectionId: "deleted",
                                 color: .red
                             ) {
                                 let isExpanded = expandedSections.contains("deleted")
-                                let displayTasks = isExpanded ? assistantViewModel.deletedTasks : Array(assistantViewModel.deletedTasks.prefix(1))
+                                let displayTasks = isExpanded ? assistantViewModel.lastDeletedTasks : Array(assistantViewModel.lastDeletedTasks.prefix(1))
 
                                 ForEach(displayTasks) { task in
                                     taskDeleteItemView(task: task)
                                 }
 
-                                if assistantViewModel.deletedTasks.count > 1 {
-                                    expandButton(sectionId: "deleted", totalCount: assistantViewModel.deletedTasks.count)
+                                if assistantViewModel.lastDeletedTasks.count > 1 {
+                                    expandButton(sectionId: "deleted", totalCount: assistantViewModel.lastDeletedTasks.count)
                                 }
                             }
                         }
 
-                        // 修改任務區域
-                        if !assistantViewModel.updatedTasks.isEmpty {
+                        // 修改任務區域 - 使用 lastUpdatedTasks 持久化顯示
+                        if !assistantViewModel.lastUpdatedTasks.isEmpty {
                             taskSection(
-                                title: "已修改的任務 (\(assistantViewModel.updatedTasks.count))",
+                                title: "已修改的任務 (\(assistantViewModel.lastUpdatedTasks.count))",
                                 sectionId: "updated",
                                 color: .blue
                             ) {
                                 let isExpanded = expandedSections.contains("updated")
-                                let displayTasks = isExpanded ? assistantViewModel.updatedTasks : Array(assistantViewModel.updatedTasks.prefix(1))
+                                let displayTasks = isExpanded ? assistantViewModel.lastUpdatedTasks : Array(assistantViewModel.lastUpdatedTasks.prefix(1))
 
                                 ForEach(0..<displayTasks.count, id: \.self) { index in
-                                    taskUpdateItemView(updateData: displayTasks[index], index: index, total: assistantViewModel.updatedTasks.count)
+                                    taskUpdateItemView(updateData: displayTasks[index], index: index, total: assistantViewModel.lastUpdatedTasks.count)
                                 }
 
-                                if assistantViewModel.updatedTasks.count > 1 {
-                                    expandButton(sectionId: "updated", totalCount: assistantViewModel.updatedTasks.count)
+                                if assistantViewModel.lastUpdatedTasks.count > 1 {
+                                    expandButton(sectionId: "updated", totalCount: assistantViewModel.lastUpdatedTasks.count)
                                 }
                             }
                         }
@@ -229,12 +215,12 @@ struct CalendarAssistantPopupView: View {
 
             // 立即更新按鈕
             Button(action: {
-                guard !inputText.isEmpty else { return }
+                guard !assistantViewModel.autoUpdateInput.isEmpty else { return }
 
                 Task {
                     showTaskCards = false
                     expandedSections.removeAll()
-                    await assistantViewModel.startUpdate(userInput: inputText)
+                    await assistantViewModel.startUpdate(userInput: assistantViewModel.autoUpdateInput)
                     showTaskCards = true
                 }
             }) {
@@ -254,11 +240,11 @@ struct CalendarAssistantPopupView: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(assistantViewModel.isUpdating || inputText.isEmpty ? accentColor.opacity(0.5) : accentColor)
+                .background(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty ? accentColor.opacity(0.5) : accentColor)
                 .cornerRadius(12)
                 .shadow(color: accentColor.opacity(0.3), radius: 4, x: 0, y: 2)
             }
-            .disabled(assistantViewModel.isUpdating || inputText.isEmpty)
+            .disabled(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty)
             .padding()
             .background(cardColor)
             .contentShape(Rectangle())
@@ -273,12 +259,12 @@ struct CalendarAssistantPopupView: View {
         .frame(width: 360)  // 縮小寬度從 420 到 360
         .frame(maxHeight: 650)
         .onAppear {
-            // 注入依賴
-            assistantViewModel.todoViewModel = todoViewModel
-            assistantViewModel.staticViewModel = staticViewModel
-
-            // 載入儲存的資料
-            loadSavedData()
+            // 如果有上一次的更新記錄，自動顯示任務卡片
+            if !assistantViewModel.lastAddedTasks.isEmpty ||
+               !assistantViewModel.lastDeletedTasks.isEmpty ||
+               !assistantViewModel.lastUpdatedTasks.isEmpty {
+                showTaskCards = true
+            }
         }
     }
 
@@ -287,29 +273,6 @@ struct CalendarAssistantPopupView: View {
     /// 隱藏鍵盤
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-
-    // MARK: - Local Storage
-
-    /// 儲存輸入文字到本地
-    private func saveInputText(_ text: String) {
-        UserDefaults.standard.set(text, forKey: inputTextKey)
-    }
-
-    /// 儲存自動更新設定到本地
-    private func saveAutoUpdate(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: autoUpdateKey)
-    }
-
-    /// 載入儲存的資料
-    private func loadSavedData() {
-        // 載入輸入文字
-        if let savedText = UserDefaults.standard.string(forKey: inputTextKey) {
-            inputText = savedText
-        }
-
-        // 載入自動更新設定
-        autoUpdateEnabled = UserDefaults.standard.bool(forKey: autoUpdateKey)
     }
 
     // MARK: - Helper Views

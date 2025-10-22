@@ -14,7 +14,7 @@ functions.http('chatProxy', (req, res) => {
       }
 
       try {
-        const { model, messages, temperature, stream, tools, tool_choice, stream_options } = req.body;
+        const { model, messages, temperature, stream, tools, tool_choice, stream_options, reasoning_effort } = req.body;
 
         // 驗證必要參數
         if (!model || !messages) {
@@ -34,6 +34,7 @@ functions.http('chatProxy', (req, res) => {
         if (tools) requestBody.tools = tools;
         if (tool_choice) requestBody.tool_choice = tool_choice;
         if (stream_options) requestBody.stream_options = stream_options;
+        if (reasoning_effort) requestBody.reasoning_effort = reasoning_effort;
 
         // 呼叫 OpenAI API
         const fetch = (await import('node-fetch')).default;

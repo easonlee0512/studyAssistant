@@ -129,6 +129,11 @@ struct studyAssistantApp: App {
     @StateObject private var settingsViewModel = UserSettingsViewModel()
     @StateObject private var staticViewModel = StaticViewModel()
     @StateObject private var chatViewModel = ChatViewModel()
+
+    // 取得 CalendarAssistantViewModel 單例
+    private var calendarAssistantViewModel: CalendarAssistantViewModel {
+        CalendarAssistantViewModel.shared
+    }
     
     // 監聽場景階段變化
     @Environment(\.scenePhase) var scenePhase
@@ -143,6 +148,7 @@ struct studyAssistantApp: App {
                     .environmentObject(settingsViewModel)
                     .environmentObject(staticViewModel)
                     .environmentObject(chatViewModel)
+                    .environmentObject(calendarAssistantViewModel)
                     .task {
                         // 首先嘗試遷移舊數據
                         do {
@@ -157,6 +163,15 @@ struct studyAssistantApp: App {
                             try await todoViewModel.loadTasks()
                             await staticViewModel.fetchStatistics()
                             await settingsViewModel.loadData()
+
+                            // 注入依賴到 CalendarAssistantViewModel
+                            await MainActor.run {
+                                calendarAssistantViewModel.todoViewModel = todoViewModel
+                                calendarAssistantViewModel.staticViewModel = staticViewModel
+                            }
+
+                            // 檢查並執行每日自動更新
+                            await calendarAssistantViewModel.performDailyAutoUpdateIfNeeded()
                         } catch {
                             print("Error loading initial data: \(error)")
                         }
@@ -175,6 +190,9 @@ struct studyAssistantApp: App {
                                     await staticViewModel.fetchStatistics()
                                     // 發送通知以更新所有依賴使用者設定的視圖
                                     NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
+
+                                    // 檢查並執行每日自動更新
+                                    await calendarAssistantViewModel.performDailyAutoUpdateIfNeeded()
                                 } catch {
                                     print("Error reloading data in foreground: \(error)")
                                 }
