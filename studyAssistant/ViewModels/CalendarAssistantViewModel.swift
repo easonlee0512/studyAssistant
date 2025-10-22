@@ -221,13 +221,40 @@ final class CalendarAssistantViewModel: ObservableObject {
         let maxRounds = 15
         var endConversationReached = false
 
-        print("開始日曆助手更新，使用者輸入：\(userInput)")
+        print("\n" + String(repeating: "=", count: 80))
+        print("📅 日曆助手開始處理")
+        print(String(repeating: "=", count: 80))
+        print("👤 使用者輸入：\(userInput)")
+        print(String(repeating: "-", count: 80))
+        print("🤖 系統提示（前500字元）：\(systemPrompt.prefix(500))...")
+        print(String(repeating: "=", count: 80) + "\n")
+
         currentStatus = "正在分析您的需求..."
 
         while !endConversationReached && roundCount < maxRounds {
             roundCount += 1
-            print("=== 第 \(roundCount) 輪對話 ===")
-            currentStatus = "正在處理... (\(roundCount)/\(maxRounds))"
+            print("\n" + String(repeating: "─", count: 80))
+            print("🔄 第 \(roundCount)/\(maxRounds) 輪對話")
+            print(String(repeating: "─", count: 80))
+
+            // 更新狀態顯示當前處理的任務變動數量
+            var statusParts: [String] = []
+            if addedTasks.count > 0 {
+                statusParts.append("新增 \(addedTasks.count)")
+            }
+            if deletedTasks.count > 0 {
+                statusParts.append("刪除 \(deletedTasks.count)")
+            }
+            if updatedTasks.count > 0 {
+                statusParts.append("修改 \(updatedTasks.count)")
+            }
+
+            if statusParts.isEmpty {
+                currentStatus = "正在分析任務... (\(roundCount)/\(maxRounds))"
+            } else {
+                currentStatus = "已\(statusParts.joined(separator: "、"))個任務 (\(roundCount)/\(maxRounds))"
+            }
+            print("📊 目前狀態：\(currentStatus)")
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
@@ -272,10 +299,12 @@ final class CalendarAssistantViewModel: ObservableObject {
                     return
                 }
 
-                // 列印回應內容以便除錯
+                // 列印回應內容以便除錯（僅在開發模式）
+                #if DEBUG
                 if let responseString = String(data: respData, encoding: .utf8) {
-                    print("收到回應：\(responseString.prefix(500))...")  // 只列印前500個字元
+                    print("API回應：\(responseString)")
                 }
+                #endif
 
                 // 解析回應
                 guard let response = try? decoder.decode(OpenAIResponse.self, from: respData) else {
@@ -297,17 +326,20 @@ final class CalendarAssistantViewModel: ObservableObject {
 
                 // 處理 tool calls
                 if let toolCalls = choice.message.tool_calls, !toolCalls.isEmpty {
-                    print("收到 \(toolCalls.count) 個函數呼叫")
+                    print("\n🔧 收到 \(toolCalls.count) 個函數呼叫")
 
                     // 將助手訊息加入對話歷史
                     messages.append(choice.message)
 
                     // 執行每個函數呼叫
-                    for toolCall in toolCalls {
+                    for (index, toolCall) in toolCalls.enumerated() {
                         let functionName = toolCall.function.name
                         let arguments = toolCall.function.arguments
 
-                        print("執行函數：\(functionName)")
+                        print("\n  [\(index + 1)/\(toolCalls.count)] 🛠️  函數名稱：\(functionName)")
+                        if !arguments.isEmpty && arguments != "{}" {
+                            print("  📝 參數：\(arguments.prefix(200))\(arguments.count > 200 ? "..." : "")")
+                        }
 
                         // 執行函數
                         let result = await handleToolCall(functionName: functionName, arguments: arguments)
@@ -315,6 +347,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                         // 檢查是否結束對話
                         if functionName == "end_conversation" {
                             endConversationReached = true
+                            print("  ✅ 對話結束")
                         }
 
                         // 將函數結果加入訊息歷史
@@ -327,29 +360,42 @@ final class CalendarAssistantViewModel: ObservableObject {
                         )
                         messages.append(toolMessage)
 
-                        print("函數結果：\(result)")
+                        print("  📤 函數結果：\(result.prefix(200))\(result.count > 200 ? "..." : "")")
                     }
                 } else {
                     // 若沒有 tool calls，只有文字回覆，繼續下一輪
-                    print("GPT 回覆：\(choice.message.content)")
+                    let content = choice.message.content
+                    if !content.isEmpty {
+                        print("\n💬 GPT 回覆：\(content)")
+                    }
                     messages.append(choice.message)
                 }
 
             } catch {
+                print("\n❌ 錯誤發生：\(error.localizedDescription)")
                 updateError = "請求失敗：\(error.localizedDescription)"
                 isUpdating = false
                 return
             }
         }
 
+        print("\n" + String(repeating: "=", count: 80))
         if roundCount >= maxRounds && !endConversationReached {
-            print("警告：已達到最大輪次限制（15輪）")
+            print("⚠️  警告：已達到最大輪次限制（15輪）")
             currentStatus = "已達到最大處理輪次"
         } else {
+            print("✅ 處理完成")
             currentStatus = "處理完成"
         }
 
-        print("更新完成，新增 \(addedTasks.count) 個任務，刪除 \(deletedTasks.count) 個任務，修改 \(updatedTasks.count) 個任務")
+        print(String(repeating: "=", count: 80))
+        print("📊 最終結果統計：")
+        print("   ➕ 新增任務：\(addedTasks.count) 個")
+        print("   ➖ 刪除任務：\(deletedTasks.count) 個")
+        print("   ✏️  修改任務：\(updatedTasks.count) 個")
+        print("   🔄 總輪次：\(roundCount) 輪")
+        print(String(repeating: "=", count: 80) + "\n")
+
         isUpdating = false
     }
 
@@ -501,10 +547,17 @@ final class CalendarAssistantViewModel: ObservableObject {
                     )
 
                     await todoViewModel.addTask(todoTask)
+
+                    // 立即更新追蹤列表並觸發 UI 更新
+                    await MainActor.run {
+                        self.addedTasks.append(pendingTask)
+                        self.updateCurrentStatus()
+                    }
+
                     successCount += 1
-                    addedTasks.append(pendingTask)
+                    print("    ✅ 已新增任務：\(task.title)")
                 } catch {
-                    print("儲存任務失敗: \(error)")
+                    print("    ❌ 儲存任務失敗: \(error)")
                     failureCount += 1
                 }
             }
@@ -542,9 +595,17 @@ final class CalendarAssistantViewModel: ObservableObject {
                     tasksToDelete.append(task)
                     do {
                         try await todoViewModel.deleteTask(task)
+
+                        // 立即更新狀態
+                        await MainActor.run {
+                            self.deletedTasks.append(task)
+                            self.updateCurrentStatus()
+                        }
+
                         successCount += 1
+                        print("    ✅ 已刪除任務：\(task.title)")
                     } catch {
-                        print("刪除任務失敗: \(error)")
+                        print("    ❌ 刪除任務失敗: \(error)")
                         failureCount += 1
                     }
                 }
@@ -554,8 +615,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                 return "找不到指定的任務"
             }
 
-            // 加入刪除列表
-            deletedTasks.append(contentsOf: tasksToDelete)
+            // 注意：已在上面的迴圈中即時更新 deletedTasks，這裡不需要重複添加
 
             if successCount > 0 {
                 return "已成功刪除 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務刪除失敗" : "")
@@ -632,10 +692,17 @@ final class CalendarAssistantViewModel: ObservableObject {
                     updatedTodoTask.color = updatedTask.color
 
                     try await todoViewModel.updateTask(updatedTodoTask)
+
+                    // 立即更新狀態
+                    await MainActor.run {
+                        self.updatedTasks.append((original: originalTask, updated: updatedTask))
+                        self.updateCurrentStatus()
+                    }
+
                     successCount += 1
-                    updatedTasks.append((original: originalTask, updated: updatedTask))
+                    print("    ✅ 已更新任務：\(updatedTask.title)")
                 } catch {
-                    print("更新任務失敗: \(error)")
+                    print("    ❌ 更新任務失敗: \(error)")
                     failureCount += 1
                 }
             }
@@ -652,6 +719,26 @@ final class CalendarAssistantViewModel: ObservableObject {
     }
 
     // MARK: - Helper Methods
+
+    /// 更新當前狀態顯示
+    private func updateCurrentStatus() {
+        var statusParts: [String] = []
+        if addedTasks.count > 0 {
+            statusParts.append("新增 \(addedTasks.count)")
+        }
+        if deletedTasks.count > 0 {
+            statusParts.append("刪除 \(deletedTasks.count)")
+        }
+        if updatedTasks.count > 0 {
+            statusParts.append("修改 \(updatedTasks.count)")
+        }
+
+        if statusParts.isEmpty {
+            currentStatus = "正在處理中..."
+        } else {
+            currentStatus = "已\(statusParts.joined(separator: "、"))個任務"
+        }
+    }
 
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
