@@ -1072,10 +1072,6 @@ struct ChatDemoDynamicView: View {
         .padding()
         .background(Color.red.opacity(0.1))
         .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-        )
         .textSelection(.enabled)
         .contextMenu {
             Button(action: {
@@ -1142,13 +1138,9 @@ struct ChatDemoDynamicView: View {
                 .padding()
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
                 .frame(maxWidth: .infinity)
                 .layoutPriority(1)
-                
+
                 // 更新後的任務數據
                 VStack(alignment: .leading, spacing: 5) {
                     Text("更新後資料")
@@ -1186,10 +1178,6 @@ struct ChatDemoDynamicView: View {
                 .padding()
                 .background(Color.blue.opacity(0.1))
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                )
                 .frame(maxWidth: .infinity)
                 .layoutPriority(1)
             }
@@ -1250,10 +1238,6 @@ struct ChatDemoDynamicView: View {
         .padding()
         .background(Color.green.opacity(0.1))
         .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.green.opacity(0.3), lineWidth: 1)
-        )
         .textSelection(.enabled)
         .contextMenu {
             Button(action: {

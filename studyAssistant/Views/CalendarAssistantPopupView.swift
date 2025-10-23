@@ -22,6 +22,14 @@ struct CalendarAssistantPopupView: View {
     private let taskHeaderSize: CGFloat = 17
     private let taskCountSize: CGFloat = 15
 
+    // 檢查是否有任務更新
+    private var hasTaskUpdates: Bool {
+        !assistantViewModel.lastAddedTasks.isEmpty ||
+        !assistantViewModel.lastDeletedTasks.isEmpty ||
+        !assistantViewModel.lastUpdatedTasks.isEmpty ||
+        assistantViewModel.updateError != nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // 標題區域
@@ -43,7 +51,9 @@ struct CalendarAssistantPopupView: View {
                         .foregroundColor(accentColor)
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top)
+            .padding(.bottom, 4)
             .background(cardColor)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -52,11 +62,12 @@ struct CalendarAssistantPopupView: View {
             }
 
             // 輸入框區域（參考 ChatSettingView 的 TextField 樣式）
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("輸入日程安排")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.black)
+                        .padding(.leading, 2)
 
                     Spacer()
 
@@ -110,7 +121,9 @@ struct CalendarAssistantPopupView: View {
                     }
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom)
             .background(cardColor)
 
             // 每日自動更新 Toggle（參考 ChatSettingView 的 Toggle 樣式）
@@ -123,7 +136,8 @@ struct CalendarAssistantPopupView: View {
                 .tint(accentColor)
                 .disabled(assistantViewModel.isUpdating)
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 2)
             .background(cardColor)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -131,8 +145,8 @@ struct CalendarAssistantPopupView: View {
                 hideKeyboard()
             }
 
-            // 任務卡片顯示區域
-            if showTaskCards {
+            // 任務卡片顯示區域 - 只在有內容時顯示
+            if showTaskCards && hasTaskUpdates {
                 ScrollView {
                     VStack(spacing: 12) {
                         // 新增任務區域 - 使用 lastAddedTasks 持久化顯示
@@ -208,10 +222,6 @@ struct CalendarAssistantPopupView: View {
                             .padding()
                             .background(Color.red.opacity(0.1))
                             .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                            )
                         }
                     }
                     .padding(.horizontal)
@@ -245,10 +255,8 @@ struct CalendarAssistantPopupView: View {
                     guard !assistantViewModel.autoUpdateInput.isEmpty else { return }
 
                     Task {
-                        showTaskCards = false
                         expandedSections.removeAll()
                         await assistantViewModel.startUpdate(userInput: assistantViewModel.autoUpdateInput)
-                        showTaskCards = true
                     }
                 }) {
                     HStack {
@@ -292,6 +300,28 @@ struct CalendarAssistantPopupView: View {
                     }
                     .disabled(!assistantViewModel.isUpdating)
                 }
+
+                // 撤回按鈕
+                if !assistantViewModel.isUpdating && hasTaskUpdates {
+                    Button(action: {
+                        Task {
+                            await assistantViewModel.undoLastUpdate()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("撤回上次更新")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(Color.orange.opacity(0.85))
+                        .cornerRadius(12)
+                        .shadow(color: Color.orange.opacity(0.3), radius: 4, x: 0, y: 2)
+                    }
+                }
             }
             .padding()
             .background(cardColor)
@@ -308,9 +338,13 @@ struct CalendarAssistantPopupView: View {
         .frame(maxHeight: 650)
         .onAppear {
             // 如果有上一次的更新記錄，自動顯示任務卡片
-            if !assistantViewModel.lastAddedTasks.isEmpty ||
-               !assistantViewModel.lastDeletedTasks.isEmpty ||
-               !assistantViewModel.lastUpdatedTasks.isEmpty {
+            if hasTaskUpdates {
+                showTaskCards = true
+            }
+        }
+        .onChange(of: assistantViewModel.isUpdating) { newValue in
+            // 當更新完成時（變為 false），顯示任務卡片
+            if !newValue {
                 showTaskCards = true
             }
         }
@@ -429,10 +463,6 @@ struct CalendarAssistantPopupView: View {
         .padding()
         .background(Color.green.opacity(0.1))
         .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.green.opacity(0.3), lineWidth: 1)
-        )
     }
 
     /// 顯示單個待刪除任務的視圖
@@ -462,10 +492,6 @@ struct CalendarAssistantPopupView: View {
         .padding()
         .background(Color.red.opacity(0.1))
         .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-        )
     }
 
     /// 顯示單個待修改任務的視圖
@@ -516,10 +542,6 @@ struct CalendarAssistantPopupView: View {
                 .padding()
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
                 .frame(maxWidth: .infinity)
 
                 // 更新後的任務數據
@@ -559,10 +581,6 @@ struct CalendarAssistantPopupView: View {
                 .padding()
                 .background(Color.blue.opacity(0.1))
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                )
                 .frame(maxWidth: .infinity)
             }
         }

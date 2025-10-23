@@ -386,6 +386,115 @@ final class CalendarAssistantViewModel: ObservableObject {
         currentUpdateTask?.cancel()
     }
 
+    // MARK: - 撤回功能
+
+    /// 撤回上一次的更新操作
+    func undoLastUpdate() async {
+        guard !isUpdating else {
+            print("⚠️ 正在更新中，無法執行撤回操作")
+            return
+        }
+
+        guard !lastAddedTasks.isEmpty || !lastDeletedTasks.isEmpty || !lastUpdatedTasks.isEmpty else {
+            print("⚠️ 沒有可以撤回的操作")
+            updateError = "沒有可以撤回的操作"
+            return
+        }
+
+        isUpdating = true
+        currentStatus = "正在撤回上次更新..."
+        updateError = nil
+
+        print("\n" + String(repeating: "=", count: 80))
+        print("🔙 開始撤回上次更新")
+        print(String(repeating: "=", count: 80))
+
+        var successCount = 0
+        var failureCount = 0
+
+        // 1. 撤回新增的任務（刪除它們）
+        for pendingTask in lastAddedTasks {
+            // 透過標題、開始時間、結束時間找到對應的任務
+            if let taskToDelete = todoViewModel?.tasks.first(where: {
+                $0.title == pendingTask.title &&
+                $0.startDate == pendingTask.startDate &&
+                $0.endDate == pendingTask.endDate
+            }) {
+                do {
+                    try await todoViewModel?.deleteTask(taskToDelete)
+                    successCount += 1
+                    print("  ✅ 已刪除先前新增的任務：\(taskToDelete.title)")
+                } catch {
+                    failureCount += 1
+                    print("  ❌ 刪除任務失敗：\(error)")
+                }
+            }
+        }
+
+        // 2. 撤回刪除的任務（重新添加它們）
+        for deletedTask in lastDeletedTasks {
+            // 重新創建任務
+            let restoredTask = TodoTask(
+                title: deletedTask.title,
+                note: deletedTask.note,
+                color: deletedTask.color,
+                focusTime: deletedTask.focusTime,
+                category: deletedTask.category,
+                isAllDay: deletedTask.isAllDay,
+                isCompleted: deletedTask.isCompleted,
+                repeatType: deletedTask.repeatType,
+                startDate: deletedTask.startDate,
+                endDate: deletedTask.endDate,
+                userId: deletedTask.userId
+            )
+
+            await todoViewModel?.addTask(restoredTask)
+            successCount += 1
+            print("  ✅ 已恢復先前刪除的任務：\(restoredTask.title)")
+        }
+
+        // 3. 撤回修改的任務（恢復到原始狀態）
+        for (original, _) in lastUpdatedTasks {
+            // 找到當前的任務
+            if let currentTask = todoViewModel?.tasks.first(where: { $0.id == original.id }) {
+                do {
+                    // 恢復為原始數據
+                    var restoredTask = currentTask
+                    restoredTask.title = original.title
+                    restoredTask.note = original.note
+                    restoredTask.category = original.category
+                    restoredTask.startDate = original.startDate
+                    restoredTask.endDate = original.endDate
+                    restoredTask.isAllDay = original.isAllDay
+                    restoredTask.isCompleted = original.isCompleted
+                    restoredTask.color = original.color
+
+                    try await todoViewModel?.updateTask(restoredTask)
+                    successCount += 1
+                    print("  ✅ 已恢復任務的原始狀態：\(restoredTask.title)")
+                } catch {
+                    failureCount += 1
+                    print("  ❌ 恢復任務失敗：\(error)")
+                }
+            }
+        }
+
+        print(String(repeating: "=", count: 80))
+        print("📊 撤回結果：成功 \(successCount) 個，失敗 \(failureCount) 個")
+        print(String(repeating: "=", count: 80) + "\n")
+
+        if failureCount > 0 {
+            currentStatus = "撤回完成，但有 \(failureCount) 個操作失敗"
+            updateError = "部分撤回操作失敗"
+        } else {
+            currentStatus = "撤回完成"
+            // 清除上次記錄
+            clearLastUpdateStatus()
+        }
+
+        isUpdating = false
+    }
+
     private func runUpdate(userInput: String) async {
         guard !Task.isCancelled else {
             completeCancellation()

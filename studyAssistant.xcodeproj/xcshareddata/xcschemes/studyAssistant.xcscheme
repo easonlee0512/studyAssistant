@@ -77,8 +77,8 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "FAKE_NOW_ISO8601"
-            value = "2025-10-28T08:00:00Z"
-            isEnabled = "YES">
+            value = "2025-10-29T08:00:00Z"
+            isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
