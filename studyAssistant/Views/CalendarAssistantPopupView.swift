@@ -52,24 +52,50 @@ struct CalendarAssistantPopupView: View {
             }
 
             // 輸入框區域（參考 ChatSettingView 的 TextField 樣式）
-            VStack(alignment: .leading, spacing: 10) {
-                Text("輸入日程安排")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.black)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("輸入日程安排")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.black)
+
+                    Spacer()
+
+                    // 注入預設文字按鈕
+                    Button(action: {
+                        insertDefaultText()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "text.badge.plus")
+                                .font(.system(size: 14))
+                            Text("預設")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(accentColor)
+                        .cornerRadius(6)
+                    }
+                    .disabled(assistantViewModel.isUpdating)
+                    .opacity(assistantViewModel.isUpdating ? 0.5 : 1.0)
+                }
 
                 ZStack(alignment: .topLeading) {
                     // 淡灰色背景的 TextEditor
                     TextEditor(text: $assistantViewModel.autoUpdateInput)
                         .font(.system(size: 16))
+                        .lineSpacing(4)
                         .foregroundColor(.black)
-                        .padding(12)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 6)
+                        .padding(.bottom, 12)
                         .background(Color.gray.opacity(0.08))
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.08), lineWidth: 1)
                         )
-                        .frame(height: 120) // 縮小以留出空間給任務卡片
+                        .frame(minHeight: 200)
                         .scrollContentBackground(.hidden)
                         .disabled(assistantViewModel.isUpdating)
 
@@ -78,8 +104,8 @@ struct CalendarAssistantPopupView: View {
                         Text("可以輸入希望助手每日如何自動調整日曆")
                             .font(.system(size: 16))
                             .foregroundColor(.gray.opacity(0.6))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 14)
                             .allowsHitTesting(false) // 允許點擊穿透
                     }
                 }
@@ -213,38 +239,60 @@ struct CalendarAssistantPopupView: View {
                 .background(cardColor)
             }
 
-            // 立即更新按鈕
-            Button(action: {
-                guard !assistantViewModel.autoUpdateInput.isEmpty else { return }
+            // 立即更新與停止按鈕
+            VStack(spacing: 10) {
+                Button(action: {
+                    guard !assistantViewModel.autoUpdateInput.isEmpty else { return }
 
-                Task {
-                    showTaskCards = false
-                    expandedSections.removeAll()
-                    await assistantViewModel.startUpdate(userInput: assistantViewModel.autoUpdateInput)
-                    showTaskCards = true
-                }
-            }) {
-                HStack {
-                    if assistantViewModel.isUpdating {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        Text("更新中...")
-                            .font(.system(size: 18, weight: .semibold))
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("立即更新")
-                            .font(.system(size: 18, weight: .semibold))
+                    Task {
+                        showTaskCards = false
+                        expandedSections.removeAll()
+                        await assistantViewModel.startUpdate(userInput: assistantViewModel.autoUpdateInput)
+                        showTaskCards = true
                     }
+                }) {
+                    HStack {
+                        if assistantViewModel.isUpdating {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            Text("更新中...")
+                                .font(.system(size: 18, weight: .semibold))
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("立即更新")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty ? accentColor.opacity(0.5) : accentColor)
+                    .cornerRadius(12)
+                    .shadow(color: accentColor.opacity(0.3), radius: 4, x: 0, y: 2)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty ? accentColor.opacity(0.5) : accentColor)
-                .cornerRadius(12)
-                .shadow(color: accentColor.opacity(0.3), radius: 4, x: 0, y: 2)
+                .disabled(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty)
+
+                if assistantViewModel.isUpdating {
+                    Button(action: {
+                        assistantViewModel.cancelUpdate()
+                    }) {
+                        HStack {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("停止更新")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(Color.red.opacity(0.85))
+                        .cornerRadius(12)
+                        .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
+                    }
+                    .disabled(!assistantViewModel.isUpdating)
+                }
             }
-            .disabled(assistantViewModel.isUpdating || assistantViewModel.autoUpdateInput.isEmpty)
             .padding()
             .background(cardColor)
             .contentShape(Rectangle())
@@ -273,6 +321,27 @@ struct CalendarAssistantPopupView: View {
     /// 隱藏鍵盤
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    // MARK: - Text Insertion Helper
+
+    /// 注入預設文字
+    private func insertDefaultText() {
+        let defaultText = """
+        檢查所有任務：
+        1. 刪除：「已完成」且「已過期」的任務。
+        2. 重新安排：「未完成」且「已過期」的任務，從今天起依序排入。
+        3. 重新排程時：
+        不可與其他任務重疊。
+        時間須在合理範圍（08:00–22:00）。
+        若當日時間不夠，自動順延至下一天。
+        4. 保留原任務內容、優先級、預估時長，只調整日期與時間。
+        5. 依優先級安排（高→中→低）：
+            高：讀書任務
+            中：運動與休息
+            低：娛樂活動
+        """
+        assistantViewModel.autoUpdateInput = defaultText
     }
 
     // MARK: - Helper Views

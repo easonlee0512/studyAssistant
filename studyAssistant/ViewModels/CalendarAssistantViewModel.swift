@@ -31,6 +31,7 @@ final class CalendarAssistantViewModel: ObservableObject {
         config.timeoutIntervalForResource = 3600 // 整體資源超時：1 小時（3600 秒）
         return URLSession(configuration: config)
     }()
+    private var currentUpdateTask: Task<Void, Never>?
 
     // 狀態追蹤
     @Published var isUpdating: Bool = false
@@ -364,6 +365,33 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     /// 開始更新日曆任務
     func startUpdate(userInput: String) async {
+        // 取消尚未完成的更新工作（若存在）
+        currentUpdateTask?.cancel()
+
+        let updateTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runUpdate(userInput: userInput)
+        }
+
+        currentUpdateTask = updateTask
+        await updateTask.value
+        currentUpdateTask = nil
+    }
+
+    /// 使用者主動取消更新
+    func cancelUpdate() {
+        guard isUpdating else { return }
+        currentStatus = "正在取消..."
+        updateError = nil
+        currentUpdateTask?.cancel()
+    }
+
+    private func runUpdate(userInput: String) async {
+        guard !Task.isCancelled else {
+            completeCancellation()
+            return
+        }
+
         isUpdating = true
         updateError = nil
         currentStatus = "正在初始化..."
@@ -376,12 +404,21 @@ final class CalendarAssistantViewModel: ObservableObject {
         // 清除上一次的記錄（開始新的更新）
         clearLastUpdateStatus()
 
-        // 執行更新
         await performUpdate(userInput: userInput)
+    }
+
+    private func completeCancellation() {
+        currentStatus = "已取消"
+        isUpdating = false
     }
 
     /// 實際執行更新的方法（從 startUpdate 分離出來）
     private func performUpdate(userInput: String) async {
+        guard !Task.isCancelled else {
+            completeCancellation()
+            return
+        }
+
         // 建構系統提示
         let systemPrompt = buildSystemPrompt()
 
@@ -405,6 +442,11 @@ final class CalendarAssistantViewModel: ObservableObject {
         currentStatus = "正在分析您的需求..."
 
         while !endConversationReached && roundCount < maxRounds {
+            if Task.isCancelled {
+                completeCancellation()
+                return
+            }
+
             roundCount += 1
             print("\n" + String(repeating: "─", count: 80))
             print("🔄 第 \(roundCount)/\(maxRounds) 輪對話")
@@ -547,6 +589,10 @@ final class CalendarAssistantViewModel: ObservableObject {
             req.httpBody = data
 
             do {
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
+
                 let (respData, resp) = try await retryOnError {
                     try await self.urlSession.data(for: req)
                 }
@@ -639,6 +685,10 @@ final class CalendarAssistantViewModel: ObservableObject {
                     messages.append(choice.message)
                 }
 
+            } catch is CancellationError {
+                print("\n⚠️ 更新已被取消")
+                completeCancellation()
+                return
             } catch let urlError as URLError {
                 print("\n❌ 網路錯誤發生：\(urlError.localizedDescription)")
                 if urlError.code == .timedOut {
@@ -1295,6 +1345,10 @@ final class CalendarAssistantViewModel: ObservableObject {
 
                 return result
             } catch {
+                if error is CancellationError {
+                    throw error
+                }
+
                 lastError = error
 
                 if attempt == maxAttempts {

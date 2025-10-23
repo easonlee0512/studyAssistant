@@ -53,6 +53,8 @@
 		E82A79D62DB13265007ED175 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79AF2DB13265007ED175 /* Preview Assets.xcassets */; };
 		E82A79D72DB13265007ED175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E82A79B12DB13265007ED175 /* Assets.xcassets */; };
 		E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E82F5CFF2D8B76C80016DF22 /* Alamofire */; };
+		E852E7B72EA766280034A1CE /* CalendarAssistantPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E852E7B62EA766280034A1CE /* CalendarAssistantPopupView.swift */; };
+		E852E7B92EA777A00034A1CE /* CalendarAssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E852E7B82EA777A00034A1CE /* CalendarAssistantViewModel.swift */; };
 		E8C63FCC2DD1E21D002A56E6 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E8C63FCB2DD1E21D002A56E6 /* Launch Screen.storyboard */; };
 		E8C63FD42DD22ED2002A56E6 /* Chatview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C63FD32DD22ED2002A56E6 /* Chatview.swift */; };
 		E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */; };
@@ -118,6 +120,8 @@
 		E82A79BC2DB13265007ED175 /* studyAssistantApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = studyAssistantApp.swift; sourceTree = "<group>"; };
 		E82A79C22DB13265007ED175 /* TodoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoDetailView.swift; sourceTree = "<group>"; };
 		E82A79C32DB13265007ED175 /* TodoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoView.swift; sourceTree = "<group>"; };
+		E852E7B62EA766280034A1CE /* CalendarAssistantPopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAssistantPopupView.swift; sourceTree = "<group>"; };
+		E852E7B82EA777A00034A1CE /* CalendarAssistantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAssistantViewModel.swift; sourceTree = "<group>"; };
 		E8C63FCB2DD1E21D002A56E6 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 		E8C63FD32DD22ED2002A56E6 /* Chatview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chatview.swift; sourceTree = "<group>"; };
 		E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
@@ -184,6 +188,7 @@
 		9B5A80B62DC2162F007E5758 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				E852E7B82EA777A00034A1CE /* CalendarAssistantViewModel.swift */,
 				9BEA4DB92DCB5A0E00C351E3 /* StaticViewModel.swift */,
 				E8E7E9F42DCA040200FC4706 /* ChatViewModel.swift */,
 				9B6D68FC2DC3CD1A00D0A3A8 /* ProfileViewModel.swift */,
@@ -197,6 +202,7 @@
 		9B5A80BA2DC2162F007E5758 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E852E7B62EA766280034A1CE /* CalendarAssistantPopupView.swift */,
 				E8C63FD32DD22ED2002A56E6 /* Chatview.swift */,
 				9B6AA06A2DCE03CB001545E1 /* ChatSettingView.swift */,
 				9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */,
@@ -455,6 +461,7 @@
 				E8E7E9F52DCA040200FC4706 /* ChatViewModel.swift in Sources */,
 				9B5A80BD2DC2162F007E5758 /* ProfileSettingView.swift in Sources */,
 				9B5A80BE2DC2162F007E5758 /* DataServiceProtocol.swift in Sources */,
+				E852E7B72EA766280034A1CE /* CalendarAssistantPopupView.swift in Sources */,
 				9B5A80CE2DC24B51007E5758 /* StatisticsView.swift in Sources */,
 				9B6AA06B2DCE03E0001545E1 /* ChatSettingView.swift in Sources */,
 				9B5A80C12DC2162F007E5758 /* SettingsView.swift in Sources */,
@@ -465,6 +472,7 @@
 				9BD7A98B2DC4F79D00B3FF29 /* Login.swift in Sources */,
 				9BD7A98C2DC4F79D00B3FF29 /* signInView.swift in Sources */,
 				9B499B792DC25F7700DD115C /* TimerView.swift in Sources */,
+				E852E7B92EA777A00034A1CE /* CalendarAssistantViewModel.swift in Sources */,
 				9BEA4DBA2DCB5A2100C351E3 /* StaticViewModel.swift in Sources */,
 				9B5A80D02DC24F84007E5758 /* View+Extension.swift in Sources */,
 				9BF0B3942DC5CD30006131DD /* NotificationConstants.swift in Sources */,
@@ -644,7 +652,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = BG572Z68DC;
+				DEVELOPMENT_TEAM = R7AMURTY34;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
@@ -681,7 +689,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = BG572Z68DC;
+				DEVELOPMENT_TEAM = R7AMURTY34;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
