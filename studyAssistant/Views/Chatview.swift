@@ -44,6 +44,7 @@ struct ChatDemoDynamicView: View {
     @FocusState private var isInputFocused: Bool
     @State private var bottomInset: CGFloat = 0
     @State private var tabBarHeight: CGFloat = 0
+    @State private var isAtBottom = true  // 追蹤聊天內容是否在底部
     // 【改動】新增狀態
     @State private var showManageSheet = false      // 是否顯示「管理聊天室」畫面
     @State private var selectedRoomIDs = Set<UUID>()// 已選取要刪除的聊天室 ID
@@ -482,35 +483,40 @@ struct ChatDemoDynamicView: View {
                 Button(action: {
                     // TODO: 添加傳送到日曆功能
                 }) {
-                    HStack {
-                        Spacer()
-                        Image("send_to_calendar")
-                            .resizable()
-                            .renderingMode(.template)
-                            .scaledToFit()
-                            .frame(width: 30, height: 30)
-                            .foregroundColor(.white)
-                    }
+                    Image("send_to_calendar")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Color.hex(hex: "E27844"))
+                        .cornerRadius(8)
+                        .contentShape(Rectangle())
                 }
-                .frame(width: 32, height: 32)
-                .background(Color.hex(hex: "E27844"))
-                .cornerRadius(8)
 
                 ZStack(alignment: .topLeading) {
-                    if inputText.isEmpty {
+                    if inputText.isEmpty && !viewModel.isRecording {
                         Text("輸入訊息...")
                             .foregroundColor(Color.black.opacity(0.4))
                             .padding(.vertical, 8)
                             .padding(.horizontal, 10)
                     }
-                    TextEditor(text: $inputText)
+                    TextEditor(text: Binding(
+                        get: { viewModel.isRecording ? viewModel.transcribedText : inputText },
+                        set: { newValue in
+                            if !viewModel.isRecording {
+                                inputText = newValue
+                            }
+                        }
+                    ))
                         .font(.system(size: 16))
                         .padding(.vertical, 8)
                         .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
                         .background(midBubbleColor)
                         .cornerRadius(12)
                         .foregroundColor(Color.black)
-                        .disabled(isGenerating)
+                        .disabled(isGenerating || viewModel.isRecording)
                         .scrollContentBackground(.hidden)
                         .focused($isInputFocused)
                         .onChange(of: isInputFocused) { focused in
@@ -548,26 +554,45 @@ struct ChatDemoDynamicView: View {
                 if isGenerating {
                     Button(action: cancelGeneration) {
                         Image(systemName: "stop.circle")
-                            .font(.system(size: 28))
+                            .font(.system(size: 24))
                             .foregroundColor(.black.opacity(0.5))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 44, height: 44)
                 } else {
-                    Button(action: {}) {
-                        Image(systemName: "mic")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color.black)
+                    Button(action: {
+                        Task {
+                            if viewModel.isRecording {
+                                await viewModel.stopRecording()
+                                // 注意：自動發送會在 ViewModel 的靜音檢測中處理
+                                // 這裡只需要將文字傳入輸入框並發送
+                                await MainActor.run {
+                                    if !viewModel.transcribedText.isEmpty {
+                                        inputText = viewModel.transcribedText
+                                        sendMessage()
+                                    }
+                                }
+                            } else {
+                                try? await viewModel.startRecording()
+                            }
+                        }
+                    }) {
+                        Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "mic")
+                            .font(.system(size: 22))
+                            .foregroundColor(viewModel.isRecording ? Color.red : Color.black)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 32, height: 32)
-                    .padding(.trailing, 2)
 
                     Button(action: sendMessage) {
                         Image(systemName: "arrowshape.up")
-                            .font(.system(size: 20))
+                            .font(.system(size: 22))
                             .foregroundColor(Color.black)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 32, height: 32)
-                    .disabled(inputText.isEmpty)
+                    .disabled(inputText.isEmpty && !viewModel.isRecording)
+                    .opacity((inputText.isEmpty && !viewModel.isRecording) ? 0.3 : 1.0)
                 }
             }
             .padding(.horizontal, 8)
@@ -722,21 +747,39 @@ struct ChatDemoDynamicView: View {
     // MARK: Message List
     private var messageList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ForEach(viewModel.chatRooms[viewModel.selectedRoomIndex].messages) { msg in
-                        if msg.isMe {
-                            userBubble(msg.text)
-                        } else {
-                            aiBubble(msg.text)
-                                .id("msg_\(msg.id)")  // 為每個消息添加唯一ID
+            GeometryReader { geometry in
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(viewModel.chatRooms[viewModel.selectedRoomIndex].messages) { msg in
+                            if msg.isMe {
+                                userBubble(msg.text)
+                            } else {
+                                aiBubble(msg.text)
+                                    .id("msg_\(msg.id)")  // 為每個消息添加唯一ID
+                            }
                         }
                     }
+                    .padding(.top, 70) // 頂部空間，讓訊息可以滾動到 header 下方
+                    .padding(.bottom, 100) // 固定底部空間
+                    .id("messageBottom")  // 添加一個 ID 用於滾動
+                    .background(
+                        GeometryReader { contentGeometry in
+                            Color.clear.preference(
+                                key: ScrollOffsetPreferenceKey.self,
+                                value: contentGeometry.frame(in: .named("scrollView")).minY
+                            )
+                        }
+                    )
                 }
-                .padding(.top, 70) // 頂部空間，讓訊息可以滾動到 header 下方
-                .padding(.bottom, 80) // 底部空間，讓訊息可以滾動到輸入框下方
-                .id("messageBottom")  // 添加一個 ID 用於滾動
+                .coordinateSpace(name: "scrollView")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    // 檢測是否接近底部（給予一些容差值）
+                    let threshold: CGFloat = 50
+                    isAtBottom = offset >= -threshold
+                }
             }
+            .offset(y: isAtBottom ? -max(viewModel.keyboardHeight - tabBarHeight, 0) : 0)
+            .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
             .onChange(of: expandedTaskMessages) { newValue in
                 // 找到最後一個展開/收起的消息
                 if let lastChangedMessageId = viewModel.chatRooms[viewModel.selectedRoomIndex].messages
@@ -783,10 +826,26 @@ struct ChatDemoDynamicView: View {
                 // 當切換聊天室時，重置對話結束標記
                 isConversationEnded = false
             }
+            .onChange(of: viewModel.keyboardHeight) { newHeight in
+                // 當鍵盤彈出時，不做任何自動滾動
+                // 讓用戶保持在當前查看的位置
+            }
+            .onChange(of: viewModel.shouldAutoSendTranscription) { shouldSend in
+                // 監聽自動發送信號
+                if shouldSend {
+                    // 將轉錄文字填入輸入框並發送
+                    if !viewModel.transcribedText.isEmpty {
+                        inputText = viewModel.transcribedText
+                        sendMessage()
+                    }
+                    // 重置信號
+                    viewModel.shouldAutoSendTranscription = false
+                }
+            }
             .onAppear {
                 // 每次進入聊天室頁面時直接滾動到底部（無動畫）
                 proxy.scrollTo("messageBottom", anchor: .bottom)
-                
+
                 // 重置對話結束標記
                 isConversationEnded = false
             }
@@ -1393,34 +1452,39 @@ struct ChatDemoDynamicView: View {
                     Button(action: {
                         // TODO: 添加傳送到日曆功能
                     }) {
-                        HStack {
-                            Spacer()
-                            Image("send_to_calendar")
-                                .resizable()
-                                .renderingMode(.template)
-                                .scaledToFit()
-                                .frame(width: 36, height: 36)
-                                .foregroundColor(.white)
-                        }
+                        Image("send_to_calendar")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .frame(width: 40, height: 40)
                     .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                     .clipShape(Rectangle())
 
                     ZStack(alignment: .topLeading) {
-                        if inputText.isEmpty {
+                        if inputText.isEmpty && !viewModel.isRecording {
                             Text("輸入訊息...")
                                 .foregroundColor(Color.black.opacity(0.4))
                                 .padding(.vertical, 8)
                                 .padding(.horizontal, 10)
                         }
-                        TextEditor(text: $inputText)
+                        TextEditor(text: Binding(
+                            get: { viewModel.isRecording ? viewModel.transcribedText : inputText },
+                            set: { newValue in
+                                if !viewModel.isRecording {
+                                    inputText = newValue
+                                }
+                            }
+                        ))
                             .font(.system(size: 16))
                             .padding(.vertical, 8)
                             .padding(.horizontal, 4)
                             .frame(height: isInputFocused ? min(max(textEditorHeight, 36), 36*4) : 36)
                             .foregroundColor(Color.black)
-                            .disabled(isGenerating)
+                            .disabled(isGenerating || viewModel.isRecording)
                             .scrollContentBackground(.hidden)
                             .focused($isInputFocused)
                             .onChange(of: isInputFocused) { focused in
@@ -1460,33 +1524,51 @@ struct ChatDemoDynamicView: View {
                     if isGenerating {
                         Button(action: cancelGeneration) {
                             Image(systemName: "stop.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 22))
                                 .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
-                        .frame(width: 44, height: 44)
                         .compatibleGlassEffect(color: Color.red, opacity: 0.6)
                         .clipShape(Rectangle())
                     } else {
-                        Button(action: {}) {
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 18))
+                        Button(action: {
+                            Task {
+                                if viewModel.isRecording {
+                                    await viewModel.stopRecording()
+                                    // 停止錄音後自動發送訊息
+                                    await MainActor.run {
+                                        if !viewModel.transcribedText.isEmpty {
+                                            inputText = viewModel.transcribedText
+                                            sendMessage()
+                                        }
+                                    }
+                                } else {
+                                    try? await viewModel.startRecording()
+                                }
+                            }
+                        }) {
+                            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "mic.fill")
+                                .font(.system(size: 20))
                                 .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
-                        .frame(width: 40, height: 40)
-                        .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
+                        .compatibleGlassEffect(color: viewModel.isRecording ? Color.red : Color.hex(hex: "E27844"), opacity: 0.8)
                         .clipShape(Rectangle())
                         .padding(.trailing, 4)
 
                         Button(action: sendMessage) {
                             Image(systemName: "arrowshape.up.fill")
-                                .font(.system(size: 18))
+                                .font(.system(size: 20))
                                 .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
-                        .frame(width: 40, height: 40)
                         .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                         .clipShape(Rectangle())
-                        .disabled(inputText.isEmpty)
-                        .opacity(inputText.isEmpty ? 0.5 : 1.0)
+                        .disabled(inputText.isEmpty && !viewModel.isRecording)
+                        .opacity((inputText.isEmpty && !viewModel.isRecording) ? 0.5 : 1.0)
                     }
                 }
                 .padding(.horizontal, 8)
@@ -1625,6 +1707,14 @@ struct ChatDemoDynamicView: View {
 
 // 添加這個 PreferenceKey 到檔案頂部的其他結構定義附近
 private struct ViewHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// ScrollView 偏移量追蹤
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()

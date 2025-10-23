@@ -1,6 +1,8 @@
+import AVFoundation
 import FirebaseAuth
 import FirebaseFirestore
 import Foundation
+import Speech
 import SwiftUI
 
 // MARK: - OpenAI API 資料結構
@@ -1006,6 +1008,17 @@ final class ChatViewModel: ObservableObject {
     private var lastRequestTokens: (prompt: Int, completion: Int, total: Int) = (0, 0, 0)
 
     @Published var keyboardHeight: CGFloat = 0  // 追蹤鍵盤高度
+
+    // 語音錄製相關（使用系統原生語音識別）
+    @Published var isRecording = false
+    @Published var transcribedText = ""
+    @Published var shouldAutoSendTranscription = false  // 用於觸發自動發送
+    private var audioEngine: AVAudioEngine?
+    private var speechRecognizer: SFSpeechRecognizer?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var silenceTimer: Timer?
+    private var lastSpeechTime: Date?
 
     // ----------------------------- 串流 GPT -----------------------------
     /// 對 GPT 串流，邊收到邊透過 onToken 回呼；結束後回傳完整內容
@@ -2177,6 +2190,180 @@ final class ChatViewModel: ObservableObject {
         let chatRoomsData = try? JSONEncoder().encode(chatRooms)
         if let data = chatRoomsData {
             UserDefaults.standard.set(data, forKey: chatRoomsKey)
+        }
+    }
+
+    // MARK: - 語音轉文字功能（使用系統原生語音識別）
+
+    /// 開始錄音並即時識別
+    func startRecording() async throws {
+        print("🎤 開始語音識別流程...")
+
+        // 初始化語音識別器（中文）
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-TW"))
+
+        // 檢查語音識別是否可用
+        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            print("❌ 語音識別不可用")
+            throw NSError(domain: "app.studyAssistant", code: 1,
+                         userInfo: [NSLocalizedDescriptionKey: "語音識別不可用"])
+        }
+
+        // 請求語音識別權限
+        let authStatus = SFSpeechRecognizer.authorizationStatus()
+        if authStatus != .authorized {
+            let authorized = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    continuation.resume(returning: status == .authorized)
+                }
+            }
+
+            guard authorized else {
+                print("❌ 語音識別權限被拒絕")
+                throw NSError(domain: "app.studyAssistant", code: 2,
+                             userInfo: [NSLocalizedDescriptionKey: "需要語音識別權限"])
+            }
+        }
+
+        // 請求麥克風權限
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+
+        guard await AVAudioApplication.requestRecordPermission() else {
+            print("❌ 麥克風權限被拒絕")
+            throw NSError(domain: "app.studyAssistant", code: 3,
+                         userInfo: [NSLocalizedDescriptionKey: "需要麥克風權限"])
+        }
+
+        print("✅ 所有權限已獲得")
+
+        // 初始化音頻引擎
+        audioEngine = AVAudioEngine()
+        guard let audioEngine = audioEngine else {
+            throw NSError(domain: "app.studyAssistant", code: 4,
+                         userInfo: [NSLocalizedDescriptionKey: "無法初始化音頻引擎"])
+        }
+
+        // 創建識別請求
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        guard let recognitionRequest = recognitionRequest else {
+            throw NSError(domain: "app.studyAssistant", code: 5,
+                         userInfo: [NSLocalizedDescriptionKey: "無法創建識別請求"])
+        }
+
+        recognitionRequest.shouldReportPartialResults = true  // 啟用即時結果
+
+        let inputNode = audioEngine.inputNode
+
+        // 移除之前的 tap
+        inputNode.removeTap(onBus: 0)
+
+        // 安裝 tap 來捕獲音頻
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+            recognitionRequest.append(buffer)
+        }
+
+        // 準備並啟動音頻引擎
+        audioEngine.prepare()
+        try audioEngine.start()
+
+        await MainActor.run {
+            isRecording = true
+            transcribedText = ""
+            shouldAutoSendTranscription = false  // 重置自動發送信號
+            lastSpeechTime = Date()
+            print("✅ 設定 isRecording = true, transcribedText = \"\"")
+        }
+
+        // 開始識別任務
+        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self = self else { return }
+
+            Task { @MainActor in
+                if let result = result {
+                    // 更新轉錄文字（即時顯示）
+                    self.transcribedText = result.bestTranscription.formattedString
+                    self.lastSpeechTime = Date()
+                    print("🔄 即時識別: \"\(self.transcribedText)\"")
+
+                    // 重置靜音計時器
+                    self.resetSilenceTimer()
+                }
+
+                if error != nil || result?.isFinal == true {
+                    print("✅ 識別完成或發生錯誤")
+                    // 識別完成，停止計時器
+                    self.silenceTimer?.invalidate()
+                    self.silenceTimer = nil
+                }
+            }
+        }
+
+        // 啟動靜音檢測計時器（2秒無聲音自動停止）
+        resetSilenceTimer()
+
+        print("✅ 語音識別已開始")
+    }
+
+    /// 停止錄音
+    func stopRecording() async {
+        print("⏹️ 停止語音識別...")
+
+        // 停止靜音計時器
+        await MainActor.run {
+            silenceTimer?.invalidate()
+            silenceTimer = nil
+        }
+
+        // 停止音頻引擎
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+
+        // 結束識別請求
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+
+        recognitionRequest = nil
+        recognitionTask = nil
+        audioEngine = nil
+
+        await MainActor.run {
+            isRecording = false
+            print("✅ 設定 isRecording = false")
+            print("📝 最終轉錄文字: \"\(transcribedText)\"")
+        }
+
+        // 清理音訊session
+        let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// 重置靜音計時器
+    private func resetSilenceTimer() {
+        Task { @MainActor in
+            silenceTimer?.invalidate()
+
+            // 2秒無聲音自動停止並發送
+            silenceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+
+                Task {
+                    if self.isRecording {
+                        print("🔇 檢測到靜音，自動停止錄音")
+                        await self.stopRecording()
+
+                        // 觸發自動發送（如果有文字）
+                        await MainActor.run {
+                            if !self.transcribedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                print("📤 觸發自動發送: \"\(self.transcribedText)\"")
+                                self.shouldAutoSendTranscription = true
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

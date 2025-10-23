@@ -39,5 +39,9 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>需要使用麥克風進行語音輸入，將您的語音轉換為文字</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>需要使用語音識別功能，將您的語音即時轉換為文字以便與助手對話</string>
 </dict>
 </plist>
