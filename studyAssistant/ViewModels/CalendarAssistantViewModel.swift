@@ -438,7 +438,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                 tools: [saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
                 tool_choice: "required",  // 強制 GPT 必須調用函數，不允許純文字回應
                 stream_options: nil,
-                reasoning_effort: "medium"
+                reasoning_effort: "low"
             )
 
             guard let data = try? encoder.encode(reqBody) else {
