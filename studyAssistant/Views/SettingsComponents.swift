@@ -20,54 +20,51 @@ struct SettingRowNew: View {
     let iconName: String
     let title: String
     @Binding var isOn: Bool
-    
+
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: iconName)
-                .resizable()
+                .font(.system(size: 22))
                 .frame(width: 24, height: 24)
-                .padding(.leading, 20)
                 .foregroundColor(.black)
-            
+
             Text(title)
-                .font(.system(size: 18))
-                .padding(.leading, 10)
+                .font(.system(size: 17, weight: .medium))
                 .foregroundColor(.black)
-            
+
             Spacer()
-            
+
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .padding(.trailing, 20)
         }
-        .frame(height: 60)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
 }
 
 struct SettingRowText: View {
     let iconName: String
     let title: String
-    
+
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: iconName)
-                .resizable()
+                .font(.system(size: 22))
                 .frame(width: 24, height: 24)
-                .padding(.leading, 20)
                 .foregroundColor(.black)
-            
+
             Text(title)
-                .font(.system(size: 18))
-                .padding(.leading, 10)
+                .font(.system(size: 17, weight: .medium))
                 .foregroundColor(.black)
-            
+
             Spacer()
-            
+
             Image(systemName: "chevron.right")
-                .foregroundColor(.black)
-                .padding(.trailing, 20)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color.black.opacity(0.3))
         }
-        .frame(height: 60)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
 }
 

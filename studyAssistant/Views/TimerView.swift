@@ -277,41 +277,67 @@ struct TimerDisplay: View {
 // 提取控制按鈕為獨立組件
 struct TimerControls: View {
     @EnvironmentObject var timerManager: TimerManager
-    
+
     var body: some View {
         HStack(spacing: 20) {
             // Reset button
-            Button(action: { timerManager.resetTimer() }) {
-                ZStack {
-                    // 外層陰影
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.hex(hex: "E09772"))
-                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            if #available(iOS 26, *) {
+                // iOS 26+ 使用玻璃效果
+                Button(action: { timerManager.resetTimer() }) {
+                    Text("重置")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(width: 150, height: 60)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            } else {
+                // iOS 26 以下保持原樣
+                Button(action: { timerManager.resetTimer() }) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.hex(hex: "E09772"))
+                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
 
-                    VStack{
                         Text("重置")
                             .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                     }
+                    .frame(width: 150, height: 60)
                 }
-                .frame(width: 150, height: 60)
             }
-            
+
             // Start/Pause button
-            Button(action: { timerManager.toggleTimer() }) {
-                ZStack {
-                    // 外層陰影
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.hex(hex: "E09772"))
-                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
-                    
+            if #available(iOS 26, *) {
+                // iOS 26+ 使用玻璃效果
+                Button(action: { timerManager.toggleTimer() }) {
                     Text(timerManager.isRunning ? "暫停" : "開始")
                         .font(.headline)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
+                        .frame(width: 150, height: 60)
                 }
-                .frame(width: 150, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            } else {
+                // iOS 26 以下保持原樣
+                Button(action: { timerManager.toggleTimer() }) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.hex(hex: "E09772"))
+                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+
+                        Text(timerManager.isRunning ? "暫停" : "開始")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 150, height: 60)
+                }
             }
         }
         .padding(.bottom, 80)
@@ -340,28 +366,50 @@ struct TimerView: View {
             VStack(spacing: 0) {
                 // Countdown/Countup toggle button in a fixed-height container
                 VStack {
-                    Button(action: {
-                        // 切換倒數/正數計時模式
-                        if !timerManager.isRunning {
-                            timerManager.toggleCountMode()
-                        }
-                    }) {
-                        ZStack {
-                            // 外層陰影
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.hex(hex: "E09772"))
-                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
-                            
+                    if #available(iOS 26, *) {
+                        // iOS 26+ 使用玻璃效果
+                        Button(action: {
+                            // 切換倒數/正數計時模式
+                            if !timerManager.isRunning {
+                                timerManager.toggleCountMode()
+                            }
+                        }) {
                             Text(timerManager.isCountUp ? "COUNT" : "COUNTDOWN")
                                 .font(.custom("Inder", size: 20))
                                 .tracking(0.5)
                                 .foregroundColor(.white)
                                 .minimumScaleFactor(0.8)
+                                .frame(width: 180, height: 50)
                         }
-                        .frame(width: 180, height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .glassEffect(.regular.tint(Color.hex(hex: "E27844").opacity(0.8)).interactive())
+                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                        .padding(.top, 40)
+                        .disabled(timerManager.isRunning) // 計時中不可切換模式
+                    } else {
+                        // iOS 26 以下保持原樣
+                        Button(action: {
+                            // 切換倒數/正數計時模式
+                            if !timerManager.isRunning {
+                                timerManager.toggleCountMode()
+                            }
+                        }) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.hex(hex: "E09772"))
+                                    .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+
+                                Text(timerManager.isCountUp ? "COUNT" : "COUNTDOWN")
+                                    .font(.custom("Inder", size: 20))
+                                    .tracking(0.5)
+                                    .foregroundColor(.white)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .frame(width: 180, height: 50)
+                        }
+                        .padding(.top, 40)
+                        .disabled(timerManager.isRunning) // 計時中不可切換模式
                     }
-                    .padding(.top, 40)
-                    .disabled(timerManager.isRunning) // 計時中不可切換模式
                 }
                 .frame(height: 100) // 固定頂部區域高度
                 
