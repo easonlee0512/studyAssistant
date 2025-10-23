@@ -29,6 +29,7 @@ struct ChatDemoDynamicView: View {
 
     @EnvironmentObject private var viewModel: ChatViewModel
     @EnvironmentObject private var staticViewModel: StaticViewModel
+    @EnvironmentObject private var calendarAssistantViewModel: CalendarAssistantViewModel
     @State private var inputText = ""
     @State private var showSidebar = false
     @State private var latestMessageId: UUID?  // 追蹤最新訊息的 ID
@@ -43,26 +44,40 @@ struct ChatDemoDynamicView: View {
     @State private var textEditorHeight: CGFloat = 36
     @FocusState private var isInputFocused: Bool
     @State private var bottomInset: CGFloat = 0
+    @State private var topInset: CGFloat = 0
     @State private var tabBarHeight: CGFloat = 0
     @State private var isAtBottom = true  // 追蹤聊天內容是否在底部
     // 【改動】新增狀態
     @State private var showManageSheet = false      // 是否顯示「管理聊天室」畫面
     @State private var selectedRoomIDs = Set<UUID>()// 已選取要刪除的聊天室 ID
+    @State private var calendarStatusMessage: String?
+    @State private var calendarStatusIsLoading = false
+    @State private var calendarStatusDismissTask: Task<Void, Never>?
+    @State private var isCalendarSending = false
 
     var body: some View {
-        Group {
-            if isIOS26OrLater {
-                // iOS 26+ 使用目前的原生樣式
-                ios26PlusView
-            } else {
-                // iOS 25 及以下使用自定義樣式
-                ios25MinusView
+        ZStack(alignment: .top) {
+            Group {
+                if isIOS26OrLater {
+                    // iOS 26+ 使用目前的原生樣式
+                    ios26PlusView
+                } else {
+                    // iOS 25 及以下使用自定義樣式
+                    ios25MinusView
+                }
+            }
+
+            if let message = calendarStatusMessage {
+                calendarStatusBanner(message: message, isLoading: calendarStatusIsLoading)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .padding(.top, topInset + 12)
             }
         }
         .onAppear {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 if let window = windowScene.windows.first {
                     bottomInset = window.safeAreaInsets.bottom
+                    topInset = window.safeAreaInsets.top
                     
                     // 尋找 UITabBarController 並獲取其高度
                     if let rootViewController = window.rootViewController {
@@ -106,6 +121,8 @@ struct ChatDemoDynamicView: View {
             if isGenerating {
                 cancelGeneration()
             }
+            isCalendarSending = false
+            updateCalendarStatus(message: nil, isLoading: false, autoDismiss: false)
             // 移除鍵盤通知觀察者
             NotificationCenter.default.removeObserver(self)
         }
@@ -113,6 +130,8 @@ struct ChatDemoDynamicView: View {
             // 切換聊天室時重設編輯狀態
             isEditingTitle = false
             editingTitleText = viewModel.chatRooms[viewModel.selectedRoomIndex].name
+            isCalendarSending = false
+            updateCalendarStatus(message: nil, isLoading: false, autoDismiss: false)
             
             // 切換聊天室時取消生成
             if isGenerating {
@@ -207,6 +226,7 @@ struct ChatDemoDynamicView: View {
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -2)
         )
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .animation(.spring(response: 0.5, dampingFraction: 0.9), value: calendarStatusMessage)
     }
 
     // MARK: - iOS 26+ View (原生樣式)
@@ -480,20 +500,25 @@ struct ChatDemoDynamicView: View {
         VStack(spacing: 0) {
             HStack {
                 // 傳送到日曆按鈕 - 輸入框左方
-                Button(action: {
-                    // TODO: 添加傳送到日曆功能
-                }) {
-                    Image("send_to_calendar")
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.hex(hex: "E27844"))
-                        .cornerRadius(8)
-                        .contentShape(Rectangle())
+                Button(action: { showCalendarConfirmationAlert() }) {
+                    HStack {
+                        Spacer()
+                        Image("send_to_calendar")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 44, height: 44)
+                    .offset(x: 2)
+                    .background(Color.hex(hex: "E27844"))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
                 }
+                .disabled(isCalendarSending || isGenerating || viewModel.isRecording)
+                .opacity((isCalendarSending || isGenerating || viewModel.isRecording) ? 0.5 : 1.0)
+
 
                 ZStack(alignment: .topLeading) {
                     if inputText.isEmpty && !viewModel.isRecording {
@@ -701,7 +726,8 @@ struct ChatDemoDynamicView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
+                   
+        .padding(.horizontal, 20)
                     .padding(.vertical, 8)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
                     .compatibleGlassEffect(color: .clear, opacity: 0.1)
@@ -726,7 +752,7 @@ struct ChatDemoDynamicView: View {
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.vertical, 8)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.5)
                 .compatibleGlassEffect(color: Color.hex(hex: "F3D4B8"), opacity: 0.6)
@@ -1449,20 +1475,25 @@ struct ChatDemoDynamicView: View {
             CompatibleGlassEffectContainer {
                 HStack {
                     // 傳送到日曆按鈕 - 輸入框左方
-                    Button(action: {
-                        // TODO: 添加傳送到日曆功能
-                    }) {
-                        Image("send_to_calendar")
-                            .resizable()
-                            .renderingMode(.template)
-                            .scaledToFit()
-                            .frame(width: 24, height: 24)
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                    Button(action: { showCalendarConfirmationAlert() }) {
+                        HStack {
+                            Spacer()
+                            Image("send_to_calendar")
+                                .resizable()
+                                .renderingMode(.template)
+                                .scaledToFit()
+                                .frame(width: 40, height: 40)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 44, height: 44)
+                        .offset(x: 2)
+                        .contentShape(Rectangle())
                     }
                     .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
                     .clipShape(Rectangle())
+                    .disabled(isCalendarSending || isGenerating || viewModel.isRecording)
+                    .opacity((isCalendarSending || isGenerating || viewModel.isRecording) ? 0.5 : 1.0)
+
 
                     ZStack(alignment: .topLeading) {
                         if inputText.isEmpty && !viewModel.isRecording {
@@ -1595,6 +1626,84 @@ struct ChatDemoDynamicView: View {
     }
     
     // MARK: - 輔助函數
+    private func showCalendarConfirmationAlert() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first,
+              let rootViewController = window.rootViewController else {
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "是否要把聊天室內容整理成日曆安排規則？",
+            message: "這會把目前聊天室的內容整理成一段日曆更新指令，並套用到日曆助手。",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "確定", style: .default) { _ in
+            guard !self.isCalendarSending else { return }
+            self.handleSendToCalendar()
+        })
+
+        // 找到最上層的 ViewController 來呈現 alert
+        var topController = rootViewController
+        while let presentedViewController = topController.presentedViewController {
+            topController = presentedViewController
+        }
+
+        topController.present(alert, animated: true)
+    }
+
+    private func handleSendToCalendar() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isGenerating {
+            cancelGeneration()
+        }
+
+        isConversationEnded = false
+        isUserScrolling = false
+        isCalendarSending = true
+
+        withAnimation {
+            updateCalendarStatus(message: "正在整理日曆規劃", isLoading: true, autoDismiss: false)
+        }
+        inputText = ""
+
+        Task {
+            let reply = await viewModel.sendMessageToCalendar(
+                additionalInstruction: trimmed.isEmpty ? nil : trimmed
+            )
+
+            await MainActor.run {
+                defer { isCalendarSending = false }
+
+                if let reply {
+                    let cleanedReply = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !cleanedReply.isEmpty {
+                        calendarAssistantViewModel.autoUpdateInput = cleanedReply
+                        withAnimation {
+                            updateCalendarStatus(
+                                message: "日曆的更新規則設定好了 [\(cleanedReply)]",
+                                isLoading: false,
+                                autoDismiss: true
+                            )
+                        }
+                        return
+                    }
+                }
+
+                withAnimation {
+                    updateCalendarStatus(
+                        message: "無法取得日曆建議，請稍後再試。",
+                        isLoading: false,
+                        autoDismiss: true
+                    )
+                }
+            }
+        }
+    }
+
     private func sendMessage() {
         guard !inputText.isEmpty else { return }
         
@@ -1644,6 +1753,69 @@ struct ChatDemoDynamicView: View {
             
             // 對話完成後，重置生成狀態
             isGenerating = false
+        }
+    }
+
+    private func calendarStatusBanner(message: String, isLoading: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            }
+
+            Text(message)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 20)
+    }
+
+    private func updateCalendarStatus(
+        message: String?,
+        isLoading: Bool,
+        autoDismiss: Bool
+    ) {
+        calendarStatusDismissTask?.cancel()
+        calendarStatusDismissTask = nil
+
+        if let message {
+            calendarStatusIsLoading = isLoading
+            calendarStatusMessage = message
+
+            if autoDismiss {
+                let currentMessage = message
+                calendarStatusDismissTask = Task {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run {
+                        if calendarStatusMessage == currentMessage {
+                            withAnimation {
+                                calendarStatusIsLoading = false
+                                calendarStatusMessage = nil
+                            }
+                            calendarStatusDismissTask = nil
+                        }
+                    }
+                }
+            }
+        } else {
+            calendarStatusIsLoading = isLoading
+            calendarStatusMessage = nil
         }
     }
 
@@ -1806,4 +1978,3 @@ struct CompatibleGlassEffectContainer<Content: View>: View {
         }
     }
 }
-

@@ -1528,6 +1528,89 @@ final class ChatViewModel: ObservableObject {
         return await task.value
     }
 
+    /// 取得僅含純文字的日曆安排建議，回傳完整回覆字串
+    func requestCalendarTextReply(
+        messages: [ChatMessage],
+        additionalInstruction: String? = nil
+    ) async -> String? {
+        isLoading = true
+        defer {
+            if !Task.isCancelled {
+                isLoading = false
+            }
+        }
+
+        let tone = studySettings?.tone ?? "沉著穩重的專家"
+        var systemInstruction = """
+        你是一位日曆安排助手，負責根據目前的對話內容整理出可以貼到「日曆安排助手」輸入框的指令。
+        以繁體中文輸出，語氣為：\(tone)。
+        僅能輸出純文字，不得呼叫工具、不得產生 JSON、Markdown 程式碼區塊或其他格式。
+        內容請具體列出需要安排、調整或注意的事項，方便直接交給日曆助手執行。
+        """
+
+        if let extra = additionalInstruction?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !extra.isEmpty
+        {
+            systemInstruction += "\n\n補充說明：\(extra)"
+            print("[CalendarSend] 追加指令：\(extra)")
+        }
+
+        let apiMessages = messages
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { OpenAIMessage(role: $0.isMe ? "user" : "assistant", content: $0.text) }
+
+        print("[CalendarSend] requestCalendarTextReply 傳送訊息數：\(apiMessages.count)")
+        for (index, msg) in apiMessages.enumerated() {
+            let truncated = msg.content.count > 120
+                ? String(msg.content.prefix(120)) + "…"
+                : msg.content
+            print("[CalendarSend] [\(index)] \(msg.role): \(truncated)")
+        }
+
+        let systemMessage = OpenAIMessage(role: "system", content: systemInstruction)
+        let requestBody = OpenAIRequest(
+            model: "gpt-4.1",
+            messages: [systemMessage] + apiMessages,
+            temperature: 0.7,
+            stream: false,
+            tools: nil,
+            tool_choice: nil,
+            stream_options: nil,
+            reasoning_effort: nil
+        )
+
+        return await callOpenAIOnce(with: requestBody)
+    }
+
+    @MainActor
+    func sendMessageToCalendar(additionalInstruction: String?) async -> String? {
+        let trimmedInstruction = additionalInstruction?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if trimmedInstruction.isEmpty {
+            print("[CalendarSend] 開始傳送 (無額外指令)")
+        } else {
+            print("[CalendarSend] 開始傳送 -> \(trimmedInstruction)")
+        }
+
+        resetSendToGPTCount()
+
+        guard chatRooms.indices.contains(selectedRoomIndex) else {
+            print("[CalendarSend] 當前聊天室索引無效")
+            return nil
+        }
+
+        let conversationSnapshot = chatRooms[selectedRoomIndex].messages
+
+        let reply = await requestCalendarTextReply(
+            messages: conversationSnapshot,
+            additionalInstruction: trimmedInstruction.isEmpty ? nil : trimmedInstruction
+        )
+
+        print("[CalendarSend] GPT 回應完成，長度：\(reply?.count ?? 0)")
+        return reply
+    }
+
     // ----------------------------- 產生標題（非串流） -----------------------------
     // 更新generateTitle方法以處理token使用量
     func generateTitle(from firstUserMessage: String) async -> String? {
@@ -1553,7 +1636,10 @@ final class ChatViewModel: ObservableObject {
 
     // ----------------------------- Helper (一次回整段) -----------------------------
     private func callOpenAIOnce(with body: OpenAIRequest) async -> String? {
-        guard let data = try? encoder.encode(body) else { return nil }
+        guard let data = try? encoder.encode(body) else {
+            print("[OpenAI] 無法編碼請求")
+            return nil
+        }
         var req = URLRequest(url: proxyURL)
         req.httpMethod = "POST"
         req.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1562,10 +1648,22 @@ final class ChatViewModel: ObservableObject {
             let (respData, resp) = try await retryOnError {
                 try await URLSession.shared.data(for: req)
             }
-            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-            if let res = try? decoder.decode(OpenAIResponse.self, from: respData),
-                let choice = res.choices.first
-            {
+            if let httpResp = resp as? HTTPURLResponse {
+                print("[OpenAI] 回應狀態碼：\(httpResp.statusCode)")
+                if httpResp.statusCode != 200 {
+                    if let bodyString = String(data: respData, encoding: .utf8) {
+                        let preview = bodyString.prefix(500)
+                        print("[OpenAI] 非 200 回應：\(preview)")
+                    }
+                    return nil
+                }
+            }
+            do {
+                let res = try decoder.decode(OpenAIResponse.self, from: respData)
+                guard let choice = res.choices.first else {
+                    print("[OpenAI] 回應不含 choices")
+                    return nil
+                }
                 // 處理token使用量
                 if let usage = res.usage {
                     print("非串流請求 - Token使用量：提示詞 \(usage.prompt_tokens)，回應 \(usage.completion_tokens)，總計 \(usage.total_tokens)")
@@ -1583,8 +1681,16 @@ final class ChatViewModel: ObservableObject {
                 }
                 
                 return choice.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                if let bodyString = String(data: respData, encoding: .utf8) {
+                    let preview = bodyString.prefix(500)
+                    print("[OpenAI] 解碼失敗，回應：\(preview)")
+                }
+                print("[OpenAI] 解碼錯誤：\(error)")
             }
-        } catch {}
+        } catch {
+            print("[OpenAI] 請求錯誤：\(error)")
+        }
         return nil
     }
 
