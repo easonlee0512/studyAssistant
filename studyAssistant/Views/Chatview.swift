@@ -470,11 +470,30 @@ struct ChatDemoDynamicView: View {
     private var ios25InputBar: some View {
         VStack(spacing: 0) {
             HStack {
+                // 傳送到日曆按鈕 - 輸入框左方
+                Button(action: {
+                    // TODO: 添加傳送到日曆功能
+                }) {
+                    HStack {
+                        Spacer()
+                        Image("send_to_calendar")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .background(Color.hex(hex: "E27844"))
+                .cornerRadius(8)
+
                 ZStack(alignment: .topLeading) {
                     if inputText.isEmpty {
                         Text("輸入訊息...")
                             .foregroundColor(Color.black.opacity(0.4))
                             .padding(.vertical, 8)
+                            .padding(.horizontal, 10)
                     }
                     TextEditor(text: $inputText)
                         .font(.system(size: 16))
@@ -1362,6 +1381,24 @@ struct ChatDemoDynamicView: View {
         VStack(spacing: 0) {
             CompatibleGlassEffectContainer {
                 HStack {
+                    // 傳送到日曆按鈕 - 輸入框左方
+                    Button(action: {
+                        // TODO: 添加傳送到日曆功能
+                    }) {
+                        HStack {
+                            Spacer()
+                            Image("send_to_calendar")
+                                .resizable()
+                                .renderingMode(.template)
+                                .scaledToFit()
+                                .frame(width: 36, height: 36)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: 40, height: 40)
+                    .compatibleGlassEffect(color: Color.hex(hex: "E27844"), opacity: 0.8)
+                    .clipShape(Rectangle())
+
                     ZStack(alignment: .topLeading) {
                         if inputText.isEmpty {
                             Text("輸入訊息...")
