@@ -43,6 +43,7 @@ struct ChatDemoDynamicView: View {
     @State private var textEditorHeight: CGFloat = 36
     @FocusState private var isInputFocused: Bool
     @State private var bottomInset: CGFloat = 0
+    @State private var tabBarHeight: CGFloat = 0
     // 【改動】新增狀態
     @State private var showManageSheet = false      // 是否顯示「管理聊天室」畫面
     @State private var selectedRoomIDs = Set<UUID>()// 已選取要刪除的聊天室 ID
@@ -58,10 +59,17 @@ struct ChatDemoDynamicView: View {
             }
         }
         .onAppear {
-            if let win = UIApplication.shared.connectedScenes
-                    .compactMap({ $0 as? UIWindowScene })
-                    .flatMap({ $0.windows }).first {
-                bottomInset = win.safeAreaInsets.bottom
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                if let window = windowScene.windows.first {
+                    bottomInset = window.safeAreaInsets.bottom
+                    
+                    // 尋找 UITabBarController 並獲取其高度
+                    if let rootViewController = window.rootViewController {
+                        if let tabBarController = findTabBarController(from: rootViewController) {
+                            self.tabBarHeight = tabBarController.tabBar.frame.size.height
+                        }
+                    }
+                }
             }
             // 添加鍵盤通知觀察者
             NotificationCenter.default.addObserver(
@@ -573,7 +581,7 @@ struct ChatDemoDynamicView: View {
                 }
             )
         }
-        .padding(.bottom, max(viewModel.keyboardHeight - bottomInset, 0))
+        .padding(.bottom, max(viewModel.keyboardHeight - tabBarHeight, 0))
         .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
     }
 
@@ -792,7 +800,7 @@ struct ChatDemoDynamicView: View {
         }
     }
     
-    // 立即滾動到底部（無動畫，用於文字串流）
+    // 立即滾动到底部（無動畫，用於文字串流）
     private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
         proxy.scrollTo("messageBottom", anchor: .bottom)
     }
@@ -936,7 +944,7 @@ struct ChatDemoDynamicView: View {
                                     .font(.headline)
                                     .foregroundColor(Color.black)
 
-                                // 使用滾動視圖限制最大高度
+                                // 使用滾动视图限制最大高度
                                 if isExpanded && tasksToDelete.count > 3 {
                                     ScrollView {
                                         LazyVStack(alignment: .leading, spacing: 10) {
@@ -1486,87 +1494,25 @@ struct ChatDemoDynamicView: View {
             }
         }
         .offset(y: -2)
-        .padding(.bottom, max(viewModel.keyboardHeight - bottomInset, 0))
+        .padding(.bottom, max(viewModel.keyboardHeight - tabBarHeight, 0))
         .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    // MARK: Sidebar
-    private var sidebarOverlay: some View {
-        GeometryReader { _ in
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    // 設定按鈕在左上角
-                    HStack {
-                        Button(action: {
-                            // 收起鍵盤
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                                     to: nil, from: nil, for: nil)
-                            showSettings = true
-                            withAnimation { showSidebar = false }
-                        }) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(Color.hex(hex: "E27844"))
-                        }
-                        .padding(.leading, 16)
-                        .padding(.top, 10)
-
-                        Spacer()
-                    }
-
-                    Text("聊天室列表")
-                        .font(.title2).fontWeight(.bold)
-                        .foregroundColor(Color.black)
-                        .padding(.vertical, 10)
-                        .padding(.leading, 20)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 5) {
-                            ForEach(
-                                Array(viewModel.chatRooms.enumerated().reversed()), id: \.element.id
-                            ) { idx, room in
-                                Button {
-                                    viewModel.selectedRoomIndex = idx
-                                    withAnimation { showSidebar = false }
-                                } label: {
-                                    Text(room.name)
-                                        .font(.title3)
-                                        .foregroundColor(Color.black)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .padding(.vertical, 12)
-                                        .padding(.horizontal)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(
-                                            idx == viewModel.selectedRoomIndex
-                                                ? midBubbleColor : Color.clear
-                                        )
-                                        .cornerRadius(8)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 3)
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        viewModel.deleteChatRoom(at: idx)
-                                    } label: {
-                                        Label("刪除聊天室", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Spacer()
-                }
-                .frame(width: 250)
-                .background(sidebarColor)
-                Spacer()
+    // 輔助函數：遞迴尋找 UITabBarController
+    private func findTabBarController(from controller: UIViewController) -> UITabBarController? {
+        if let tabBarController = controller as? UITabBarController {
+            return tabBarController
+        }
+        for child in controller.children {
+            if let found = findTabBarController(from: child) {
+                return found
             }
         }
-        .zIndex(1)
-        .transition(.move(edge: .leading))
-        .background(Color.clear)
+        return nil
     }
-
-    // MARK: - 發送訊息（串流）
+    
+    // MARK: - 輔助函數
     private func sendMessage() {
         guard !inputText.isEmpty else { return }
         
