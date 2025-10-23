@@ -927,8 +927,8 @@ struct ChatDemoDynamicView: View {
                             .textSelection(.enabled)
                     }
 
-                    // 顯示載入動畫（當正在載入時且是最新的AI訊息）
-                    if viewModel.isLoading && isLatestAIMessage {
+                    // 顯示載入動畫（當正在載入時且是最新的AI訊息，但不在日曆傳送期間）
+                    if viewModel.isLoading && isLatestAIMessage && !isCalendarSending {
                         HStack(spacing: 12) {
                             LoadingDots()
                                 .padding(.vertical, 12)
@@ -1684,7 +1684,7 @@ struct ChatDemoDynamicView: View {
                         calendarAssistantViewModel.autoUpdateInput = cleanedReply
                         withAnimation {
                             updateCalendarStatus(
-                                message: "日曆的更新規則設定好了 [\(cleanedReply)]",
+                                message: "日曆的更新規則設定好了:\n\(cleanedReply)",
                                 isLoading: false,
                                 autoDismiss: true
                             )
@@ -1783,6 +1783,7 @@ struct ChatDemoDynamicView: View {
                 )
         )
         .padding(.horizontal, 20)
+        .padding(.top, 4)
     }
 
     private func updateCalendarStatus(
