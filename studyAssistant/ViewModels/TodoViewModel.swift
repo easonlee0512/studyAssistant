@@ -31,6 +31,7 @@ class TodoViewModel: ObservableObject {
     @Published var newTaskSelectedMonthDays: Set<Int> = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var hasLoadedInitialTasks = false
     
     @Published var keyboardHeight: CGFloat = 0  // 追蹤鍵盤高度
     
@@ -128,6 +129,7 @@ class TodoViewModel: ObservableObject {
                 } else {
                     // 使用者登出，清空資料
                     self?.tasks = []
+                    self?.hasLoadedInitialTasks = false
                     // 移除 Firestore 監聽
                     self?.tasksListener?.remove()
                 }
@@ -300,6 +302,7 @@ class TodoViewModel: ObservableObject {
         // 確保已經登入
         guard Auth.auth().currentUser != nil else {
             tasks = []
+            hasLoadedInitialTasks = false
             return
         }
         
@@ -310,6 +313,7 @@ class TodoViewModel: ObservableObject {
            !tasks.isEmpty {
             // 如果在快取時間內且已有資料，直接返回
             print("使用快取的任務數據，距離上次載入: \(now.timeIntervalSince(lastLoad))秒")
+            hasLoadedInitialTasks = true
             return
         }
         
@@ -340,6 +344,7 @@ class TodoViewModel: ObservableObject {
         tasks = try await firebaseService.fetchTodoTasks()
         lastTasksLoadTime = now
         print("從Firebase重新載入任務數據")
+        hasLoadedInitialTasks = true
         
         // 設置監聽器（如果還沒有設置）
         if tasksListener == nil {
@@ -673,4 +678,3 @@ enum ValidationError: LocalizedError {
 extension Notification.Name {
     static let todoTaskDidUpdate = Notification.Name("todoTaskDidUpdate")
 }
-

@@ -24,6 +24,14 @@ final class CalendarAssistantViewModel: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
+    // 自訂 URLSession，設定長時間 timeout（10 分鐘）以配合 Cloud Function
+    private lazy var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 600   // 單次請求超時：10 分鐘（600 秒）
+        config.timeoutIntervalForResource = 3600 // 整體資源超時：1 小時（3600 秒）
+        return URLSession(configuration: config)
+    }()
+
     // 狀態追蹤
     @Published var isUpdating: Bool = false
     @Published var updateError: String?
@@ -56,6 +64,7 @@ final class CalendarAssistantViewModel: ObservableObject {
             UserDefaults.standard.set(autoUpdateInput, forKey: autoUpdateInputKey)
         }
     }
+    private var isAutoUpdateInProgress: Bool = false
     private var lastUpdateDate: Date? {
         get {
             UserDefaults.standard.object(forKey: lastUpdateDateKey) as? Date
@@ -73,34 +82,6 @@ final class CalendarAssistantViewModel: ObservableObject {
     @Published var studySettings: StudySettings?
     @Published var isLoadingSettings: Bool = false
     @Published var settingsError: String?
-
-    // 定義 getTask 函數
-    private let getTaskFunction = Tool(
-        type: "function",
-        function: ToolFunction(
-            name: "getTask",
-            description: "Get all tasks from the system",
-            parameters: ToolFunction.Parameters(
-                type: "object",
-                properties: [:],
-                required: []
-            )
-        )
-    )
-
-    // 定義 getTime 函數
-    private let getTimeFunction = Tool(
-        type: "function",
-        function: ToolFunction(
-            name: "getTime",
-            description: "Get current time from the system",
-            parameters: ToolFunction.Parameters(
-                type: "object",
-                properties: [:],
-                required: []
-            )
-        )
-    )
 
     // 定義 saveTask 函數
     private let saveTaskFunction = Tool(
@@ -286,13 +267,62 @@ final class CalendarAssistantViewModel: ObservableObject {
             return
         }
 
+        // 避免重複觸發
+        guard !isAutoUpdateInProgress else {
+            print("每日自動更新已在進行中，跳過")
+            return
+        }
+
+        // 等待其他日曆相關操作完成
+        let waitSucceeded = await waitForCalendarUpdateAvailability()
+        guard waitSucceeded else {
+            print("每日自動更新等待日曆更新完成時超過時間限制，取消此次自動更新")
+            return
+        }
+
+        isAutoUpdateInProgress = true
+        defer { isAutoUpdateInProgress = false }
+
         print("開始執行每日自動更新...")
         await startUpdate(userInput: autoUpdateInput)
 
-        // 記錄更新時間（使用當前日期，支援測試模式）
-        let currentDate = getCurrentDate()
-        lastUpdateDate = currentDate
-        print("每日自動更新完成，記錄時間：\(currentDate)")
+        if updateError == nil {
+            let currentDate = getCurrentDate()
+            lastUpdateDate = currentDate
+            print("每日自動更新完成，記錄時間：\(currentDate)")
+        } else {
+            print("每日自動更新失敗：\(updateError ?? "未知錯誤")")
+        }
+    }
+
+    /// 等待日曆相關操作完成，避免自動更新與其他操作重疊
+    private func waitForCalendarUpdateAvailability(
+        timeout: TimeInterval = 30.0,
+        pollInterval: TimeInterval = 0.5
+    ) async -> Bool {
+        var elapsed: TimeInterval = 0
+        let pollNanoseconds = UInt64(pollInterval * 1_000_000_000)
+        var hasLoggedWaitMessage = false
+
+        while isUpdating || (todoViewModel?.isLoading ?? false) || !(todoViewModel?.hasLoadedInitialTasks ?? false) {
+            if !hasLoggedWaitMessage {
+                print("每日自動更新等待日曆資料載入/更新完成...")
+                hasLoggedWaitMessage = true
+            }
+
+            if elapsed >= timeout {
+                return false
+            }
+
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+            elapsed += pollInterval
+        }
+
+        if hasLoggedWaitMessage {
+            print("日曆更新已完成，自動更新即將開始")
+        }
+
+        return true
     }
 
     // MARK: - 持久化相關
@@ -329,6 +359,7 @@ final class CalendarAssistantViewModel: ObservableObject {
         lastUpdatedTasks = []
     }
 
+
     // MARK: - 主要更新方法
 
     /// 開始更新日曆任務
@@ -345,6 +376,12 @@ final class CalendarAssistantViewModel: ObservableObject {
         // 清除上一次的記錄（開始新的更新）
         clearLastUpdateStatus()
 
+        // 執行更新
+        await performUpdate(userInput: userInput)
+    }
+
+    /// 實際執行更新的方法（從 startUpdate 分離出來）
+    private func performUpdate(userInput: String) async {
         // 建構系統提示
         let systemPrompt = buildSystemPrompt()
 
@@ -394,14 +431,14 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
-                model: "gpt-5-mini",
+                model: "gpt-5",
                 messages: messages,
-                temperature: 1.0,  // GPT-5 只支援 temperature = 1.0
+                temperature: 1.0,
                 stream: false,
-                tools: [getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
-                tool_choice: roundCount == 1 ? "required" : "auto",
+                tools: [saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
+                tool_choice: "required",  // 強制 GPT 必須調用函數，不允許純文字回應
                 stream_options: nil,
-                reasoning_effort: "minimal"  // 使用最小推理程度以獲得最快回應
+                reasoning_effort: "medium"
             )
 
             guard let data = try? encoder.encode(reqBody) else {
@@ -410,6 +447,100 @@ final class CalendarAssistantViewModel: ObservableObject {
                 return
             }
 
+            // 在終端機顯示完整的請求內容（易閱讀格式）
+            print("\n" + String(repeating: "═", count: 80))
+            print("📤 發送給 OpenAI 的請求內容（第 \(roundCount) 輪）")
+            print(String(repeating: "═", count: 80))
+
+            // 顯示摘要資訊
+            print("📊 請求摘要：")
+            print("   模型: \(reqBody.model)")
+            print("   訊息數: \(reqBody.messages.count) 條")
+            print("   工具數: \(reqBody.tools?.count ?? 0) 個")
+            if let tools = reqBody.tools {
+                let toolNames = tools.map { $0.function.name }
+                print("   工具: [\(toolNames.joined(separator: ", "))]")
+            }
+            print("   Tool Choice: \(reqBody.tool_choice ?? "auto")")
+            print("   Temperature: \(reqBody.temperature)")
+            print("   Stream: \(reqBody.stream)")
+
+            print("\n" + String(repeating: "-", count: 80))
+            print("💬 訊息列表：")
+            for (index, message) in reqBody.messages.enumerated() {
+                let roleIcon = message.role == "system" ? "🤖" :
+                               message.role == "user" ? "👤" :
+                               message.role == "assistant" ? "🤖" : "🔧"
+
+                print("\n   [\(index + 1)] \(roleIcon) \(message.role.uppercased())")
+
+                if message.role == "system" {
+                    // 系統訊息：只顯示前 300 字元和最後 150 字元
+                    let content = message.content
+                    if content.count > 500 {
+                        print("      內容: \(content.prefix(300))...")
+                        print("      ...")
+                        print("      ...\(content.suffix(150))")
+                        print("      (總長度: \(content.count) 字元)")
+                    } else {
+                        print("      內容: \(content)")
+                    }
+                } else if message.role == "tool" {
+                    // Tool 回應訊息
+                    print("      Tool Call ID: \(message.tool_call_id ?? "N/A")")
+                    let content = message.content
+                    if content.count > 200 {
+                        print("      回應: \(content.prefix(200))... (總長度: \(content.count) 字元)")
+                    } else {
+                        print("      回應: \(content)")
+                    }
+                } else {
+                    // User 或 Assistant 訊息
+                    if !message.content.isEmpty {
+                        print("      內容: \(message.content)")
+                    }
+
+                    // 顯示 tool_calls（如果有）
+                    if let toolCalls = message.tool_calls, !toolCalls.isEmpty {
+                        print("      🔧 Tool Calls: (\(toolCalls.count) 個)")
+                        for (tcIndex, toolCall) in toolCalls.enumerated() {
+                            print("         [\(tcIndex + 1)] \(toolCall.function.name)")
+                            print("             ID: \(toolCall.id)")
+                            let args = toolCall.function.arguments
+                            if args.count > 150 {
+                                print("             參數: \(args.prefix(150))... (總長度: \(args.count) 字元)")
+                            } else {
+                                print("             參數: \(args)")
+                            }
+                        }
+                    }
+                }
+            }
+
+            print("\n" + String(repeating: "-", count: 80))
+            print("🛠️ 可用工具定義：")
+            if let tools = reqBody.tools {
+                for (index, tool) in tools.enumerated() {
+                    print("\n   [\(index + 1)] \(tool.function.name)")
+                    print("      描述: \(tool.function.description)")
+                    print("      類型: \(tool.type)")
+                }
+            }
+
+            print("\n" + String(repeating: "-", count: 80))
+            print("📦 完整 JSON（美化格式）：")
+            if let jsonObject = try? JSONSerialization.jsonObject(with: data),
+               let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
+               let prettyString = String(data: prettyData, encoding: .utf8) {
+                print(prettyString)
+            } else if let requestString = String(data: data, encoding: .utf8) {
+                print(requestString)
+            } else {
+                print("無法將請求轉換為字串")
+            }
+
+            print(String(repeating: "═", count: 80) + "\n")
+
             var req = URLRequest(url: proxyURL)
             req.httpMethod = "POST"
             req.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -417,7 +548,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             do {
                 let (respData, resp) = try await retryOnError {
-                    try await URLSession.shared.data(for: req)
+                    try await self.urlSession.data(for: req)
                 }
 
                 guard let httpResponse = resp as? HTTPURLResponse else {
@@ -508,6 +639,21 @@ final class CalendarAssistantViewModel: ObservableObject {
                     messages.append(choice.message)
                 }
 
+            } catch let urlError as URLError {
+                print("\n❌ 網路錯誤發生：\(urlError.localizedDescription)")
+                if urlError.code == .timedOut {
+                    updateError = "請求超時（已等待超過 10 分鐘），請檢查網路連線或稍後再試"
+                } else {
+                    updateError = "網路錯誤：\(urlError.localizedDescription)"
+                }
+                isUpdating = false
+                return
+            } catch let nsError as NSError where nsError.domain == "CalendarAssistant" && nsError.code == 429 {
+                // 專門處理 429 錯誤
+                print("\n❌ 請求過於頻繁：\(nsError.localizedDescription)")
+                updateError = nsError.localizedDescription
+                isUpdating = false
+                return
             } catch {
                 print("\n❌ 錯誤發生：\(error.localizedDescription)")
                 updateError = "請求失敗：\(error.localizedDescription)"
@@ -557,10 +703,6 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     private func handleToolCall(functionName: String, arguments: String) async -> String {
         switch functionName {
-        case "getTask":
-            return await executeGetTask()
-        case "getTime":
-            return executeGetTime()
         case "saveTask":
             return await executeSaveTask(arguments: arguments)
         case "deleteTask":
@@ -571,48 +713,6 @@ final class CalendarAssistantViewModel: ObservableObject {
             return "對話結束"
         default:
             return "未知函數：\(functionName)"
-        }
-    }
-
-    // 執行 getTime 函數
-    private func executeGetTime() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd HH:mm:ss"
-        let currentTime = formatter.string(from: Date())
-        return "現在時間是：\(currentTime)"
-    }
-
-    // 執行 getTask 函數
-    private func executeGetTask() async -> String {
-        let firebaseService = FirebaseService.shared
-        do {
-            let tasks = try await firebaseService.fetchTodoTasks()
-
-            var taskString: String
-            if tasks.isEmpty {
-                taskString = "目前沒有任何任務。"
-            } else {
-                let today = Date()
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy/MM/dd HH:mm"
-                let todayString = formatter.string(from: today)
-                taskString = "今日日期: \(todayString)\n"
-                taskString += "allTasks:\n"
-                for task in tasks {
-                    taskString += "-------\n"
-                    taskString += "id:\(task.id) "
-                    taskString += "title:\(task.title) "
-                    taskString += "isCompleted:\(task.isCompleted) "
-                    if !task.note.isEmpty {
-                        taskString += "note:\(task.note) "
-                    }
-                    taskString += "startTime:\(formatDate(task.startDate)) "
-                    taskString += "endTime:\(formatDate(task.endDate))\n\n"
-                }
-            }
-            return taskString
-        } catch {
-            return "抱歉，無法取得任務列表。請確保您已登入並且網路連線正常。"
         }
     }
 
@@ -662,6 +762,9 @@ final class CalendarAssistantViewModel: ObservableObject {
             for task in args.tasks {
                 guard let startDate = parseDate(task.startDate),
                       let endDate = parseDate(task.endDate) else {
+                    print("    ❌ 日期解析失敗 - 任務: \(task.title)")
+                    print("       開始時間: \(task.startDate)")
+                    print("       結束時間: \(task.endDate)")
                     failureCount += 1
                     continue
                 }
@@ -807,7 +910,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             let args = try JSONDecoder().decode(UpdateTasksArgs.self, from: jsonData)
             if args.tasks.isEmpty {
-                return "未提供任何要更新的任務"
+                return "成功更新，目前尚無任務需要更新"
             }
 
             let allTasks = todoViewModel?.tasks ?? []
@@ -904,10 +1007,13 @@ final class CalendarAssistantViewModel: ObservableObject {
         guard let dateString = dateString else { return nil }
 
         let dateFormats = [
-            "yyyy-MM-dd'T'HH:mm:ssXXX",
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mmXXX",
-            "yyyy-MM-dd'T'HH:mm"
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",      // 2025-10-26T08:00:00.000Z (帶毫秒和 Z)
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",    // 2025-10-26T08:00:00.000+08:00 (帶毫秒和時區)
+            "yyyy-MM-dd'T'HH:mm:ssZ",          // 2025-10-26T08:00:00Z (帶 Z)
+            "yyyy-MM-dd'T'HH:mm:ssXXX",        // 2025-10-26T08:00:00+08:00 (帶時區)
+            "yyyy-MM-dd'T'HH:mm:ss",           // 2025-10-26T08:00:00 (本地時間)
+            "yyyy-MM-dd'T'HH:mmXXX",           // 2025-10-26T08:00+08:00
+            "yyyy-MM-dd'T'HH:mm"               // 2025-10-26T08:00
         ]
 
         let dateFormatter = DateFormatter()
@@ -917,6 +1023,7 @@ final class CalendarAssistantViewModel: ObservableObject {
         for format in dateFormats {
             dateFormatter.dateFormat = format
             if let date = dateFormatter.date(from: dateString) {
+                print("✅ 成功解析日期：\(dateString) -> \(date) (使用格式: \(format))")
                 return date
             }
         }
@@ -928,6 +1035,7 @@ final class CalendarAssistantViewModel: ObservableObject {
             }
         }
 
+        print("❌ 無法解析日期：\(dateString)")
         return nil
     }
 
@@ -968,38 +1076,38 @@ final class CalendarAssistantViewModel: ObservableObject {
     }
 
     private func buildSystemPrompt() -> String {
-        let tone = studySettings?.tone ?? "Calm and composed expert"
+        let tone = studySettings?.tone ?? "冷靜且專業的專家"
         let currentTimeString = getCurrentDate()
         var prompt = """
-            You are a calendar scheduling assistant that automatically adjusts calendar tasks based on user requirements. Your tone is: \(tone)
+            你是一個日曆安排助手，會根據使用者的需求自動調整日曆任務。你的語氣是：\(tone)
 
             \(formatStudySettings())
 
-            Current system time: \(currentTimeString)
+            當前系統時間：\(currentTimeString)
 
-            Your goals are:
-            1. Add, delete, or modify tasks based on requirements
-            2. Call end_conversation immediately after completing all operations(if there are no tasks to add/delete/update, call end_conversation directly to end the conversation)
+            你的目標：
+            1. 根據需求新增、刪除或修改任務
+            2. 完成所有操作後立即調用 end_conversation（如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話）
 
-            Important rules:
-            1. If there are no tasks to add/delete/update, call end_conversation directly to end the conversation.
-            2. Do not make unnecessary updates. Use common sense to determine what is "unnecessary":
-                - Tasks with no actual changes do not need to be updated
-                - When user asks to "update tasks to today", ONLY update tasks that are significantly outdated (e.g., from yesterday or earlier dates)
-                - Tasks scheduled for today (even if a few minutes or hours in the past) generally do NOT need to be updated unless they are clearly outdated
-                - Example: If current time is 14:30 and a task is scheduled for 13:00 today, this does NOT need updating
-                - Example: If current time is 14:30 and a task is scheduled for yesterday, this DOES need updating
-                - Use practical judgment: minor time differences within the same day are acceptable and do not require updates
-            3. If the user has not specified a particular time period, when scheduling tasks you must follow these rules:
-                - Tasks can only be scheduled within the user's configured study dates and times
-                - Each task's duration should be the configured study time (\(studySettings?.studyDuration ?? 60) minutes)
-                - Do not schedule tasks outside the configured time ranges
-                - Do not overlap with existing task times
-            4. When scheduling tasks, if the user requests many tasks (e.g., one or two hundred tasks), you must fulfill the user's request and schedule them all at once.
-            5. If no time is specified, it means now.
-            6. If time changes are not requested, do not modify times (e.g., when user hasn't asked to change times).
-            7. You must fully follow the user's instructions without adding extra rules or assumptions.
-            8. Respond in the user's language (e.g., respond in Chinese if using Chinese, respond in English if using English).
+            重要規則：
+            1. 如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話。
+            2. 不要進行不必要的更新。使用常識判斷什麼是「不必要的」：
+                - 沒有實際變化的任務不需要更新
+                - 當使用者要求「更新任務到今天」時，只更新明顯過時的任務（例如昨天或更早的日期）
+                - 今天排程的任務（即使過去幾分鐘或幾小時）通常不需要更新，除非明顯過時
+                - 範例：如果現在時間是 14:30，任務排在今天 13:00，這不需要更新
+                - 範例：如果現在時間是 14:30，任務排在昨天，這需要更新
+                - 使用實際判斷：同一天內的輕微時間差異是可以接受的，不需要更新
+            3. 如果使用者沒有指定特定時段，安排任務時必須遵循以下規則：
+                - 任務只能在使用者設定的讀書日期和時間內安排
+                - 每個任務的持續時間應該是設定的讀書時間（\(studySettings?.studyDuration ?? 60) 分鐘）
+                - 不要在設定的時間範圍外安排任務
+                - 不要與現有任務時間重疊
+            4. 安排任務時，如果使用者要求很多任務（例如一兩百個任務），你必須滿足使用者的要求，一次全部安排。
+            5. 如果沒有指定時間，表示現在。
+            6. 如果沒有要求更改時間，不要修改時間（例如使用者沒有要求更改時間時）。
+            7. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
+            8. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
             """
 
         let existingTasksInfo = formatExistingTasks()
@@ -1068,7 +1176,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     private func formatExistingTasks() -> String {
         let tasks = todoViewModel?.tasks ?? []
-        guard !tasks.isEmpty else { return "There are currently no existing tasks." }
+        guard !tasks.isEmpty else { return "目前沒有任何現有任務。" }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/MM/dd HH:mm"
@@ -1143,53 +1251,65 @@ final class CalendarAssistantViewModel: ObservableObject {
     // MARK: - Retry Logic
 
     private func retryOnError<T>(
-        maxAttempts: Int = 3,
-        delay: TimeInterval = 1.5,
+        maxAttempts: Int = 5,
+        baseDelay: TimeInterval = 2.0,  // 基礎延遲時間（秒）
         operation: @escaping () async throws -> T
     ) async throws -> T {
-        var attempts = 0
+        func backoffDelay(forRetry retry: Int, suggested: TimeInterval? = nil) -> TimeInterval {
+            if let suggested, suggested > 0 {
+                return min(suggested, 60.0)
+            }
+            let exponentialDelay = pow(2.0, Double(max(retry - 1, 0))) * baseDelay
+            let jitter = Double.random(in: 0...1.0)
+            return min(exponentialDelay + jitter, 60.0)
+        }
+
         var lastError: Error?
 
-        while attempts < maxAttempts {
+        for attempt in 1...maxAttempts {
             do {
-                if attempts > 0 {
-                    let waitTime = delay * Double(attempts)
-                    print("等待 \(waitTime) 秒後重試...")
-                    try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
-                }
-
                 let result = try await operation()
 
                 if let (_, response) = result as? (Data, URLResponse),
                    let httpResponse = response as? HTTPURLResponse,
                    httpResponse.statusCode == 429 {
-                    print("收到 429 狀態碼")
-                    attempts += 1
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let suggestedDelay = retryAfterHeader.flatMap { TimeInterval($0) }
+
+                    lastError = NSError(
+                        domain: "CalendarAssistant",
+                        code: 429,
+                        userInfo: [NSLocalizedDescriptionKey: "請求過於頻繁，請稍後再試"]
+                    )
+
+                    if attempt == maxAttempts {
+                        print("❌ 已達到最大重試次數 (\(maxAttempts))")
+                        break
+                    }
+
+                    let waitTime = backoffDelay(forRetry: attempt, suggested: suggestedDelay)
+                    print("⚠️ 收到 429 狀態碼 (請求過於頻繁)，等待 \(String(format: "%.1f", waitTime)) 秒後重試...")
+                    try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
                     continue
                 }
 
                 return result
-            } catch let urlError as URLError {
-                print("捕獲到 URLError: \(urlError.localizedDescription)")
-                lastError = urlError
-                attempts += 1
-                if attempts >= maxAttempts {
-                    throw urlError
-                }
-                continue
             } catch {
-                print("捕獲到其他錯誤: \(error.localizedDescription)")
                 lastError = error
-                attempts += 1
-                if attempts >= maxAttempts {
-                    throw error
+
+                if attempt == maxAttempts {
+                    break
                 }
-                continue
+
+                let waitTime = backoffDelay(forRetry: attempt)
+                print("⚠️ 發生錯誤（第 \(attempt) 次）：\(error.localizedDescription)，等待 \(String(format: "%.1f", waitTime)) 秒後重試...")
+                try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
             }
         }
 
         throw lastError ?? URLError(.timedOut)
     }
+
 }
 
 // MARK: - 持久化結構定義
