@@ -582,7 +582,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
-                model: "gpt-5",
+                model: "gpt-5-mini",
                 messages: messages,
                 temperature: 1.0,
                 stream: false,
