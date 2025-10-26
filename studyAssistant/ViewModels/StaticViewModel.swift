@@ -8,6 +8,7 @@
 import SwiftUI
 import Firebase
 import FirebaseFirestore
+import FirebaseFunctions
 import FirebaseAuth
 
 @MainActor
@@ -15,10 +16,63 @@ class StaticViewModel: ObservableObject {
     @Published var statistics: [LearningStatistic] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    
+
     @Published var tokenUsage = TokenUsageStats()
-    
+
     private let db = Firestore.firestore()
+    private let functions = Functions.functions(region: "asia-east1")
+
+    // MARK: - Helper Methods
+    /// 將包含 Timestamp 的字典轉換為可序列化的格式（使用 ISO 8601 字符串）
+    private func convertTimestampsToStrings(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        for (key, value) in data {
+            if let timestamp = value as? Timestamp {
+                result[key] = dateFormatter.string(from: timestamp.dateValue())
+            } else if let dict = value as? [String: Any] {
+                result[key] = convertTimestampsToStrings(dict)
+            } else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertTimestampsToStrings($0) }
+            }
+        }
+
+        return result
+    }
+
+    /// 將 Cloud Functions 返回的日期數據轉換為 Timestamp 對象
+    private func convertToTimestamps(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+
+        for (key, value) in data {
+            // 檢查是否是 Firestore Timestamp 的序列化格式 {_seconds: ..., _nanoseconds: ...}
+            if let dict = value as? [String: Any],
+               let seconds = dict["_seconds"] as? Int64 ?? dict["_seconds"] as? Int as? Int64,
+               let nanoseconds = dict["_nanoseconds"] as? Int32 ?? dict["_nanoseconds"] as? Int as? Int32 {
+                result[key] = Timestamp(seconds: seconds, nanoseconds: nanoseconds)
+            }
+            // 檢查是否是 ISO 8601 字符串
+            else if let dateString = value as? String {
+                let dateFormatter = ISO8601DateFormatter()
+                dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = dateFormatter.date(from: dateString) {
+                    result[key] = Timestamp(date: date)
+                }
+            }
+            // 遞歸處理嵌套字典
+            else if let dict = value as? [String: Any] {
+                result[key] = convertToTimestamps(dict)
+            }
+            // 遞歸處理數組
+            else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertToTimestamps($0) }
+            }
+        }
+
+        return result
+    }
     
     // 初始化並設置監聽器
     init() {
@@ -84,43 +138,77 @@ class StaticViewModel: ObservableObject {
         }
     }
     
-    // 從Firestore獲取統計數據
+    // 從Cloud Functions獲取統計數據
     func fetchStatistics() async {
         guard let userId = Auth.auth().currentUser?.uid else {
             self.statistics = []
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         do {
-            let querySnapshot = try await db.collection("userStatistics")
-                .document(userId)
-                .collection("statistics")
-                .getDocuments()
-            
+            print("[StaticViewModel] 開始獲取統計數據，用戶ID: \(userId)")
+
+            // 調用 Cloud Functions 獲取統計數據
+            let result = try await functions.httpsCallable("fetchStatistics").call()
+
+            print("[StaticViewModel] 收到 Cloud Function 回應: \(result.data)")
+
+            guard let data = result.data as? [String: Any] else {
+                print("[StaticViewModel] 錯誤: 無法解析回應數據為字典")
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "無法解析回應數據"])
+            }
+
+            print("[StaticViewModel] 回應數據鍵: \(data.keys)")
+
+            guard let success = data["success"] as? Bool else {
+                print("[StaticViewModel] 錯誤: 回應中沒有 success 字段")
+                let errorMsg = data["error"] as? String ?? "未知錯誤"
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "獲取統計數據失敗: \(errorMsg)"])
+            }
+
+            print("[StaticViewModel] success 狀態: \(success)")
+
+            guard success else {
+                let errorMsg = data["error"] as? String ?? "未知錯誤"
+                print("[StaticViewModel] 錯誤: Cloud Function 返回失敗: \(errorMsg)")
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "獲取統計數據失敗: \(errorMsg)"])
+            }
+
+            guard let statsData = data["statistics"] as? [[String: Any]] else {
+                print("[StaticViewModel] 錯誤: 無法解析 statistics 數據")
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "無法解析統計數據"])
+            }
+
+            print("[StaticViewModel] 成功獲取 \(statsData.count) 條統計數據")
+
             var newStatistics: [LearningStatistic] = []
-            
-            for document in querySnapshot.documents {
-                let data = document.data()
-                
-                // 手動解析文檔數據
-                let id = document.documentID
-                let userId = data["userId"] as? String ?? ""
-                let category = data["category"] as? String ?? ""
-                let progress = data["progress"] as? Double ?? 0.0
-                let taskcount = data["taskcount"] as? Int ?? 0
-                let taskcompletecount = data["taskcompletecount"] as? Int ?? 0
-                let totalFocusTime = data["totalFocusTime"] as? Int ?? 0
-                let version = data["version"] as? Int ?? 1
-                
-                let dateTimestamp = data["date"] as? Timestamp
+
+            for statData in statsData {
+                // 轉換日期數據為 Timestamp 格式
+                let convertedStatData = convertToTimestamps(statData)
+
+                let id = convertedStatData["id"] as? String ?? ""
+                let userId = convertedStatData["userId"] as? String ?? ""
+                let category = convertedStatData["category"] as? String ?? ""
+                let progress = convertedStatData["progress"] as? Double ?? 0.0
+                let taskcount = convertedStatData["taskcount"] as? Int ?? 0
+                let taskcompletecount = convertedStatData["taskcompletecount"] as? Int ?? 0
+                let totalFocusTime = convertedStatData["totalFocusTime"] as? Int ?? 0
+                let version = convertedStatData["version"] as? Int ?? 1
+
+                let dateTimestamp = convertedStatData["date"] as? Timestamp
                 let date = dateTimestamp?.dateValue() ?? Date()
-                
-                let updatedAtTimestamp = data["updatedAt"] as? Timestamp
+
+                let updatedAtTimestamp = convertedStatData["updatedAt"] as? Timestamp
                 let updatedAt = updatedAtTimestamp?.dateValue() ?? Date()
-                
+
                 let statistic = LearningStatistic(
                     id: id,
                     userId: userId,
@@ -133,41 +221,50 @@ class StaticViewModel: ObservableObject {
                     updatedAt: updatedAt,
                     version: version
                 )
-                
+
                 newStatistics.append(statistic)
             }
-            
+
             self.statistics = newStatistics
             self.isLoading = false
-            
-            // 新增：獲取Token使用量
+
+            // 獲取Token使用量
             await fetchTokenUsageStats()
         } catch {
             self.errorMessage = "載入統計數據失敗: \(error.localizedDescription)"
             self.isLoading = false
-            print("Error fetching statistics: \(error)")
+            print("[StaticViewModel] Error fetching statistics: \(error)")
+
+            // 獲取更詳細的錯誤信息
+            if let functionsError = error as NSError? {
+                print("[StaticViewModel] Error domain: \(functionsError.domain)")
+                print("[StaticViewModel] Error code: \(functionsError.code)")
+                print("[StaticViewModel] Error userInfo: \(functionsError.userInfo)")
+
+                // 檢查是否有底層錯誤
+                if let underlyingError = functionsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                    print("[StaticViewModel] Underlying error: \(underlyingError)")
+                    print("[StaticViewModel] Underlying error domain: \(underlyingError.domain)")
+                    print("[StaticViewModel] Underlying error code: \(underlyingError.code)")
+                }
+            }
         }
     }
     
     // 保存或更新統計數據
     func saveStatistic(_ statistic: LearningStatistic) async -> Bool {
-        guard let userId = Auth.auth().currentUser?.uid else {
+        guard Auth.auth().currentUser?.uid != nil else {
             return false
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         do {
             var updatedStatistic = statistic
-            updatedStatistic.userId = userId
             updatedStatistic.updatedAt = Date()
-            
-            let docRef = updatedStatistic.id == nil ? 
-                db.collection("userStatistics").document(userId).collection("statistics").document() :
-                db.collection("userStatistics").document(userId).collection("statistics").document(updatedStatistic.id!)
-            
-            // 手動將 LearningStatistic 轉換為字典
+
+            // 準備統計數據
             let data: [String: Any] = [
                 "userId": updatedStatistic.userId,
                 "category": updatedStatistic.category,
@@ -179,17 +276,28 @@ class StaticViewModel: ObservableObject {
                 "updatedAt": Timestamp(date: updatedStatistic.updatedAt),
                 "version": updatedStatistic.version
             ]
-            
-            try await docRef.setData(data)
-            
-            // 如果是新創建的文檔，更新 ID
-            if updatedStatistic.id == nil {
-                updatedStatistic.id = docRef.documentID
+
+            // 轉換 Timestamp 為 ISO 8601 字符串
+            let convertedData = convertTimestampsToStrings(data)
+
+            // 調用 Cloud Functions 更新統計數據
+            var parameters: [String: Any] = ["statistic": convertedData]
+            if let statisticId = updatedStatistic.id {
+                parameters["statisticId"] = statisticId
             }
-            
+
+            let result = try await functions.httpsCallable("updateStatistic").call(parameters)
+
+            guard let responseData = result.data as? [String: Any],
+                  let success = responseData["success"] as? Bool,
+                  success else {
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "保存統計數據失敗"])
+            }
+
             // 重新載入數據以確保UI更新
             await fetchStatistics()
-            
+
             isLoading = false
             return true
         } catch {
@@ -329,28 +437,33 @@ class StaticViewModel: ObservableObject {
     
     // 刪除統計類別
     func deleteStatistic(_ statisticId: String) async {
-        guard let userId = Auth.auth().currentUser?.uid else {
+        guard Auth.auth().currentUser?.uid != nil else {
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         do {
-            // 從 Firestore 刪除統計數據
-            try await db.collection("userStatistics")
-                .document(userId)
-                .collection("statistics")
-                .document(statisticId)
-                .delete()
-            
+            // 調用 Cloud Functions 刪除統計數據
+            let result = try await functions.httpsCallable("deleteStatistic").call([
+                "statisticId": statisticId
+            ])
+
+            guard let data = result.data as? [String: Any],
+                  let success = data["success"] as? Bool,
+                  success else {
+                throw NSError(domain: "StaticViewModelErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "刪除統計類別失敗"])
+            }
+
             // 從本地陣列中移除該統計
             await MainActor.run {
                 if let index = statistics.firstIndex(where: { $0.id == statisticId }) {
                     statistics.remove(at: index)
                 }
             }
-            
+
             isLoading = false
             print("成功刪除統計類別 ID: \(statisticId)")
         } catch {
@@ -365,26 +478,51 @@ class StaticViewModel: ObservableObject {
     // 獲取Token使用量
     func fetchTokenUsageStats() async {
         guard let userId = Auth.auth().currentUser?.uid else {
+            print("[StaticViewModel] fetchTokenUsageStats: 用戶未登入")
             return
         }
-        
+
+        print("[StaticViewModel] 開始獲取 Token 使用量，用戶ID: \(userId)")
         isLoading = true
-        
+
         do {
-            let docRef = db.collection("userStatistics").document(userId)
-            let document = try await docRef.getDocument()
-            
-            if document.exists, let data = document.data() {
+            // 調用 Cloud Functions 獲取 Token 使用量
+            let result = try await functions.httpsCallable("fetchTokenUsage").call()
+
+            print("[StaticViewModel] 收到 fetchTokenUsage 回應: \(result.data)")
+
+            guard let data = result.data as? [String: Any] else {
+                print("[StaticViewModel] 錯誤: 無法解析 fetchTokenUsage 回應為字典")
+                isLoading = false
+                return
+            }
+
+            print("[StaticViewModel] fetchTokenUsage 回應數據鍵: \(data.keys)")
+
+            guard let success = data["success"] as? Bool, success else {
+                print("[StaticViewModel] fetchTokenUsage 返回失敗或沒有 success 字段")
+                isLoading = false
+                return
+            }
+
+            print("[StaticViewModel] fetchTokenUsage success 狀態: true")
+
+            // 注意：Cloud Function 返回的是 "tokenUsage" 而不是 "usage"
+            if let usageData = data["tokenUsage"] as? [String: Any] {
+                print("[StaticViewModel] 找到 tokenUsage 數據，鍵: \(usageData.keys)")
                 var modelUsage: [String: ModelTokenUsage] = [:]
-                
+
                 // 獲取模型使用量
-                if let usageData = data["modelUsage"] as? [String: Any] {
-                    for (model, usage) in usageData {
+                if let modelUsageData = usageData["modelUsage"] as? [String: Any] {
+                    print("[StaticViewModel] 找到 modelUsage，模型數量: \(modelUsageData.count)")
+                    for (model, usage) in modelUsageData {
                         if let usageDict = usage as? [String: Any] {
                             let totalTokens = usageDict["total"] as? Int ?? 0
                             let promptTokens = usageDict["prompt"] as? Int
                             let completionTokens = usageDict["completion"] as? Int
-                            
+
+                            print("[StaticViewModel] 模型 \(model): total=\(totalTokens), prompt=\(promptTokens ?? 0), completion=\(completionTokens ?? 0)")
+
                             modelUsage[model] = ModelTokenUsage(
                                 total: totalTokens,
                                 prompt: promptTokens,
@@ -392,28 +530,42 @@ class StaticViewModel: ObservableObject {
                             )
                         } else if let totalTokens = usage as? Int {
                             // 處理舊數據格式，僅有總數沒有詳細分類
+                            print("[StaticViewModel] 模型 \(model) (舊格式): total=\(totalTokens)")
                             modelUsage[model] = ModelTokenUsage(total: totalTokens)
                         }
                     }
+                } else {
+                    print("[StaticViewModel] 沒有找到 modelUsage 數據")
                 }
-                
+
+                let totalTokens = usageData["totalTokens"] as? Int ?? 0
+                print("[StaticViewModel] totalTokens: \(totalTokens)")
+
+                // 轉換 lastUpdated（可能是 Timestamp 格式）
+                let convertedUsageData = convertToTimestamps(usageData)
+                let lastUpdated = (convertedUsageData["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
+                print("[StaticViewModel] lastUpdated: \(lastUpdated)")
+
                 // 構建完整的使用量統計
                 let newTokenUsage = TokenUsageStats(
-                    totalTokens: data["totalTokens"] as? Int ?? 0,
+                    totalTokens: totalTokens,
                     modelUsage: modelUsage,
-                    lastUpdated: (data["lastUpdated"] as? Timestamp)?.dateValue() ?? Date()
+                    lastUpdated: lastUpdated
                 )
-                
+
                 await MainActor.run {
                     self.tokenUsage = newTokenUsage
+                    print("[StaticViewModel] Token 使用量已更新: \(newTokenUsage.totalTokens) tokens")
                 }
+            } else {
+                print("[StaticViewModel] 沒有找到 usage 數據")
             }
-            
+
             isLoading = false
         } catch {
             errorMessage = "載入Token使用量失敗: \(error.localizedDescription)"
             isLoading = false
-            print("Error fetching token usage: \(error)")
+            print("[StaticViewModel] Error fetching token usage: \(error)")
         }
     }
 }

@@ -478,28 +478,28 @@ struct DateCellView: View {
     }
 }
 
-// 新增單個任務條視圖
+// 新增單個任務條視圖（優化版）
 struct SingleTaskBarView: View {
     let task: TodoTask
     let cellDate: Date
     let width: CGFloat
-    let rowIdx: Int 
-    
-    private func isFirstDayOfWeek(_ date: Date) -> Bool {
-        return Calendar.current.component(.weekday, from: date) == 1  // 週日
-    }
-    
-    private func isLastDayOfWeek(_ date: Date) -> Bool {
-        return Calendar.current.component(.weekday, from: date) == 7  // 週六
-    }
-    
-    private func calculateTaskPosition() -> (isStart: Bool, isEnd: Bool, isWeekStart: Bool, isWeekEnd: Bool) {
-        let isFirstDay = utcCalendar.isDate(cellDate, inSameDayAs: task.startDate)
-        let isLastDay = utcCalendar.isDate(cellDate, inSameDayAs: task.endDate)
-        let isWeekStart = isFirstDayOfWeek(cellDate)
-        let isWeekEnd = isLastDayOfWeek(cellDate)
-        
-        return (isFirstDay, isLastDay, isWeekStart, isWeekEnd)
+    let rowIdx: Int
+
+    // 預先計算的常量
+    private let weekday: Int
+    private let isStart: Bool
+    private let isEnd: Bool
+
+    init(task: TodoTask, cellDate: Date, width: CGFloat, rowIdx: Int) {
+        self.task = task
+        self.cellDate = cellDate
+        self.width = width
+        self.rowIdx = rowIdx
+
+        // 預先計算所有需要的值
+        self.weekday = Calendar.current.component(.weekday, from: cellDate)
+        self.isStart = utcCalendar.isDate(cellDate, inSameDayAs: task.startDate)
+        self.isEnd = utcCalendar.isDate(cellDate, inSameDayAs: task.endDate)
     }
     
     private func shouldShowText() -> Bool {
@@ -533,18 +533,15 @@ struct SingleTaskBarView: View {
     }
     
     var body: some View {
-        let position = calculateTaskPosition()
         let showText = shouldShowText()
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: cellDate) // 1=週日, 7=週六
         let forceLeftRadius = (weekday == 1)  // 週日
         let forceRightRadius = (weekday == 7) // 週六
-        
+
         return TaskBarView(
             color: task.color,
-            showLeftRadius: position.isStart || forceLeftRadius,
-            showRightRadius: position.isEnd || forceRightRadius,
-            isSingle: (position.isStart && position.isEnd) || (forceLeftRadius && forceRightRadius),
+            showLeftRadius: isStart || forceLeftRadius,
+            showRightRadius: isEnd || forceRightRadius,
+            isSingle: (isStart && isEnd) || (forceLeftRadius && forceRightRadius),
             width: width
         ) {
             Group {
@@ -560,7 +557,6 @@ struct SingleTaskBarView: View {
         }
         .frame(maxWidth: width)
         .offset(y: CGFloat(rowIdx) * 18)
-        .transition(.opacity.combined(with: .scale))
     }
 }
 
@@ -616,12 +612,17 @@ struct CalendarMonthView: View {
     @State private var selectedDateId: String? = nil
     private let calendar = Calendar.current
     private let maxRows = 4 // 最大顯示行數
-    
+
+    // 緩存計算結果
+    @State private var cachedTasksData: (allTasks: [TodoTask], rowAssignments: [Date: [Int: TodoTask]]) = ([], [:])
+    @State private var cachedDateTasks: [Date: [TodoTask]] = [:] // 緩存每個日期的任務
+    @State private var lastTasksHash: Int = 0
+
     var body: some View {
         let cellHeight = (geometry.size.height - 25) / 6
-        
-        // 預先計算所有所需數據
-        let tasksData = prepareTasksData()
+
+        // 使用緩存的數據
+        let tasksData = cachedTasksData
         
         VStack(spacing: 0) {
             ForEach(0..<6) { rowIndex in
@@ -629,9 +630,9 @@ struct CalendarMonthView: View {
                     ForEach(0..<7) { columnIndex in
                         let dateText = calendarData[rowIndex][columnIndex]
                         let cellDate = getCellDate(row: rowIndex, column: columnIndex)
-                        
-                        // 獲取該天所有該顯示的任務
-                        let allTasksForThisDay: [TodoTask] = getTasksForDate(cellDate)
+
+                        // 從緩存中獲取該天所有該顯示的任務
+                        let allTasksForThisDay: [TodoTask] = cellDate.flatMap { cachedDateTasks[$0] } ?? []
                         
                         // 從分配結果中獲取當天的任務列表
                         let tasksToShowInCell: [TodoTask?] = cellDate.map { date in
@@ -665,30 +666,56 @@ struct CalendarMonthView: View {
             }
         }
         .frame(width: geometry.size.width, height: geometry.size.height - 25)
-        .drawingGroup()
+        .drawingGroup(opaque: false, colorMode: .nonLinear) // 啟用更高效的渲染
         .animation(nil, value: isDragging)
         .onAppear {
             eventPlacementManager.clearPositions()
+            updateCachedData()
+        }
+        .onChange(of: viewModel.tasks.count) { _ in
+            // 延遲更新，避免頻繁刷新
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                updateCachedData()
+            }
+        }
+        .onChange(of: monthDate) { _ in
+            updateCachedData()
+        }
+    }
+
+    // 更新緩存數據
+    private func updateCachedData() {
+        // 計算當前任務列表的哈希值
+        let currentHash = viewModel.tasks.map { $0.id }.joined().hashValue
+
+        // 只有在任務變化時才重新計算
+        if currentHash != lastTasksHash {
+            let (tasksData, dateTasks) = prepareTasksData()
+            cachedTasksData = tasksData
+            cachedDateTasks = dateTasks
+            lastTasksHash = currentHash
         }
     }
     
     // 輔助函數：準備所有任務數據
-    private func prepareTasksData() -> (allTasks: [TodoTask], rowAssignments: [Date: [Int: TodoTask]]) {
+    private func prepareTasksData() -> ((allTasks: [TodoTask], rowAssignments: [Date: [Int: TodoTask]]), [Date: [TodoTask]]) {
         // 獲取當月的日期範圍
         let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: monthDate))!
         let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart)!
         let daysInMonth = calendar.dateComponents([.day], from: monthStart, to: nextMonthStart).day!
-        
+
         // 收集所有任務（包括重複任務的實例）
         var allTasksForMonth: [TodoTask] = []
+        var dateTasks: [Date: [TodoTask]] = [:] // 緩存每個日期的任務
         // 使用 Set 追踪已添加的多日任務 ID，避免重複添加
         var addedMultiDayTaskIds = Set<String>()
-        
+
         // 為當月每一天收集任務
         for day in 0..<daysInMonth {
             if let date = calendar.date(byAdding: .day, value: day, to: monthStart) {
                 let tasksForDate = getTasksForDate(date)
-                
+                dateTasks[date] = tasksForDate // 緩存該日期的任務
+
                 for task in tasksForDate {
                     // 對於跨多天的任務，使用 ID 去重
                     if !task.startDate.isSameDay(as: task.endDate) {
@@ -704,55 +731,46 @@ struct CalendarMonthView: View {
                 }
             }
         }
-        
+
         // 分配任務行
         let rowAssignments = assignRowsForMonth(allTasks: allTasksForMonth)
-        
-        return (allTasksForMonth, rowAssignments)
+
+        return ((allTasksForMonth, rowAssignments), dateTasks)
     }
     
-    // 輔助函數：獲取指定日期的所有任務
+    // 輔助函數：獲取指定日期的所有任務（優化版）
     private func getTasksForDate(_ date: Date?) -> [TodoTask] {
         guard let date = date else { return [] }
-        
+
         let tasksForDate = viewModel.tasksForDate(date)
         var tasksToShow: [TodoTask] = []
-        
+        tasksToShow.reserveCapacity(tasksForDate.count) // 預先分配容量
+
         for task in tasksForDate {
             if task.repeatType == .none {
                 tasksToShow.append(task)
             } else {
-                // 獲取當前日期的實例
-                let instances = viewModel.getInstancesForDate(date, task: task)
-                
-                // 即使沒有當前日期的實例，也檢查是否有已完成的實例
-                var foundInstance = false
-                
-                // 檢查所有實例，查找匹配當前日期的實例
-                for instance in task.instances {
-                    if Calendar.current.isDate(instance.date, inSameDayAs: date) {
-                        var instanceTask = task
-                        instanceTask.startDate = instance.date
-                        instanceTask.endDate = instance.date
-                        instanceTask.isCompleted = instance.isCompleted
-                        tasksToShow.append(instanceTask)
-                        foundInstance = true
-                        break
-                    }
-                }
-                
-                // 如果沒有找到實例但根據當前的重複模式應該顯示
-                if !foundInstance && !instances.isEmpty {
-                    let instance = instances.first!
+                // 直接在實例數組中查找匹配的日期
+                if let matchingInstance = task.instances.first(where: { Calendar.current.isDate($0.date, inSameDayAs: date) }) {
                     var instanceTask = task
-                    instanceTask.startDate = instance.date
-                    instanceTask.endDate = instance.date
-                    instanceTask.isCompleted = instance.isCompleted
+                    instanceTask.startDate = matchingInstance.date
+                    instanceTask.endDate = matchingInstance.date
+                    instanceTask.isCompleted = matchingInstance.isCompleted
                     tasksToShow.append(instanceTask)
+                } else {
+                    // 如果沒有找到實例，嘗試生成
+                    let instances = viewModel.getInstancesForDate(date, task: task)
+                    if let firstInstance = instances.first {
+                        var instanceTask = task
+                        instanceTask.startDate = firstInstance.date
+                        instanceTask.endDate = firstInstance.date
+                        instanceTask.isCompleted = firstInstance.isCompleted
+                        tasksToShow.append(instanceTask)
+                    }
                 }
             }
         }
-        
+
         return tasksToShow
     }
     
@@ -773,55 +791,69 @@ struct CalendarMonthView: View {
         return calendar.date(from: dateComponents)
     }
     
-    // 將任務分配邏輯移至此處
+    // 將任務分配邏輯移至此處（優化版）
     func assignRowsForMonth(allTasks: [TodoTask]) -> [Date: [Int: TodoTask]] {
         var rowUsage: [Date: [Int: TodoTask]] = [:]
-        var taskRowAssignment: [String: Int] = [:]
         let calendar = Calendar.current
 
-        // 1. 先分配跨天任務
-        let multiDayTasks = allTasks
-            .filter { !$0.startDate.isSameDay(as: $0.endDate) }
-            .sorted { $0.startDate < $1.startDate }
+        // 分離跨天和單日任務
+        var multiDayTasks: [TodoTask] = []
+        var singleDayTasks: [TodoTask] = []
+        multiDayTasks.reserveCapacity(allTasks.count / 4) // 預估容量
+        singleDayTasks.reserveCapacity(allTasks.count)
+
+        for task in allTasks {
+            if task.startDate.isSameDay(as: task.endDate) {
+                singleDayTasks.append(task)
+            } else {
+                multiDayTasks.append(task)
+            }
+        }
+
+        // 1. 先分配跨天任務（按開始日期排序）
+        multiDayTasks.sort { $0.startDate < $1.startDate }
 
         for task in multiDayTasks {
             let start = calendar.startOfDay(for: task.startDate)
             let end = calendar.startOfDay(for: task.endDate)
             let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
-            let datesSpanned = (0...days).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
 
-            // 找一個 row，這個 row 在所有日期都沒被佔用
+            // 找一個可用的 row
             var assignedRow: Int? = nil
             rowLoop: for row in 0..<maxRows {
-                for date in datesSpanned {
-                    if rowUsage[date]?[row] != nil {
+                // 檢查這個 row 在所有跨越的日期是否都可用
+                for dayOffset in 0...days {
+                    if let date = calendar.date(byAdding: .day, value: dayOffset, to: start),
+                       rowUsage[date]?[row] != nil {
                         continue rowLoop
                     }
                 }
                 assignedRow = row
                 break
             }
+
+            // 分配到找到的 row
             if let row = assignedRow {
-                taskRowAssignment[task.id] = row
-                for date in datesSpanned {
-                    if rowUsage[date] == nil { rowUsage[date] = [:] }
-                    rowUsage[date]![row] = task
+                for dayOffset in 0...days {
+                    if let date = calendar.date(byAdding: .day, value: dayOffset, to: start) {
+                        if rowUsage[date] == nil { rowUsage[date] = [:] }
+                        rowUsage[date]![row] = task
+                    }
                 }
             }
         }
 
-        // 2. 再分配單日任務
-        let singleDayTasks = allTasks
-            .filter { $0.startDate.isSameDay(as: $0.endDate) }
-            .sorted { t1, t2 in
-                if t1.startDate == t2.startDate {
-                    return t1.durationInMinutes > t2.durationInMinutes
-                }
-                return t1.startDate < t2.startDate
+        // 2. 再分配單日任務（按開始時間和持續時間排序）
+        singleDayTasks.sort { t1, t2 in
+            if t1.startDate == t2.startDate {
+                return t1.durationInMinutes > t2.durationInMinutes
             }
+            return t1.startDate < t2.startDate
+        }
 
         for task in singleDayTasks {
             let date = calendar.startOfDay(for: task.startDate)
+            // 找第一個可用的 row
             for row in 0..<maxRows {
                 if rowUsage[date]?[row] == nil {
                     if rowUsage[date] == nil { rowUsage[date] = [:] }

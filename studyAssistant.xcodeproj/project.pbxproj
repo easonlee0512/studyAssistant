@@ -11,6 +11,7 @@
 		9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03B82D8BFD4F001CF344 /* FirebaseAuthCombine-Community */; };
 		9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BA2D8BFD4F001CF344 /* FirebaseDatabase */; };
 		9B2C03BD2D8C05CE001CF344 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2C03BC2D8C05CE001CF344 /* FirebaseFirestore */; };
+		9B34B8D32EAC8A81004EB7F6 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 9B34B8D22EAC8A81004EB7F6 /* FirebaseFunctions */; };
 		9B366A2E2DCA2CCA00CCA59B /* TodoEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B366A2D2DCA2CBC00CCA59B /* TodoEditView.swift */; };
 		9B499B792DC25F7700DD115C /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B782DC25F7700DD115C /* TimerView.swift */; };
 		9B499B7B2DC25F8400DD115C /* TimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499B7A2DC25F8400DD115C /* TimerManager.swift */; };
@@ -136,6 +137,7 @@
 				E82F5D002D8B76C80016DF22 /* Alamofire in Frameworks */,
 				9B2C03B92D8BFD4F001CF344 /* FirebaseAuthCombine-Community in Frameworks */,
 				9BD7A9942DC5037400B3FF29 /* GoogleSignInSwift in Frameworks */,
+				9B34B8D32EAC8A81004EB7F6 /* FirebaseFunctions in Frameworks */,
 				9B2C03BB2D8BFD4F001CF344 /* FirebaseDatabase in Frameworks */,
 				9B2C03BD2D8C05CE001CF344 /* FirebaseFirestore in Frameworks */,
 				9B2C03B72D8BFD4F001CF344 /* FirebaseAuth in Frameworks */,
@@ -320,6 +322,7 @@
 				9B2C03BC2D8C05CE001CF344 /* FirebaseFirestore */,
 				9BD7A9912DC5037400B3FF29 /* GoogleSignIn */,
 				9BD7A9932DC5037400B3FF29 /* GoogleSignInSwift */,
+				9B34B8D22EAC8A81004EB7F6 /* FirebaseFunctions */,
 			);
 			productName = studyAssistant;
 			productReference = 9BC153402D78771600FCA465 /* studyAssistant.app */;
@@ -652,7 +655,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = R7AMURTY34;
+				DEVELOPMENT_TEAM = BG572Z68DC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
@@ -691,7 +694,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"studyAssistant/Preview Content\"";
-				DEVELOPMENT_TEAM = R7AMURTY34;
+				DEVELOPMENT_TEAM = BG572Z68DC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = studyAssistant/Info.plist;
@@ -876,6 +879,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		9B34B8D22EAC8A81004EB7F6 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9B2C03B52D8BFD4F001CF344 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 		9B6D68FE2DC3D06900D0A3A8 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;

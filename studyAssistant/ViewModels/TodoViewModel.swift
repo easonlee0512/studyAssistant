@@ -45,10 +45,7 @@ class TodoViewModel: ObservableObject {
     
     // 重複選項
     let repeatOptions = ["不重複", "每天", "每週", "每月"]
-    
-    // 添加一個標記來記錄是否已經嘗試過遷移
-    private var hasMigrationAttempted = false
-    
+
     // 添加一個變數來記錄上次載入時間
     private var lastTasksLoadTime: Date? = nil
     // 添加一個變數來設定快取時間（秒）
@@ -76,15 +73,15 @@ class TodoViewModel: ObservableObject {
                 print("Error loading tasks: \(error)")
             }
         }
-        
+
         // 設置通知監聽
         setupNotificationObserver()
-        
+
         // 監聽 Auth 狀態
         setupAuthListener()
-        
-        // 設置 Firestore 實時監聽
-        setupFirestoreListener()
+
+        // 注意：不再使用 Firestore 實時監聽，因為數據現在由 Cloud Functions 管理
+        // 改用手動刷新的方式
     }
     
     deinit {
@@ -124,68 +121,35 @@ class TodoViewModel: ObservableObject {
                 if user != nil {
                     // 使用者登入，重新載入資料
                     try? await self?.loadTasks()
-                    // 設置 Firestore 監聽
-                    self?.setupFirestoreListener()
                 } else {
                     // 使用者登出，清空資料
                     self?.tasks = []
                     self?.hasLoadedInitialTasks = false
-                    // 移除 Firestore 監聽
-                    self?.tasksListener?.remove()
                 }
-                
+
                 // 發送使用者驗證狀態改變通知
                 NotificationCenter.default.post(name: .userAuthDidChange, object: nil)
             }
         }
     }
     
-    // 設置 Firestore 實時監聽
+    // 已停用：不再使用 Firestore 實時監聽，因為數據現在由 Cloud Functions 管理
+    // Cloud Functions 會在服務端處理數據變更，客戶端通過手動刷新或定期輪詢獲取最新數據
     private func setupFirestoreListener() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        
-        // 移除舊的監聽器
-        tasksListener?.remove()
-        
-        // 設置新的監聽器
-        tasksListener = firebaseService.db.collection("tasks")
-            .document(userId)
-            .collection("userTasks")
-            .addSnapshotListener { [weak self] (snapshot: QuerySnapshot?, error: Error?) in
-                guard let self = self else { return }
-                
-                if let error = error {
-                    print("Error listening for task updates: \(error)")
-                    return
-                }
-                
-                guard let snapshot = snapshot else { return }
-                
-                // 檢查是否有變化
-                let changes = snapshot.documentChanges
-                if !changes.isEmpty {
-                    print("檢測到任務更新，共 \(changes.count) 個變化")
-                    
-                    Task {
-                        do {
-                            // 直接重新載入所有任務
-                            try await self.forceReloadTasks()
-                            
-                            // 發送資料變更通知
-                            NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
-                        } catch {
-                            print("Error reloading tasks: \(error)")
-                        }
-                    }
-                }
-            }
+        // 已停用此功能
+        // 原因：使用 Cloud Functions 後，直接監聽 Firestore 會導致：
+        // 1. 監聽路徑不匹配（Cloud Functions 管理的數據結構可能不同）
+        // 2. 造成不必要的雙重載入
+        // 3. 增加網絡開銷
     }
     
     // 處理資料變更通知
     @objc private func handleDataChange() {
+        // 注意：現在使用 Cloud Functions，數據變更後需要手動重新載入
+        // 使用 forceReloadTasks 來忽略快取
         Task {
             do {
-                try await loadTasks()
+                try await forceReloadTasks()
             } catch {
                 print("Error reloading tasks from notification: \(error)")
             }
@@ -325,31 +289,15 @@ class TodoViewModel: ObservableObject {
         
         isLoadingTasks = true
         defer { isLoadingTasks = false }
-        
+
         isLoading = true
         defer { isLoading = false }
-        
-        // 只在第一次載入時嘗試進行數據遷移
-        if !hasMigrationAttempted {
-            do {
-                try await firebaseService.migrateTasksToUserCollection()
-                hasMigrationAttempted = true
-            } catch {
-                print("任務遷移錯誤（可能已經遷移完成）: \(error.localizedDescription)")
-                hasMigrationAttempted = true
-            }
-        }
-        
+
         // 載入任務
         tasks = try await firebaseService.fetchTodoTasks()
         lastTasksLoadTime = now
         print("從Firebase重新載入任務數據")
         hasLoadedInitialTasks = true
-        
-        // 設置監聽器（如果還沒有設置）
-        if tasksListener == nil {
-            setupFirestoreListener()
-        }
     }
     
     // 強制重新載入任務（忽略快取）
@@ -397,41 +345,40 @@ class TodoViewModel: ObservableObject {
     func addTask(_ task: TodoTask) async {
         isLoading = true
         errorMessage = nil
-        
+
         // 確保已經登入
         guard let currentUserId = Auth.auth().currentUser?.uid else {
             errorMessage = "請先登入再新增任務"
             isLoading = false
             return
         }
-        
+
         do {
             // 確保任務有使用者 ID
             var updatedTask = task
             updatedTask.userId = currentUserId
-            
+
             // 如果是重複任務，設定 repeatEndDate
             if updatedTask.repeatType != .none {
                 updatedTask.repeatEndDate = newTaskRepeatEndDate
             }
-            
+
             try await firebaseService.saveTodoTask(updatedTask)
-            
-            // 重新加載任務列表以獲取最新數據
-            try await loadTasks()
-            
-            // 發送資料變更通知
-            postDataChangeNotification()
-            
+
             // 清空錯誤訊息
             errorMessage = nil
+
+            // 結束 loading 狀態，確保 isLoadingTasks 可以重置
+            isLoading = false
+
+            // 強制重新載入任務以確保新任務顯示
+            try await forceReloadTasks()
         } catch {
             // 設置錯誤訊息
             errorMessage = "儲存任務失敗: \(error.localizedDescription)"
             print("Error adding task: \(error)")
+            isLoading = false
         }
-        
-        isLoading = false
     }
     
     func toggleTaskCompletion(_ task: TodoTask) async {

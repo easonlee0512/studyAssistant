@@ -247,17 +247,18 @@ struct ChatDemoDynamicView: View {
                                                  to: nil, from: nil, for: nil)
                 }
 
-            ZStack(alignment: .top) {
-                messageList
+            VStack(spacing: 0) {
+                // 標題欄固定在最上方
+                header
+                    .zIndex(2) // 確保標題欄在最上層
 
-                VStack(spacing: 0) {
-                    header
-                    Spacer()
-                }
+                // 訊息列表和輸入框區域
+                ZStack(alignment: .bottom) {
+                    messageList
+                        .zIndex(0)
 
-                VStack(spacing: 0) {
-                    Spacer()
                     inputBar
+                        .zIndex(1)
                 }
             }
             .contentShape(Rectangle())
@@ -785,7 +786,7 @@ struct ChatDemoDynamicView: View {
                             }
                         }
                     }
-                    .padding(.top, 70) // 頂部空間，讓訊息可以滾動到 header 下方
+                    .padding(.top, 16) // 減少頂部空間，因為 header 已經獨立了
                     .padding(.bottom, 100) // 固定底部空間
                     .id("messageBottom")  // 添加一個 ID 用於滾動
                     .background(
@@ -804,8 +805,7 @@ struct ChatDemoDynamicView: View {
                     isAtBottom = offset >= -threshold
                 }
             }
-            .offset(y: isAtBottom ? -max(viewModel.keyboardHeight - tabBarHeight, 0) : 0)
-            .animation(.easeOut(duration: 0.2), value: viewModel.keyboardHeight)
+            // 移除 offset 調整，讓訊息列表保持固定，不隨鍵盤移動
             .onChange(of: expandedTaskMessages) { newValue in
                 // 找到最後一個展開/收起的消息
                 if let lastChangedMessageId = viewModel.chatRooms[viewModel.selectedRoomIndex].messages

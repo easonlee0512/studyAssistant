@@ -109,7 +109,32 @@ struct studyAssistantApp: App {
     // 初始化 Firebase
     init() {
         FirebaseApp.configure()
-        
+
+        // 設置 TabBar 外觀 - 使用項目的橘色調
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+
+        // 設置背景色為淺橘色
+        appearance.backgroundColor = UIColor(red: 0.95, green: 0.83, blue: 0.72, alpha: 1.0) // #F3D4B7
+
+        // 設置選中狀態的圖標顏色為深橘色
+        let selectedColor = UIColor(red: 0.89, green: 0.47, blue: 0.27, alpha: 1.0) // #E27844
+        appearance.stackedLayoutAppearance.selected.iconColor = selectedColor
+        appearance.inlineLayoutAppearance.selected.iconColor = selectedColor
+        appearance.compactInlineLayoutAppearance.selected.iconColor = selectedColor
+
+        // 設置未選中狀態的圖標顏色
+        let normalColor = UIColor.black.withAlphaComponent(0.5)
+        appearance.stackedLayoutAppearance.normal.iconColor = normalColor
+        appearance.inlineLayoutAppearance.normal.iconColor = normalColor
+        appearance.compactInlineLayoutAppearance.normal.iconColor = normalColor
+
+        // 應用外觀設置
+        UITabBar.appearance().standardAppearance = appearance
+        if #available(iOS 15.0, *) {
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
+
         // 嘗試恢復先前的 Google 登入會話
         GIDSignIn.sharedInstance.restorePreviousSignIn { user, error in
             if let error = error {
@@ -150,14 +175,6 @@ struct studyAssistantApp: App {
                     .environmentObject(chatViewModel)
                     .environmentObject(calendarAssistantViewModel)
                     .task {
-                        // 首先嘗試遷移舊數據
-                        do {
-                            let firebaseService = FirebaseService.shared
-                            try await firebaseService.migrateTasksToUserCollection()
-                        } catch {
-                            print("任務遷移錯誤: \(error)")
-                        }
-                        
                         // 載入初始資料
                         do {
                             try await todoViewModel.loadTasks()

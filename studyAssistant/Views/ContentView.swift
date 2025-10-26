@@ -6,6 +6,8 @@ struct ContentView: View {
     @EnvironmentObject var timerManager: TimerManager
     @EnvironmentObject var chatViewModel: ChatViewModel
     @State private var selectedTab = 0
+    @State private var previousTab = 0  // 追蹤上一個選中的 tab
+    @State private var isAnimating = false  // 防止動畫期間重複點擊
     // 假設有一個共享的待辦事項數據
     @State private var todos: [Date: [(task: String, isCompleted: Bool)]] = [:]
 
@@ -66,6 +68,7 @@ struct ContentView: View {
                             .safeAreaInset(edge: .bottom) {
                                 Color.clear.frame(height: 0)
                             }
+                            .transition(slideTransition(isMovingRight: selectedTab > previousTab))
                     }
                     else if selectedTab == 1 {
                         CalendarView()
@@ -73,12 +76,14 @@ struct ContentView: View {
                             .safeAreaInset(edge: .bottom) {
                                 Color.clear.frame(height: 100)
                             }
+                            .transition(slideTransition(isMovingRight: selectedTab > previousTab))
                     }
                     else if selectedTab == 2 {
                         ChatDemoDynamicView()
                             .safeAreaInset(edge: .bottom) {
                                 Color.clear.frame(height: 72)
                             }
+                            .transition(slideTransition(isMovingRight: selectedTab > previousTab))
                     }
                     else if selectedTab == 3 {
                         TimerView()
@@ -86,6 +91,7 @@ struct ContentView: View {
                             .safeAreaInset(edge: .bottom) {
                                 Color.clear.frame(height: 100)
                             }
+                            .transition(slideTransition(isMovingRight: selectedTab > previousTab))
                     }
                     else if selectedTab == 4 {
                         SettingsView(todos: todos)
@@ -93,6 +99,7 @@ struct ContentView: View {
                             .safeAreaInset(edge: .bottom) {
                                 Color.clear.frame(height: 100)
                             }
+                            .transition(slideTransition(isMovingRight: selectedTab > previousTab))
                     }
                 }
                 .ignoresSafeArea(edges: .bottom) // 內容延伸到底部
@@ -100,7 +107,7 @@ struct ContentView: View {
                 // 底部导航栏 - 浮動在內容最上層，完全忽略系統安全區域
                 VStack(spacing: 0) {
                     Spacer()
-                    TabBarNew(selectedTab: $selectedTab)
+                    TabBarNew(selectedTab: $selectedTab, previousTab: $previousTab, isAnimating: $isAnimating)
                 }
                 .ignoresSafeArea(.all, edges: .bottom) // 完全忽略底部所有安全區域
             }
@@ -110,12 +117,48 @@ struct ContentView: View {
             }
         }
     }
+
+    // 計算滑動轉場效果
+    private func slideTransition(isMovingRight: Bool) -> AnyTransition {
+        // 加快動畫速度 + 減少回彈：dampingFraction 0.9 = 只有 10% 回彈
+        let animation = Animation.spring(response: 0.3, dampingFraction: 0.9)
+
+        // 往右切換：新頁面從右滑入，舊頁面往左滑出（同向移動，都往左 ←）
+        // 往左切換：新頁面從左滑入，舊頁面往右滑出（同向移動，都往右 →）
+        let insertion: AnyTransition = isMovingRight ? .move(edge: .trailing) : .move(edge: .leading)
+        let removal: AnyTransition = isMovingRight ? .move(edge: .leading) : .move(edge: .trailing)
+
+        return .asymmetric(insertion: insertion, removal: removal)
+            .animation(animation)
+    }
 }
 
 // 自定义TabBar - 从testSettingView.swift中复制的TabBarNew组件
 struct TabBarNew: View {
     @Binding var selectedTab: Int
+    @Binding var previousTab: Int
+    @Binding var isAnimating: Bool
     @Namespace private var animation
+
+    // 切換 tab 的輔助函數，防止動畫期間重複點擊
+    private func switchTab(to newTab: Int) {
+        // 如果已經是當前 tab 或正在動畫中，忽略點擊
+        guard newTab != selectedTab && !isAnimating else { return }
+
+        // 設置動畫狀態
+        isAnimating = true
+        previousTab = selectedTab
+
+        // 執行切換動畫（更快的速度 + 減少回彈）
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+            selectedTab = newTab
+        }
+
+        // 動畫結束後重置狀態（300ms 後）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            isAnimating = false
+        }
+    }
 
     var body: some View {
         // Liquid Glass 圓角形狀 - 四周都是圓角
@@ -143,37 +186,27 @@ struct TabBarNew: View {
 
                 HStack(spacing: 0) {
                     TabButtonNew(icon: "home_icon", isSelected: selectedTab == 0) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            selectedTab = 0
-                        }
+                        switchTab(to: 0)
                     }
                     .frame(width: tabWidth, height: 60)
 
                     TabButtonNew(icon: "calendar_icon", isSelected: selectedTab == 1) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            selectedTab = 1
-                        }
+                        switchTab(to: 1)
                     }
                     .frame(width: tabWidth, height: 60)
 
                     TabButtonNew(icon: "chat_icon", isSelected: selectedTab == 2) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            selectedTab = 2
-                        }
+                        switchTab(to: 2)
                     }
                     .frame(width: tabWidth, height: 60)
 
                     TabButtonNew(icon: "timer_icon", isSelected: selectedTab == 3) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            selectedTab = 3
-                        }
+                        switchTab(to: 3)
                     }
                     .frame(width: tabWidth, height: 60)
 
                     TabButtonNew(icon: "settings_icon", isSelected: selectedTab == 4) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            selectedTab = 4
-                        }
+                        switchTab(to: 4)
                     }
                     .frame(width: tabWidth, height: 60)
                 }
