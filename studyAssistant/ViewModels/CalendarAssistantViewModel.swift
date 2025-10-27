@@ -8,6 +8,7 @@
 
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import Foundation
 import SwiftUI
 
@@ -17,6 +18,7 @@ final class CalendarAssistantViewModel: ObservableObject {
     static let shared = CalendarAssistantViewModel()
 
     private let proxyURL = URL(string: "https://asia-east1-studyassistant-f7172.cloudfunctions.net/chatProxy")!
+    private let functions = Functions.functions(region: "asia-east1")
 
     @Published var staticViewModel: StaticViewModel?
     @Published var todoViewModel: TodoViewModel?
@@ -412,7 +414,7 @@ final class CalendarAssistantViewModel: ObservableObject {
         var successCount = 0
         var failureCount = 0
 
-        // 1. 撤回新增的任務（刪除它們）
+        // 1. 撤回新增的任務（刪除它們）- 使用 Cloud Functions
         for pendingTask in lastAddedTasks {
             // 透過標題、開始時間、結束時間找到對應的任務
             if let taskToDelete = todoViewModel?.tasks.first(where: {
@@ -421,7 +423,17 @@ final class CalendarAssistantViewModel: ObservableObject {
                 $0.endDate == pendingTask.endDate
             }) {
                 do {
-                    try await todoViewModel?.deleteTask(taskToDelete)
+                    let result = try await functions.httpsCallable("deleteTask").call([
+                        "taskId": taskToDelete.id
+                    ])
+
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "CalendarAssistant", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "刪除任務失敗"])
+                    }
+
                     successCount += 1
                     print("  ✅ 已刪除先前新增的任務：\(taskToDelete.title)")
                 } catch {
@@ -431,29 +443,47 @@ final class CalendarAssistantViewModel: ObservableObject {
             }
         }
 
-        // 2. 撤回刪除的任務（重新添加它們）
+        // 2. 撤回刪除的任務（重新添加它們）- 使用 Cloud Functions
         for deletedTask in lastDeletedTasks {
-            // 重新創建任務
-            let restoredTask = TodoTask(
-                title: deletedTask.title,
-                note: deletedTask.note,
-                color: deletedTask.color,
-                focusTime: deletedTask.focusTime,
-                category: deletedTask.category,
-                isAllDay: deletedTask.isAllDay,
-                isCompleted: deletedTask.isCompleted,
-                repeatType: deletedTask.repeatType,
-                startDate: deletedTask.startDate,
-                endDate: deletedTask.endDate,
-                userId: deletedTask.userId
-            )
+            do {
+                // 重新創建任務
+                let restoredTask = TodoTask(
+                    title: deletedTask.title,
+                    note: deletedTask.note,
+                    color: deletedTask.color,
+                    focusTime: deletedTask.focusTime,
+                    category: deletedTask.category,
+                    isAllDay: deletedTask.isAllDay,
+                    isCompleted: deletedTask.isCompleted,
+                    repeatType: deletedTask.repeatType,
+                    startDate: deletedTask.startDate,
+                    endDate: deletedTask.endDate,
+                    userId: deletedTask.userId
+                )
 
-            await todoViewModel?.addTask(restoredTask)
-            successCount += 1
-            print("  ✅ 已恢復先前刪除的任務：\(restoredTask.title)")
+                var taskData = restoredTask.toFirestore
+                let convertedData = convertTimestampsToStrings(taskData)
+
+                let result = try await functions.httpsCallable("createTask").call([
+                    "task": convertedData
+                ])
+
+                guard let data = result.data as? [String: Any],
+                      let success = data["success"] as? Bool,
+                      success else {
+                    throw NSError(domain: "CalendarAssistant", code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "創建任務失敗"])
+                }
+
+                successCount += 1
+                print("  ✅ 已恢復先前刪除的任務：\(restoredTask.title)")
+            } catch {
+                failureCount += 1
+                print("  ❌ 恢復任務失敗：\(error)")
+            }
         }
 
-        // 3. 撤回修改的任務（恢復到原始狀態）
+        // 3. 撤回修改的任務（恢復到原始狀態）- 使用 Cloud Functions
         for (original, _) in lastUpdatedTasks {
             // 找到當前的任務
             if let currentTask = todoViewModel?.tasks.first(where: { $0.id == original.id }) {
@@ -469,7 +499,21 @@ final class CalendarAssistantViewModel: ObservableObject {
                     restoredTask.isCompleted = original.isCompleted
                     restoredTask.color = original.color
 
-                    try await todoViewModel?.updateTask(restoredTask)
+                    var taskData = restoredTask.toFirestore
+                    let convertedData = convertTimestampsToStrings(taskData)
+
+                    let result = try await functions.httpsCallable("updateTask").call([
+                        "taskId": original.id,
+                        "task": convertedData
+                    ])
+
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "CalendarAssistant", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "更新任務失敗"])
+                    }
+
                     successCount += 1
                     print("  ✅ 已恢復任務的原始狀態：\(restoredTask.title)")
                 } catch {
@@ -482,6 +526,15 @@ final class CalendarAssistantViewModel: ObservableObject {
         print(String(repeating: "=", count: 80))
         print("📊 撤回結果：成功 \(successCount) 個，失敗 \(failureCount) 個")
         print(String(repeating: "=", count: 80) + "\n")
+
+        // 如果有成功的撤回操作，重新整理任務清單
+        if successCount > 0 {
+            do {
+                try await todoViewModel?.forceReloadTasks()
+            } catch {
+                print("⚠️ 重新整理任務清單失敗: \(error)")
+            }
+        }
 
         if failureCount > 0 {
             currentStatus = "撤回完成，但有 \(failureCount) 個操作失敗"
@@ -946,7 +999,7 @@ final class CalendarAssistantViewModel: ObservableObject {
                 // 檢查並建立類別統計
                 await checkAndCreateStatisticsForCategory(task.resolvedCategory)
 
-                // 直接儲存任務
+                // 使用 Cloud Functions 儲存任務
                 do {
                     let todoTask = TodoTask(
                         title: task.title,
@@ -962,7 +1015,22 @@ final class CalendarAssistantViewModel: ObservableObject {
                         userId: ""
                     )
 
-                    await todoViewModel?.addTask(todoTask)
+                    // 準備任務資料並轉換為 JSON 可序列化格式
+                    var taskData = todoTask.toFirestore
+                    let convertedData = convertTimestampsToStrings(taskData)
+
+                    // 呼叫 Cloud Functions createTask
+                    let result = try await functions.httpsCallable("createTask").call([
+                        "task": convertedData
+                    ])
+
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "CalendarAssistant", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "創建任務失敗"])
+                    }
 
                     // 立即更新追蹤列表並觸發 UI 更新
                     await MainActor.run {
@@ -978,7 +1046,13 @@ final class CalendarAssistantViewModel: ObservableObject {
                 }
             }
 
+            // 如果有成功新增的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel?.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功新增 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務新增失敗" : "")
             } else {
                 return "任務新增失敗"
@@ -1002,38 +1076,58 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             let args = try JSONDecoder().decode(DeleteTaskArgs.self, from: jsonData)
             var tasksToDelete: [TodoTask] = []
-            let allTasks = todoViewModel?.tasks ?? []
             var successCount = 0
             var failureCount = 0
 
             for taskId in args.taskIds {
-                if let task = allTasks.first(where: { $0.id == taskId }) {
-                    tasksToDelete.append(task)
-                    do {
-                        try await todoViewModel?.deleteTask(task)
+                // 直接呼叫 Cloud Functions 刪除任務
+                do {
+                    let result = try await functions.httpsCallable("deleteTask").call([
+                        "taskId": taskId
+                    ])
 
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        print("    ❌ Cloud Functions 刪除任務失敗: taskId = \(taskId)")
+                        failureCount += 1
+                        continue
+                    }
+
+                    successCount += 1
+
+                    // 嘗試從本地快取中獲取任務資訊（用於顯示），但不強制要求
+                    if let task = todoViewModel?.tasks.first(where: { $0.id == taskId }) {
+                        tasksToDelete.append(task)
                         // 立即更新狀態
                         await MainActor.run {
                             self.deletedTasks.append(task)
                             self.updateCurrentStatus()
                         }
-
-                        successCount += 1
                         print("    ✅ 已刪除任務：\(task.title)")
-                    } catch {
-                        print("    ❌ 刪除任務失敗: \(error)")
-                        failureCount += 1
+                    } else {
+                        print("    ✅ 已刪除任務：taskId = \(taskId)")
                     }
+                } catch {
+                    print("    ❌ 刪除任務失敗: taskId = \(taskId), error = \(error)")
+                    failureCount += 1
                 }
             }
 
-            if tasksToDelete.isEmpty {
-                return "找不到指定的任務"
+            if successCount == 0 {
+                return "任務刪除失敗" + (failureCount > 0 ? "（共 \(failureCount) 個任務）" : "")
             }
 
             // 注意：已在上面的迴圈中即時更新 deletedTasks，這裡不需要重複添加
 
+            // 如果有成功刪除的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel?.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功刪除 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務刪除失敗" : "")
             } else {
                 return "任務刪除失敗"
@@ -1072,12 +1166,27 @@ final class CalendarAssistantViewModel: ObservableObject {
                 return "成功更新，目前尚無任務需要更新"
             }
 
-            let allTasks = todoViewModel?.tasks ?? []
             var successCount = 0
             var failureCount = 0
 
             for taskArg in args.tasks {
-                guard let originalTask = allTasks.first(where: { $0.id == taskArg.taskId }) else {
+                // 先從本地快取查找原任務
+                var originalTask = todoViewModel?.tasks.first(where: { $0.id == taskArg.taskId })
+
+                // 如果本地快取找不到，嘗試從 Firebase 重新載入
+                if originalTask == nil {
+                    print("本地快取找不到任務 \(taskArg.taskId)，從 Firebase 重新載入")
+                    do {
+                        let firebaseService = FirebaseService.shared
+                        let allTasks = try await firebaseService.fetchTodoTasks()
+                        originalTask = allTasks.first(where: { $0.id == taskArg.taskId })
+                    } catch {
+                        print("從 Firebase 載入任務失敗: \(error)")
+                    }
+                }
+
+                // 如果還是找不到任務，跳過
+                guard let originalTask = originalTask else {
                     print("找不到 ID 為 \(taskArg.taskId) 的任務")
                     failureCount += 1
                     continue
@@ -1107,7 +1216,23 @@ final class CalendarAssistantViewModel: ObservableObject {
                     updatedTodoTask.isCompleted = updatedTask.isCompleted
                     updatedTodoTask.color = updatedTask.color
 
-                    try await todoViewModel?.updateTask(updatedTodoTask)
+                    // 準備任務資料並轉換為 JSON 可序列化格式
+                    var taskData = updatedTodoTask.toFirestore
+                    let convertedData = convertTimestampsToStrings(taskData)
+
+                    // 使用 Cloud Functions 更新任務
+                    let result = try await functions.httpsCallable("updateTask").call([
+                        "taskId": taskArg.taskId,
+                        "updates": convertedData
+                    ])
+
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "CalendarAssistant", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "更新任務失敗"])
+                    }
 
                     // 立即更新狀態
                     await MainActor.run {
@@ -1123,7 +1248,13 @@ final class CalendarAssistantViewModel: ObservableObject {
                 }
             }
 
+            // 如果有成功更新的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel?.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功更新 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務更新失敗" : "")
             } else {
                 return "任務更新失敗"
@@ -1135,6 +1266,57 @@ final class CalendarAssistantViewModel: ObservableObject {
     }
 
     // MARK: - Helper Methods
+
+    /// 將 Firestore Timestamp 轉換為 ISO 8601 字串（用於 Cloud Functions）
+    private func convertTimestampsToStrings(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        for (key, value) in data {
+            if let timestamp = value as? Timestamp {
+                result[key] = dateFormatter.string(from: timestamp.dateValue())
+            } else if let dict = value as? [String: Any] {
+                result[key] = convertTimestampsToStrings(dict)
+            } else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertTimestampsToStrings($0) }
+            }
+        }
+
+        return result
+    }
+
+    /// 將 Cloud Functions 返回的日期數據轉換為 Timestamp 對象
+    private func convertToTimestamps(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+
+        for (key, value) in data {
+            // 檢查是否是 Firestore Timestamp 的序列化格式 {_seconds: ..., _nanoseconds: ...}
+            if let dict = value as? [String: Any],
+               let seconds = dict["_seconds"] as? Int64 ?? dict["_seconds"] as? Int as? Int64,
+               let nanoseconds = dict["_nanoseconds"] as? Int32 ?? dict["_nanoseconds"] as? Int as? Int32 {
+                result[key] = Timestamp(seconds: seconds, nanoseconds: nanoseconds)
+            }
+            // 檢查是否是 ISO 8601 字符串
+            else if let dateString = value as? String {
+                let dateFormatter = ISO8601DateFormatter()
+                dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = dateFormatter.date(from: dateString) {
+                    result[key] = Timestamp(date: date)
+                }
+            }
+            // 遞歸處理嵌套字典
+            else if let dict = value as? [String: Any] {
+                result[key] = convertToTimestamps(dict)
+            }
+            // 遞歸處理數組
+            else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertToTimestamps($0) }
+            }
+        }
+
+        return result
+    }
 
     /// 更新當前狀態顯示
     private func updateCurrentStatus() {
@@ -1165,14 +1347,32 @@ final class CalendarAssistantViewModel: ObservableObject {
     private func parseDate(_ dateString: String?) -> Date? {
         guard let dateString = dateString else { return nil }
 
+        // 優先使用 ISO8601DateFormatter（最準確）
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso8601Formatter.date(from: dateString) {
+            print("✅ 成功解析日期（ISO8601）：\(dateString) -> \(date)")
+            return date
+        }
+
+        // 如果失敗，嘗試不帶毫秒的格式
+        iso8601Formatter.formatOptions = [.withInternetDateTime]
+        if let date = iso8601Formatter.date(from: dateString) {
+            print("✅ 成功解析日期（ISO8601 無毫秒）：\(dateString) -> \(date)")
+            return date
+        }
+
+        // 備用：使用 DateFormatter 嘗試多種格式
         let dateFormats = [
-            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",      // 2025-10-26T08:00:00.000Z (帶毫秒和 Z)
-            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",    // 2025-10-26T08:00:00.000+08:00 (帶毫秒和時區)
-            "yyyy-MM-dd'T'HH:mm:ssZ",          // 2025-10-26T08:00:00Z (帶 Z)
-            "yyyy-MM-dd'T'HH:mm:ssXXX",        // 2025-10-26T08:00:00+08:00 (帶時區)
-            "yyyy-MM-dd'T'HH:mm:ss",           // 2025-10-26T08:00:00 (本地時間)
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",    // 2025-10-26T08:00:00.000+08:00
+            "yyyy-MM-dd'T'HH:mm:ssXXX",        // 2025-10-26T08:00:00+08:00
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",      // 2025-10-26T08:00:00.000Z
+            "yyyy-MM-dd'T'HH:mm:ssZ",          // 2025-10-26T08:00:00Z
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",       // 2025-10-26T08:00:00.000
+            "yyyy-MM-dd'T'HH:mm:ss",           // 2025-10-26T08:00:00
             "yyyy-MM-dd'T'HH:mmXXX",           // 2025-10-26T08:00+08:00
-            "yyyy-MM-dd'T'HH:mm"               // 2025-10-26T08:00
+            "yyyy-MM-dd'T'HH:mm",              // 2025-10-26T08:00
+            "yyyy-MM-dd"                       // 2025-10-26
         ]
 
         let dateFormatter = DateFormatter()
@@ -1182,15 +1382,8 @@ final class CalendarAssistantViewModel: ObservableObject {
         for format in dateFormats {
             dateFormatter.dateFormat = format
             if let date = dateFormatter.date(from: dateString) {
-                print("✅ 成功解析日期：\(dateString) -> \(date) (使用格式: \(format))")
+                print("✅ 成功解析日期（DateFormatter）：\(dateString) -> \(date) (格式: \(format))")
                 return date
-            }
-        }
-
-        if dateString.contains("+") || dateString.contains("-") {
-            let components = dateString.components(separatedBy: CharacterSet(charactersIn: "+-"))
-            if let basicString = components.first {
-                return parseDate(basicString)
             }
         }
 
@@ -1333,33 +1526,106 @@ final class CalendarAssistantViewModel: ObservableObject {
         return formatter.string(from: Date())
     }
 
+    // 執行 getTask 函數：優先使用本地快取，為空才用 Cloud Functions（與 ChatViewModel 保持一致）
+    private func executeGetTask() async -> String {
+        // 優先使用本地快取（避免超時），如果為空才用 Cloud Functions
+        var tasks = todoViewModel?.tasks ?? []
+
+        if tasks.isEmpty {
+            let firebaseService = FirebaseService.shared
+            do {
+                tasks = try await firebaseService.fetchTodoTasks()
+            } catch {
+                print("從 Cloud Functions 載入任務失敗: \(error)")
+                return "{\"error\":\"獲取任務時發生錯誤：\(error.localizedDescription)\"}"
+            }
+        }
+
+        do {
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            isoFormatter.timeZone = TimeZone.current
+
+            let formattedTasks: [[String: Any]] = tasks.map { task in
+                var taskDict: [String: Any] = [
+                    "taskId": task.id,
+                    "title": task.title,
+                    "category": task.category,
+                    "isCompleted": task.isCompleted,
+                    "isAllDay": task.isAllDay,
+                    "startDate": isoFormatter.string(from: task.startDate),
+                    "endDate": isoFormatter.string(from: task.endDate)
+                ]
+
+                if !task.note.isEmpty {
+                    taskDict["note"] = task.note
+                }
+
+                return taskDict
+            }
+
+            let payload: [String: Any] = [
+                "currentTime": isoFormatter.string(from: Date()),
+                "existingTasks": formattedTasks
+            ]
+
+            let jsonData = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            } else {
+                return "{\"error\":\"無法將任務轉換為 JSON 字串\"}"
+            }
+        } catch {
+            print("獲取任務失敗: \(error)")
+            return "{\"error\":\"獲取任務時發生錯誤：\(error.localizedDescription)\"}"
+        }
+    }
+
     private func formatExistingTasks() -> String {
+        // 使用本地快取（避免超時問題）
         let tasks = todoViewModel?.tasks ?? []
         guard !tasks.isEmpty else { return "目前沒有任何現有任務。" }
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        isoFormatter.timeZone = TimeZone.current
 
-        var result = "目前系統中的任務列表：\n"
-        for task in tasks {
-            result += "- 任務ID：\(task.id)\n"
-            result += "  標題：\(task.title)\n"
+        let formattedTasks: [[String: Any]] = tasks.map { task in
+            var taskDict: [String: Any] = [
+                "taskId": task.id,
+                "title": task.title,
+                "category": task.category,
+                "isCompleted": task.isCompleted,
+                "isAllDay": task.isAllDay,
+                "startDate": isoFormatter.string(from: task.startDate),
+                "endDate": isoFormatter.string(from: task.endDate)
+            ]
+
             if !task.note.isEmpty {
-                result += "  備註：\(task.note)\n"
+                taskDict["note"] = task.note
             }
-            result += "  類別：\(task.category)\n"
-            result += "  完成狀態：\(task.isCompleted ? "已完成" : "未完成")\n"
-            result += "  全天：\(task.isAllDay ? "是" : "否")\n"
-            result += "  開始時間：\(formatter.string(from: task.startDate))\n"
-            result += "  結束時間：\(formatter.string(from: task.endDate))\n"
-            result += "-------\n"
+
+            return taskDict
         }
 
-        if result.hasSuffix("\n") {
-            result.removeLast()
+        do {
+            let payload: [String: Any] = ["existingTasks": formattedTasks]
+            let jsonData = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                return "目前系統中的任務列表（JSON）：\n\(jsonString)"
+            }
+        } catch {
+            print("formatExistingTasks JSON error: \(error)")
+            return "目前系統中的任務列表（JSON）轉換失敗：\(error.localizedDescription)"
         }
 
-        return result
+        return "目前系統中的任務列表（JSON）轉換失敗。"
     }
 
     // MARK: - Study Settings

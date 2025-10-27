@@ -1,6 +1,7 @@
 import AVFoundation
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import Foundation
 import Speech
 import SwiftUI
@@ -419,11 +420,12 @@ struct PendingTask: Identifiable, Codable {
 @MainActor
 final class ChatViewModel: ObservableObject {
     private let proxyURL = URL(string: "https://asia-east1-studyassistant-f7172.cloudfunctions.net/chatProxy")!
+    private let functions = Functions.functions(region: "asia-east1")
     private let chatRoomsKey = "local_chat_rooms"
-    
+
     @Published var staticViewModel: StaticViewModel?
     @Published var todoViewModel = TodoViewModel()
-    
+
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -717,43 +719,67 @@ final class ChatViewModel: ObservableObject {
         return "現在時間是：\(currentTime)"
     }
 
-    // 執行 getTask 函數並將結果添加到聊天記錄
+    // 執行 getTask 函數並將結果添加到聊天記錄（JSON 格式）
     private func executeGetTask() async -> String {
         currentFunction = "getTask"
-        let firebaseService = FirebaseService.shared
-        do {
-            // 從 Firebase 獲取任務
-            let tasks = try await firebaseService.fetchTodoTasks()
+        defer { currentFunction = nil }
 
-            var taskString: String
-            if tasks.isEmpty {
-                taskString = "目前沒有任何任務。"
-            } else {
-                // 加入今日時間
-                let today = Date()
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy/MM/dd HH:mm"
-                let todayString = formatter.string(from: today)
-                taskString = "今日日期: \(todayString)\n"
-                taskString += "allTasks:\n"
-                for task in tasks {
-                    taskString += "-------\n"
-                    taskString += "id:\(task.id) "
-                    taskString += "title:\(task.title) "
-                    taskString += "isCompleted:\(task.isCompleted) "
-                    if !task.note.isEmpty {
-                        taskString += "note:\(task.note) "
-                    }
-                    taskString += "startTime:\(formatDate(task.startDate)) "
-                    taskString += "endTime:\(formatDate(task.endDate))\n\n"
-                }
-                print("taskString: \(taskString)")
+        // 優先使用本地快取（避免超時），如果為空才用 Cloud Functions
+        var tasks = todoViewModel.tasks
+
+        if tasks.isEmpty {
+            let firebaseService = FirebaseService.shared
+            do {
+                tasks = try await firebaseService.fetchTodoTasks()
+            } catch {
+                print("從 Cloud Functions 載入任務失敗: \(error)")
+                return """
+                {"error":"抱歉，無法獲取任務列表。請確保您已登入並且網路連接正常。"}
+                """
             }
-            currentFunction = nil
-            return taskString
+        }
+
+        do {
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            isoFormatter.timeZone = TimeZone.current
+
+            let formattedTasks: [[String: Any]] = tasks.map { task in
+                var taskDict: [String: Any] = [
+                    "taskId": task.id,
+                    "title": task.title,
+                    "category": task.category,
+                    "isCompleted": task.isCompleted,
+                    "isAllDay": task.isAllDay,
+                    "startDate": isoFormatter.string(from: task.startDate),
+                    "endDate": isoFormatter.string(from: task.endDate)
+                ]
+
+                if !task.note.isEmpty {
+                    taskDict["note"] = task.note
+                }
+
+                return taskDict
+            }
+
+            let payload: [String: Any] = [
+                "currentTime": isoFormatter.string(from: Date()),
+                "existingTasks": formattedTasks
+            ]
+
+            let jsonData = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            } else {
+                return "{\"error\":\"無法將任務轉換為 JSON 字串\"}"
+            }
         } catch {
-            currentFunction = nil
-            return "抱歉，無法獲取任務列表。請確保您已登入並且網路連接正常。"
+            return """
+            {"error":"抱歉，無法獲取任務列表。請確保您已登入並且網路連接正常。"}
+            """
         }
     }
 
@@ -871,41 +897,8 @@ final class ChatViewModel: ObservableObject {
             let args = try JSONDecoder().decode(SaveTasksArgs.self, from: jsonData)
             print("成功解析參數，共 \(args.tasks.count) 個任務")
 
-            // 定義多種可能的日期格式
-            let dateFormats = [
-                "yyyy-MM-dd'T'HH:mm:ssXXX",  // 帶時區和秒
-                "yyyy-MM-dd'T'HH:mm:ss",  // 帶秒，不帶時區
-                "yyyy-MM-dd'T'HH:mmXXX",  // 帶時區，不帶秒
-                "yyyy-MM-dd'T'HH:mm",  // 不帶時區和秒
-            ]
-
-            func parseDate(_ dateString: String) -> Date? {
-                let dateFormatter = DateFormatter()
-                dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-                dateFormatter.timeZone = TimeZone.current
-
-                // 嘗試所有可能的格式
-                for format in dateFormats {
-                    dateFormatter.dateFormat = format
-                    if let date = dateFormatter.date(from: dateString) {
-                        return date
-                    }
-                }
-
-                // 如果包含時區信息，嘗試移除時區後再解析
-                if dateString.contains("+") || dateString.contains("-") {
-                    let components = dateString.components(
-                        separatedBy: CharacterSet(charactersIn: "+-"))
-                    if let basicString = components.first {
-                        return parseDate(basicString)
-                    }
-                }
-
-                print("無法解析日期：\(dateString)")
-                return nil
-            }
-
             // 解析並直接保存所有任務
+            // 注意：使用全域的 parseDate(_:) 函數，不在此定義局部函數
             var pendingTasks: [PendingTask] = []
             var successCount = 0
             var failureCount = 0
@@ -937,7 +930,7 @@ final class ChatViewModel: ObservableObject {
                 // 檢查並創建類別統計
                 await checkAndCreateStatisticsForCategory(task.resolvedCategory)
 
-                // 直接保存任務到資料庫
+                // 使用 Cloud Functions 保存任務到資料庫
                 do {
                     let todoTask = TodoTask(
                         title: task.title,
@@ -953,7 +946,23 @@ final class ChatViewModel: ObservableObject {
                         userId: ""
                     )
 
-                    await todoViewModel.addTask(todoTask)
+                    // 準備任務資料並轉換為 JSON 可序列化格式
+                    var taskData = todoTask.toFirestore
+                    let convertedData = convertTimestampsToStrings(taskData)
+
+                    // 呼叫 Cloud Functions createTask
+                    let result = try await functions.httpsCallable("createTask").call([
+                        "task": convertedData
+                    ])
+
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "ChatViewModel", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "創建任務失敗"])
+                    }
+
                     successCount += 1
                     pendingTasks.append(pendingTask)
                 } catch {
@@ -962,11 +971,16 @@ final class ChatViewModel: ObservableObject {
                 }
             }
 
-            // 將已保存的任務存儲到訊息中（用於顯示）
+            // 注意：不要將任務儲存到訊息中，避免舊任務一直顯示
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingTasks = pendingTasks
 
-            // 返回結果消息
+            // 如果有成功新增的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功新增 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務新增失敗" : "")
             } else {
                 return "任務新增失敗"
@@ -1083,6 +1097,7 @@ final class ChatViewModel: ObservableObject {
                 13. 沒有指定時間就是現在。
                 14. 不要叫使用者等待gpt安排任務。
                 15. 安排任務請直接安排，不要只用文字說明。
+                16. 安排任務就是要直接新增任務，不要只用文字說明。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs
@@ -1118,7 +1133,7 @@ final class ChatViewModel: ObservableObject {
             let reqBody = OpenAIRequest(
                 model: "gpt-4.1",
                 messages: allMessages,
-                temperature: 0.7,
+                temperature: 1.0,
                 stream: true,
                 tools: [
                         getTaskFunction, getTimeFunction, saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction,
@@ -1999,35 +2014,53 @@ final class ChatViewModel: ObservableObject {
             let args = try JSONDecoder().decode(DeleteTaskArgs.self, from: jsonData)
             print("成功解析參數，準備刪除 \(args.taskIds.count) 個任務")
 
-            // 獲取要刪除的任務資訊並直接刪除
+            // 直接使用 Cloud Functions 刪除任務
             var tasksToDelete: [TodoTask] = []
-            let allTasks = todoViewModel.tasks
             var successCount = 0
             var failureCount = 0
 
             for taskId in args.taskIds {
-                if let task = allTasks.first(where: { $0.id == taskId }) {
-                    tasksToDelete.append(task)
-                    // 直接刪除任務
-                    do {
-                        try await todoViewModel.deleteTask(task)
-                        successCount += 1
-                    } catch {
-                        print("刪除任務失敗: \(error)")
+                // 直接呼叫 Cloud Functions 刪除任務
+                do {
+                    let result = try await functions.httpsCallable("deleteTask").call([
+                        "taskId": taskId
+                    ])
+
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        print("Cloud Functions 刪除任務失敗: taskId = \(taskId)")
                         failureCount += 1
+                        continue
                     }
+
+                    successCount += 1
+
+                    // 嘗試從本地快取中獲取任務資訊（用於顯示），但不強制要求
+                    if let task = todoViewModel.tasks.first(where: { $0.id == taskId }) {
+                        tasksToDelete.append(task)
+                    }
+                } catch {
+                    print("刪除任務失敗: taskId = \(taskId), error = \(error)")
+                    failureCount += 1
                 }
             }
 
-            if tasksToDelete.isEmpty {
-                return "找不到指定的任務"
+            if successCount == 0 {
+                return "任務刪除失敗" + (failureCount > 0 ? "（共 \(failureCount) 個任務）" : "")
             }
 
             // 將已刪除的任務存儲到訊息中（用於顯示）
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingDeleteTasks = tasksToDelete
 
-            // 返回結果消息
+            // 如果有成功刪除的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功刪除 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務刪除失敗" : "")
             } else {
                 return "任務刪除失敗"
@@ -2076,15 +2109,29 @@ final class ChatViewModel: ObservableObject {
                 return "未提供任何要更新的任務"
             }
 
-            // 獲取所有任務並直接更新
-            let allTasks = todoViewModel.tasks
+            // 準備更新任務
             var tasksToUpdate: [(original: TodoTask, updated: PendingTask)] = []
             var successCount = 0
             var failureCount = 0
 
             for taskArg in args.tasks {
-                // 查找原任務
-                guard let originalTask = allTasks.first(where: { $0.id == taskArg.taskId }) else {
+                // 先從本地快取查找原任務
+                var originalTask = todoViewModel.tasks.first(where: { $0.id == taskArg.taskId })
+
+                // 如果本地快取找不到，嘗試從 Firebase 重新載入
+                if originalTask == nil {
+                    print("本地快取找不到任務 \(taskArg.taskId)，從 Firebase 重新載入")
+                    do {
+                        let firebaseService = FirebaseService.shared
+                        let allTasks = try await firebaseService.fetchTodoTasks()
+                        originalTask = allTasks.first(where: { $0.id == taskArg.taskId })
+                    } catch {
+                        print("從 Firebase 載入任務失敗: \(error)")
+                    }
+                }
+
+                // 如果還是找不到任務，跳過
+                guard let originalTask = originalTask else {
                     print("找不到 ID 為 \(taskArg.taskId) 的任務")
                     failureCount += 1
                     continue
@@ -2104,7 +2151,7 @@ final class ChatViewModel: ObservableObject {
                     color: parseColor(taskArg.color) ?? originalTask.color
                 )
 
-                // 直接更新任務
+                // 使用 Cloud Functions 更新任務
                 do {
                     var updatedTodoTask = originalTask
                     updatedTodoTask.title = updatedTask.title
@@ -2116,7 +2163,24 @@ final class ChatViewModel: ObservableObject {
                     updatedTodoTask.isCompleted = updatedTask.isCompleted
                     updatedTodoTask.color = updatedTask.color
 
-                    try await todoViewModel.updateTask(updatedTodoTask)
+                    // 準備任務資料並轉換為 JSON 可序列化格式
+                    var taskData = updatedTodoTask.toFirestore
+                    let convertedData = convertTimestampsToStrings(taskData)
+
+                    // 呼叫 Cloud Functions updateTask
+                    let result = try await functions.httpsCallable("updateTask").call([
+                        "taskId": taskArg.taskId,
+                        "updates": convertedData
+                    ])
+
+                    // 解析回應
+                    guard let data = result.data as? [String: Any],
+                          let success = data["success"] as? Bool,
+                          success else {
+                        throw NSError(domain: "ChatViewModel", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "更新任務失敗"])
+                    }
+
                     successCount += 1
                     tasksToUpdate.append((original: originalTask, updated: updatedTask))
                 } catch {
@@ -2128,8 +2192,13 @@ final class ChatViewModel: ObservableObject {
             // 將已更新的任務存儲到訊息中（用於顯示）
             chatRooms[selectedRoomIndex].messages[currentMessageIndex].pendingUpdateTasks = tasksToUpdate
 
-            // 返回結果消息
+            // 如果有成功更新的任務，通知 TodoViewModel 重新整理
             if successCount > 0 {
+                do {
+                    try await todoViewModel.forceReloadTasks()
+                } catch {
+                    print("⚠️ 重新整理任務清單失敗: \(error)")
+                }
                 return "已成功更新 \(successCount) 個任務" + (failureCount > 0 ? "，\(failureCount) 個任務更新失敗" : "")
             } else {
                 return "任務更新失敗"
@@ -2141,38 +2210,102 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    /// 將 Firestore Timestamp 轉換為 ISO 8601 字串（用於 Cloud Functions）
+    private func convertTimestampsToStrings(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        for (key, value) in data {
+            if let timestamp = value as? Timestamp {
+                result[key] = dateFormatter.string(from: timestamp.dateValue())
+            } else if let dict = value as? [String: Any] {
+                result[key] = convertTimestampsToStrings(dict)
+            } else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertTimestampsToStrings($0) }
+            }
+        }
+
+        return result
+    }
+
+    /// 將 Cloud Functions 返回的日期數據轉換為 Timestamp 對象
+    private func convertToTimestamps(_ data: [String: Any]) -> [String: Any] {
+        var result = data
+
+        for (key, value) in data {
+            // 檢查是否是 Firestore Timestamp 的序列化格式 {_seconds: ..., _nanoseconds: ...}
+            if let dict = value as? [String: Any],
+               let seconds = dict["_seconds"] as? Int64 ?? dict["_seconds"] as? Int as? Int64,
+               let nanoseconds = dict["_nanoseconds"] as? Int32 ?? dict["_nanoseconds"] as? Int as? Int32 {
+                result[key] = Timestamp(seconds: seconds, nanoseconds: nanoseconds)
+            }
+            // 檢查是否是 ISO 8601 字符串
+            else if let dateString = value as? String {
+                let dateFormatter = ISO8601DateFormatter()
+                dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = dateFormatter.date(from: dateString) {
+                    result[key] = Timestamp(date: date)
+                }
+            }
+            // 遞歸處理嵌套字典
+            else if let dict = value as? [String: Any] {
+                result[key] = convertToTimestamps(dict)
+            }
+            // 遞歸處理數組
+            else if let array = value as? [[String: Any]] {
+                result[key] = array.map { convertToTimestamps($0) }
+            }
+        }
+
+        return result
+    }
+
     // 解析日期字串的輔助函數
     private func parseDate(_ dateString: String?) -> Date? {
         guard let dateString = dateString else { return nil }
-        
+
+        // 優先使用 ISO8601DateFormatter（最準確）
+        let iso8601Formatter = ISO8601DateFormatter()
+        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso8601Formatter.date(from: dateString) {
+            print("✅ 成功解析日期（ISO8601）：\(dateString) -> \(date)")
+            return date
+        }
+
+        // 如果失敗，嘗試不帶毫秒的格式
+        iso8601Formatter.formatOptions = [.withInternetDateTime]
+        if let date = iso8601Formatter.date(from: dateString) {
+            print("✅ 成功解析日期（ISO8601 無毫秒）：\(dateString) -> \(date)")
+            return date
+        }
+
+        // 備用：使用 DateFormatter 嘗試多種格式
         let dateFormats = [
-            "yyyy-MM-dd'T'HH:mm:ssXXX",  // 帶時區和秒
-            "yyyy-MM-dd'T'HH:mm:ss",  // 帶秒，不帶時區
-            "yyyy-MM-dd'T'HH:mmXXX",  // 帶時區，不帶秒
-            "yyyy-MM-dd'T'HH:mm",  // 不帶時區和秒
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",    // 2025-10-26T08:00:00.000+08:00
+            "yyyy-MM-dd'T'HH:mm:ssXXX",        // 2025-10-26T08:00:00+08:00
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",      // 2025-10-26T08:00:00.000Z
+            "yyyy-MM-dd'T'HH:mm:ssZ",          // 2025-10-26T08:00:00Z
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",       // 2025-10-26T08:00:00.000
+            "yyyy-MM-dd'T'HH:mm:ss",           // 2025-10-26T08:00:00
+            "yyyy-MM-dd'T'HH:mmXXX",           // 2025-10-26T08:00+08:00
+            "yyyy-MM-dd'T'HH:mm",              // 2025-10-26T08:00
+            "yyyy-MM-dd"                       // 2025-10-26
         ]
 
         let dateFormatter = DateFormatter()
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         dateFormatter.timeZone = TimeZone.current
 
-        // 嘗試所有可能的格式
         for format in dateFormats {
             dateFormatter.dateFormat = format
             if let date = dateFormatter.date(from: dateString) {
+                print("✅ 成功解析日期（DateFormatter）：\(dateString) -> \(date) (格式: \(format))")
                 return date
             }
         }
 
-        // 如果包含時區信息，嘗試移除時區後再解析
-        if dateString.contains("+") || dateString.contains("-") {
-            let components = dateString.components(separatedBy: CharacterSet(charactersIn: "+-"))
-            if let basicString = components.first {
-                return parseDate(basicString)
-            }
-        }
-
-        print("無法解析日期：\(dateString)")
+        print("❌ 無法解析日期：\(dateString)")
         return nil
     }
 

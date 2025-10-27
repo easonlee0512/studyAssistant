@@ -773,7 +773,11 @@ struct ChatDemoDynamicView: View {
 
     // MARK: Message List
     private var messageList: some View {
-        ScrollViewReader { proxy in
+        let baseBottomPadding: CGFloat = 100
+        let keyboardInset = max(viewModel.keyboardHeight - tabBarHeight, 0)
+        let dynamicBottomPadding = baseBottomPadding + (isAtBottom ? keyboardInset : 0)
+
+        return ScrollViewReader { proxy in
             GeometryReader { geometry in
                 ScrollView {
                     LazyVStack(spacing: 16) {
@@ -787,7 +791,7 @@ struct ChatDemoDynamicView: View {
                         }
                     }
                     .padding(.top, 16) // 減少頂部空間，因為 header 已經獨立了
-                    .padding(.bottom, 100) // 固定底部空間
+                    .padding(.bottom, dynamicBottomPadding) // 根據鍵盤高度給底部留空間
                     .id("messageBottom")  // 添加一個 ID 用於滾動
                     .background(
                         GeometryReader { contentGeometry in
@@ -852,9 +856,10 @@ struct ChatDemoDynamicView: View {
                 // 當切換聊天室時，重置對話結束標記
                 isConversationEnded = false
             }
-            .onChange(of: viewModel.keyboardHeight) { newHeight in
-                // 當鍵盤彈出時，不做任何自動滾動
-                // 讓用戶保持在當前查看的位置
+            .onChange(of: viewModel.keyboardHeight) { _ in
+                if isAtBottom {
+                    scrollToBottom(proxy: proxy)
+                }
             }
             .onChange(of: viewModel.shouldAutoSendTranscription) { shouldSend in
                 // 監聽自動發送信號
