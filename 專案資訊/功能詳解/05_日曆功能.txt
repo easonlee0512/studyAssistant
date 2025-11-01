@@ -1,0 +1,1057 @@
+===========================================
+日曆功能 (Calendar & Assistant)
+===========================================
+
+【功能概述】
+日曆功能不僅提供月曆和週曆視圖,更重要的是整合了 AI 日曆助手,能夠自動管理任務、每日自動更新、批次處理任務操作、以及撤回功能。採用 Singleton 模式確保全局一致性。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【ViewModels】
+- studyAssistant/ViewModels/CalendarAssistantViewModel.swift (1792行)
+  └─ 日曆助手核心邏輯、GPT 整合、Function Calling、每日自動更新
+
+【Views】
+- studyAssistant/Views/CalendarAssistantPopupView.swift (601行)
+  └─ 日曆助手彈窗 UI、任務卡片顯示、操作按鈕
+
+- studyAssistant/Views/TodoView.swift - 包含週曆視圖
+  └─ WeekPagerView, DayPagerView
+
+【相關】
+- TodoViewModel.swift - 任務資料管理
+- TodoTask.swift - 重複任務實例機制
+
+【總代碼量】約 2,393 行 (不含 TodoView)
+
+===========================================
+二、CalendarAssistantViewModel (核心邏輯)
+===========================================
+
+【設計模式】
+
+**Singleton 模式**
+
+class CalendarAssistantViewModel: ObservableObject {
+    static let shared = CalendarAssistantViewModel()
+    private init() { ... }
+}
+
+為什麼使用 Singleton?
+1. 確保全局只有一個日曆助手實例
+2. 避免多個實例造成的狀態不一致
+3. 保證每日自動更新只執行一次
+4. 在背景執行不會被中斷
+
+【核心屬性】
+
+A. 依賴注入
+   @Published var staticViewModel: StaticViewModel?
+   @Published var todoViewModel: TodoViewModel?
+
+B. API 與服務
+   private let proxyURL: URL - GPT API 代理
+   private let functions: Functions - Firebase Cloud Functions
+   private let db: Firestore - Firestore 資料庫
+   private lazy var urlSession: URLSession - 自訂 URLSession (10分鐘 timeout)
+
+C. 狀態追蹤
+   @Published var isUpdating: Bool = false
+   @Published var updateError: String?
+   @Published var currentStatus: String = ""
+   private var currentUpdateTask: Task<Void, Never>?
+
+D. 任務變動追蹤 (當前)
+   @Published var addedTasks: [PendingTask] = []
+   @Published var deletedTasks: [TodoTask] = []
+   @Published var updatedTasks: [(original: TodoTask, updated: PendingTask)] = []
+
+E. 任務變動記錄 (持久化)
+   @Published var lastAddedTasks: [PendingTask] = []
+   @Published var lastDeletedTasks: [TodoTask] = []
+   @Published var lastUpdatedTasks: [(original: TodoTask, updated: PendingTask)] = []
+
+F. 每日自動更新設定
+   @Published var autoUpdateEnabled: Bool = false
+   @Published var autoUpdateInput: String = ""
+   private var isAutoUpdateInProgress: Bool = false
+   private var lastUpdateDate: Date?
+
+G. 讀書設定
+   @Published var studySettings: StudySettings?
+   @Published var isLoadingSettings: Bool = false
+   @Published var settingsError: String?
+
+【定義的 Function Tools】
+
+與 ChatViewModel 相同的 Function Calling 機制:
+
+1. saveTask
+   - 批次新增任務
+   - 參數: tasks: [TaskObject]
+
+2. deleteTask
+   - 批次刪除任務
+   - 參數: taskIds: [String]
+
+3. updateTask
+   - 批次更新任務
+   - 參數: tasks: [UpdateTaskObject]
+
+4. end_conversation
+   - 結束對話
+   - 參數: 無
+
+【初始化與設定】
+
+private init()
+- loadLastUpdateStatus() - 載入上次更新記錄
+- loadAutoUpdateSettings() - 載入自動更新設定
+- loadStudySettingsFromFirestore() - 載入讀書設定
+
+【核心方法】
+
+1. 每日自動更新
+   ────────────
+
+   func performDailyAutoUpdateIfNeeded() async
+
+   流程:
+   1. 檢查 autoUpdateEnabled
+   2. 檢查 autoUpdateInput 不為空
+   3. 檢查今天是否已更新: hasUpdatedToday()
+   4. 避免重複觸發: isAutoUpdateInProgress
+   5. 等待其他操作完成: waitForCalendarUpdateAvailability()
+   6. 執行更新: startUpdate()
+   7. 記錄 lastUpdateDate
+
+   hasUpdatedToday() -> Bool
+   - 比較 lastUpdateDate 與當前日期
+   - 使用 Calendar.isDate(_:inSameDayAs:)
+
+   getCurrentDate() -> Date
+   - 支援測試模式 (FAKE_NOW_ISO8601)
+   - 返回當前日期或測試日期
+
+   waitForCalendarUpdateAvailability() async -> Bool
+   - 等待 isUpdating, isLoading, hasLoadedInitialTasks
+   - 超時設定: 30秒
+   - 輪詢間隔: 0.5秒
+   - 返回: 是否成功等待
+
+2. 主要更新方法
+   ────────────
+
+   func startUpdate(userInput: String) async
+
+   流程:
+   1. 取消尚未完成的更新工作
+   2. 建立新的 Task
+   3. 執行 runUpdate()
+
+   func cancelUpdate()
+   - 檢查 isUpdating
+   - 設置狀態為"正在取消..."
+   - 取消 currentUpdateTask
+
+   private func runUpdate(userInput: String) async
+   1. 設置 isUpdating = true
+   2. 清空當前任務追蹤陣列
+   3. 清除上次記錄
+   4. 執行 performUpdate()
+
+   private func performUpdate(userInput: String) async
+
+   核心邏輯:
+   1. 建構 system prompt: buildSystemPrompt()
+   2. 建構初始訊息: [systemMessage, userMessage]
+   3. 進入對話循環 (最多15輪):
+      - 建立 OpenAIRequest:
+        - model: "gpt-5-mini"
+        - tool_choice: "required" (強制使用工具)
+        - temperature: 1.0
+        - stream: false
+        - reasoning_effort: "low"
+
+      - 發送請求到 proxyURL
+      - 處理回應:
+        - 解析 tool_calls
+        - 執行對應函數: handleToolCall()
+        - 將結果添加到 messages
+        - 檢查 end_conversation
+
+      - 更新狀態顯示:
+        - "已新增 X 個任務"
+        - "已刪除 Y 個任務"
+        - "已修改 Z 個任務"
+
+   4. 完成後:
+      - 保存記錄: saveLastUpdateStatus()
+      - 更新 lastXXXTasks
+      - 記錄更新時間
+
+3. 撤回功能
+   ────────
+
+   func undoLastUpdate() async
+
+   流程:
+   1. 檢查不在更新中
+   2. 檢查有可撤回的操作
+   3. 設置 isUpdating = true
+   4. 撤回新增的任務 (刪除):
+      - 遍歷 lastAddedTasks
+      - 透過標題、開始/結束時間找到任務
+      - 呼叫 Cloud Functions deleteTask
+
+   5. 撤回刪除的任務 (恢復):
+      - 遍歷 lastDeletedTasks
+      - 重新建立 TodoTask
+      - 呼叫 Cloud Functions createTask
+
+   6. 撤回修改的任務 (恢復原狀):
+      - 遍歷 lastUpdatedTasks
+      - 恢復為原始數據
+      - 呼叫 Cloud Functions updateTask
+
+   7. 重新整理任務清單
+   8. 如果全部成功: 清除記錄
+
+4. Function 執行
+   ────────────
+
+   private func handleToolCall(functionName: String, arguments: String) async -> String
+   - saveTask → executeSaveTask()
+   - deleteTask → executeDeleteTask()
+   - updateTask → executeUpdateTask()
+   - end_conversation → 返回"對話結束"
+
+   private func executeSaveTask(arguments: String) async -> String
+
+   流程:
+   1. 解析 JSON arguments 為 SaveTasksArgs
+   2. ForEach(task in args.tasks):
+      - 解析日期: parseDate()
+      - 建立 PendingTask
+      - 檢查並建立類別統計
+      - 轉換為 TodoTask
+      - 準備 Firestore 資料: toFirestore
+      - 轉換 Timestamp: convertTimestampsToStrings()
+      - 呼叫 Cloud Functions createTask
+      - 成功: addedTasks.append()
+      - 更新狀態: updateCurrentStatus()
+
+   3. 重新整理任務: todoViewModel?.forceReloadTasks()
+   4. 返回結果字串
+
+   private func executeDeleteTask(arguments: String) async -> String
+
+   流程:
+   1. 解析 JSON arguments 為 DeleteTaskArgs
+   2. ForEach(taskId in args.taskIds):
+      - 呼叫 Cloud Functions deleteTask
+      - 從本地快取獲取任務資訊(用於顯示)
+      - 成功: deletedTasks.append()
+      - 更新狀態
+
+   3. 重新整理任務
+   4. 返回結果字串
+
+   private func executeUpdateTask(arguments: String) async -> String
+
+   流程:
+   1. 解析 JSON arguments 為 UpdateTasksArgs
+   2. ForEach(taskArg in args.tasks):
+      - 從本地快取查找原任務
+      - 找不到 → 從 Firebase 重新載入
+      - 建立 PendingTask (更新後)
+      - 更新 TodoTask 屬性
+      - 準備 Firestore 資料
+      - 呼叫 Cloud Functions updateTask
+      - 成功: updatedTasks.append()
+      - 更新狀態
+
+   3. 重新整理任務
+   4. 返回結果字串
+
+5. System Prompt 建構
+   ──────────────
+
+   private func buildSystemPrompt() -> String
+
+   包含:
+   1. 角色定義: "你是一個日曆安排助手"
+   2. 語氣: 從 studySettings.tone 獲取
+   3. 讀書設定: formatStudySettings()
+   4. 當前時間: getCurrentDate()
+   5. 目標:
+      - 根據需求新增、刪除或修改任務
+      - 完成後立即調用 end_conversation
+
+   6. 重要規則 (16條):
+      - 沒有任務需要操作就直接結束對話
+      - 不要進行不必要的更新
+      - 使用常識判斷什麼是"不必要的"
+      - 同一天內的輕微時間差異可接受
+      - 遵循使用者的讀書時段設定
+      - 不要與現有任務重疊
+      - 一次處理大量任務(一兩百個)
+      - 沒有指定時間表示現在
+      - 遵循使用者指示,不添加額外假設
+      - 使用使用者的語言回應
+      - ...
+
+   7. 現有任務列表: formatExistingTasks()
+      - 從 todoViewModel 獲取
+      - 轉換為 JSON 格式
+      - 包含 taskId, title, category, dates 等
+
+   formatStudySettings() -> String
+   - 讀書日期和時間偏好
+   - 每次讀書時長
+   - 格式化為可讀文字
+
+6. 持久化相關
+   ────────────
+
+   private func loadLastUpdateStatus()
+   - 從 UserDefaults 載入 LastUpdateStatus
+   - 更新 lastXXXTasks
+
+   private func saveLastUpdateStatus()
+   - 將當前更新記錄保存到 UserDefaults
+   - 使用 LastUpdateStatus 結構
+
+   private func clearLastUpdateStatus()
+   - 清空所有 lastXXXTasks
+
+7. 輔助方法
+   ────────
+
+   convertTimestampsToStrings(_ data: [String: Any]) -> [String: Any]
+   - 遞迴轉換 Timestamp 為 ISO 8601 字串
+   - 處理嵌套字典和陣列
+   - 用於發送到 Cloud Functions
+
+   convertToTimestamps(_ data: [String: Any]) -> [String: Any]
+   - 遞迴轉換日期字串為 Timestamp
+   - 支援兩種格式:
+     - {_seconds: ..., _nanoseconds: ...}
+     - ISO 8601 字串
+
+   parseDate(_ dateString: String?) -> Date?
+   - 支援多種日期格式
+   - 優先使用 ISO8601DateFormatter
+   - 備用 9 種 DateFormatter 格式
+   - 輸出調試訊息
+
+   parseColor(_ colorString: String?) -> Color?
+   - 解析 "R,G,B,A" 格式字串
+
+   updateCurrentStatus()
+   - 根據 addedTasks, deletedTasks, updatedTasks 數量
+   - 更新 currentStatus 文字
+
+   checkAndCreateStatisticsForCategory(_ category: String) async
+   - 檢查類別統計是否存在
+   - 不存在則建立新的 LearningStatistic
+
+8. 重試機制
+   ────────
+
+   private func retryOnError<T>(maxAttempts: 5, baseDelay: 2.0, operation: () async throws -> T) async throws -> T
+
+   邏輯:
+   1. 指數退避演算法: 2^(retry-1) * baseDelay
+   2. 加入隨機抖動: +0~1秒
+   3. 最大延遲: 60秒
+   4. 處理 429 狀態碼:
+      - 讀取 Retry-After header
+      - 使用建議的等待時間
+   5. 最多重試 5 次
+   6. 輸出詳細的重試日誌
+
+===========================================
+三、CalendarAssistantPopupView (UI)
+===========================================
+
+【視圖結構】
+struct CalendarAssistantPopupView: View
+
+【依賴注入】
+@EnvironmentObject var todoViewModel: TodoViewModel
+@EnvironmentObject var staticViewModel: StaticViewModel
+@EnvironmentObject var assistantViewModel: CalendarAssistantViewModel
+
+【狀態管理】
+
+@Binding var isPresented: Bool
+@State private var showTaskCards: Bool = false
+@State private var expandedSections: Set<String> = [] // "added", "deleted", "updated"
+
+【顏色系統】
+
+private let backgroundColor = Color.hex(hex: "F3D4B7")
+private let accentColor = Color.hex(hex: "E27844") (橘色)
+private let cardColor = Color.hex(hex: "FEECD8")
+
+【字體大小】
+
+private let taskTitleSize: CGFloat = 16
+private let taskContentSize: CGFloat = 14
+private let taskHeaderSize: CGFloat = 17
+private let taskCountSize: CGFloat = 15
+
+【視圖佈局】
+
+VStack(spacing: 0) {
+    // 標題區域
+    HStack {
+        Text("日曆安排助手")
+        Spacer
+        關閉按鈕 (X)
+    }
+    .background(cardColor)
+
+    // 輸入框區域
+    VStack {
+        HStack {
+            Text("輸入日程安排")
+            Spacer
+            "預設" 按鈕 (注入預設文字)
+        }
+
+        ZStack {
+            TextEditor(text: $assistantViewModel.autoUpdateInput)
+                .frame(minHeight: 200)
+                .background(Color.gray.opacity(0.08))
+                .disabled(assistantViewModel.isUpdating)
+
+            // 占位符
+            if autoUpdateInput.isEmpty {
+                Text("可以輸入希望助手每日如何自動調整日曆")
+            }
+        }
+    }
+    .background(cardColor)
+
+    // 每日自動更新 Toggle
+    Toggle("每日自動更新", isOn: $assistantViewModel.autoUpdateEnabled)
+        .tint(accentColor)
+        .disabled(assistantViewModel.isUpdating)
+        .background(cardColor)
+
+    // 任務卡片顯示區域
+    if showTaskCards && hasTaskUpdates {
+        ScrollView {
+            VStack {
+                // 新增任務區域
+                if !lastAddedTasks.isEmpty {
+                    taskSection(title: "已新增的任務", color: .green) {
+                        顯示任務列表 (可展開/收起)
+                    }
+                }
+
+                // 刪除任務區域
+                if !lastDeletedTasks.isEmpty {
+                    taskSection(title: "已刪除的任務", color: .red) {
+                        顯示任務列表
+                    }
+                }
+
+                // 修改任務區域
+                if !lastUpdatedTasks.isEmpty {
+                    taskSection(title: "已修改的任務", color: .blue) {
+                        顯示任務對比 (原始 vs 更新後)
+                    }
+                }
+
+                // 錯誤訊息
+                if let error = assistantViewModel.updateError {
+                    Text(error)
+                        .background(Color.red.opacity(0.1))
+                }
+            }
+        }
+        .frame(maxHeight: 300)
+    }
+
+    // 狀態顯示區域
+    if assistantViewModel.isUpdating && !currentStatus.isEmpty {
+        Text(currentStatus)
+            .background(cardColor)
+    }
+
+    // 按鈕區域
+    VStack {
+        // 立即更新按鈕
+        Button(action: startUpdate) {
+            HStack {
+                if isUpdating {
+                    ProgressView + "更新中..."
+                } else {
+                    Image(systemName: "arrow.clockwise") + "立即更新"
+                }
+            }
+            .background(accentColor)
+        }
+        .disabled(isUpdating || autoUpdateInput.isEmpty)
+
+        // 停止更新按鈕
+        if isUpdating {
+            Button(action: cancelUpdate) {
+                Image + "停止更新"
+            }
+            .background(Color.red.opacity(0.85))
+        }
+
+        // 撤回按鈕
+        if !isUpdating && hasTaskUpdates {
+            Button(action: undoLastUpdate) {
+                Image + "撤回上次更新"
+            }
+            .background(Color.orange.opacity(0.85))
+        }
+    }
+    .background(cardColor)
+}
+.frame(width: 360, maxHeight: 650)
+
+【子視圖】
+
+1. taskSection
+   ────────
+   private func taskSection<Content: View>(
+       title: String,
+       sectionId: String,
+       color: Color,
+       @ViewBuilder content: () -> Content
+   ) -> some View
+
+   結構:
+   VStack {
+       Text(title) - 區段標題
+       content() - 任務列表
+   }
+   .background(Color.gray.opacity(0.05))
+
+2. expandButton
+   ────────────
+   展開/收起按鈕:
+   Button {
+       Text("展開全部 (X 個任務)" / "收起")
+       Image(systemName: "chevron.down" / "chevron.up")
+   }
+
+3. taskAddItemView
+   ────────────────
+   顯示新增任務:
+   VStack {
+       Text("標題: ...")
+       Text("備註: ...")
+       Text("類別: ...")
+       Text("開始時間: ...")
+       Text("結束時間: ...")
+       Text("全天: ...")
+       Text("已完成: ...")
+   }
+   .background(Color.green.opacity(0.1))
+
+4. taskDeleteItemView
+   ──────────────────
+   顯示刪除任務:
+   (與 taskAddItemView 類似)
+   .background(Color.red.opacity(0.1))
+
+5. taskUpdateItemView
+   ──────────────────
+   顯示修改任務 (對比):
+   VStack {
+       Text("任務 X / Y") (如果有多個)
+
+       HStack {
+           // 原始資料
+           VStack {
+               Text("原始資料")
+               任務詳情
+           }
+           .background(Color.gray.opacity(0.1))
+
+           // 更新後資料
+           VStack {
+               Text("更新後資料")
+               任務詳情
+           }
+           .background(Color.blue.opacity(0.1))
+       }
+   }
+
+【輔助方法】
+
+insertDefaultText()
+- 注入預設的日曆整理指令
+- 包含:
+  - 刪除已完成且已過期的任務
+  - 重新安排未完成且已過期的任務
+  - 時間限制: 08:00–22:00
+  - 依優先級安排 (高→中→低)
+
+formatDate(_ date: Date?, isAllDay: Bool) -> String
+- 全天: "yyyy/MM/dd"
+- 非全天: "yyyy/MM/dd HH:mm"
+
+hideKeyboard()
+- 呼叫 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder))
+
+【生命週期】
+
+onAppear:
+- 如果有上次更新記錄,顯示任務卡片
+
+onChange(assistantViewModel.isUpdating):
+- 更新完成時顯示任務卡片
+
+===========================================
+四、重複任務實例機制
+===========================================
+
+(參考任務管理功能文檔的重複任務機制)
+
+TodoTask.shouldDisplay(on date: Date) -> Bool
+- 判斷任務是否應該在指定日期顯示
+- 支援 daily, weekly, monthly 重複類型
+
+任務實例生成:
+- 伺服器端: Cloud Functions 生成 TaskInstance
+- 客戶端: shouldDisplay() 判斷顯示邏輯
+
+===========================================
+五、資料流程圖
+===========================================
+
+【每日自動更新流程】
+
+App 啟動 / 從背景返回
+  ↓
+TodoView.onAppear
+  ↓
+CalendarAssistantViewModel.performDailyAutoUpdateIfNeeded()
+  ↓
+檢查 autoUpdateEnabled
+  ↓
+檢查 autoUpdateInput 不為空
+  ↓
+檢查今天是否已更新: hasUpdatedToday()
+  ├─ 是: 跳過
+  └─ 否: 繼續
+  ↓
+檢查 isAutoUpdateInProgress
+  ├─ 是: 跳過
+  └─ 否: 設置標記
+  ↓
+waitForCalendarUpdateAvailability() (最多等待30秒)
+  ├─ 超時: 取消此次自動更新
+  └─ 成功: 繼續
+  ↓
+startUpdate(userInput: autoUpdateInput)
+  ↓
+runUpdate() → performUpdate()
+  ↓
+建構 system prompt
+  ├─ 角色定義
+  ├─ 讀書設定
+  ├─ 16條規則
+  └─ 現有任務列表 (JSON)
+  ↓
+進入對話循環 (最多15輪)
+  ├─ 建立 OpenAIRequest (gpt-5-mini, tool_choice: "required")
+  ├─ 發送到 proxyURL
+  ├─ 解析回應: tool_calls
+  ├─ 執行函數: saveTask / deleteTask / updateTask
+  ├─ 更新追蹤陣列: addedTasks, deletedTasks, updatedTasks
+  ├─ 更新狀態: currentStatus
+  └─ 檢查 end_conversation
+  ↓
+完成
+  ├─ 保存記錄: saveLastUpdateStatus()
+  ├─ 更新 lastXXXTasks
+  ├─ 記錄時間: lastUpdateDate = 當前日期
+  └─ 設置 isUpdating = false
+
+【手動更新流程】
+
+用戶點擊"立即更新"
+  ↓
+startUpdate(userInput: 用戶輸入)
+  ↓
+(與每日自動更新流程相同,從 runUpdate 開始)
+
+【撤回流程】
+
+用戶點擊"撤回上次更新"
+  ↓
+undoLastUpdate()
+  ↓
+檢查不在更新中
+  ↓
+檢查有可撤回的操作
+  ↓
+設置 isUpdating = true
+  ↓
+1. 撤回新增的任務 (刪除)
+   ForEach(lastAddedTasks) {
+       找到任務 (by title, startDate, endDate)
+       Cloud Functions: deleteTask
+   }
+
+2. 撤回刪除的任務 (恢復)
+   ForEach(lastDeletedTasks) {
+       建立 TodoTask
+       Cloud Functions: createTask
+   }
+
+3. 撤回修改的任務 (恢復原狀)
+   ForEach(lastUpdatedTasks) {
+       恢復原始數據
+       Cloud Functions: updateTask
+   }
+  ↓
+重新整理任務: todoViewModel.forceReloadTasks()
+  ↓
+更新狀態: currentStatus
+  ↓
+全部成功 → clearLastUpdateStatus()
+  ↓
+設置 isUpdating = false
+
+【新增任務流程】
+
+GPT 決定新增任務
+  ↓
+tool_call: saveTask
+  ↓
+arguments: { tasks: [...] }
+  ↓
+executeSaveTask(arguments)
+  ↓
+ForEach(task in args.tasks):
+  ├─ parseDate(startDate, endDate)
+  ├─ 建立 PendingTask
+  ├─ checkAndCreateStatisticsForCategory()
+  ├─ 轉換為 TodoTask
+  ├─ toFirestore
+  ├─ convertTimestampsToStrings()
+  ├─ Cloud Functions: createTask
+  ├─ 成功: addedTasks.append(pendingTask)
+  └─ updateCurrentStatus()
+  ↓
+todoViewModel.forceReloadTasks()
+  ↓
+返回結果 "已成功新增 X 個任務"
+  ↓
+添加到 messages (作為 tool role)
+  ↓
+繼續下一輪對話
+
+===========================================
+六、整合機制
+===========================================
+
+【與任務管理整合】
+
+1. 依賴注入:
+   - CalendarAssistantViewModel.todoViewModel
+   - 獲取任務列表
+   - 執行 CRUD 操作
+
+2. 任務同步:
+   - executeSaveTask → Cloud Functions → forceReloadTasks
+   - executeDeleteTask → Cloud Functions → forceReloadTasks
+   - executeUpdateTask → Cloud Functions → forceReloadTasks
+
+3. 任務查找:
+   - 透過標題、開始/結束時間匹配
+   - 用於撤回功能
+
+【與統計分析整合】
+
+1. 依賴注入:
+   - CalendarAssistantViewModel.staticViewModel
+
+2. 類別統計:
+   - checkAndCreateStatisticsForCategory()
+   - 新增任務時檢查類別統計
+
+【與讀書設定整合】
+
+1. 載入設定:
+   - loadStudySettingsFromFirestore()
+   - 從 Firestore 載入 StudySettings
+
+2. System Prompt:
+   - formatStudySettings()
+   - 將讀書偏好格式化為文字
+   - 告知 GPT 使用者的時間偏好
+
+【與聊天助手整合】
+
+共享機制:
+- 相同的 Function Calling 工具
+- 相同的 parseDate, parseColor 邏輯
+- 相同的 convertTimestampsToStrings 方法
+
+差異:
+- CalendarAssistantViewModel: 非串流, tool_choice: "required"
+- ChatViewModel: 串流, tool_choice: "auto"/"none"/"required" (動態)
+
+===========================================
+七、每日自動更新詳解
+===========================================
+
+【觸發時機】
+
+1. App 啟動:
+   - studyAssistantApp.onAppear
+   - ContentView.onAppear
+
+2. 從背景返回:
+   - .scenePhase 變化
+   - active → performDailyAutoUpdateIfNeeded()
+
+3. 日期變更:
+   - 跨越午夜後首次啟動
+
+【判斷邏輯】
+
+hasUpdatedToday() -> Bool:
+1. 獲取 lastUpdateDate
+2. 比較與當前日期是否同一天
+3. 使用 Calendar.isDate(_:inSameDayAs:)
+
+支援測試模式:
+- 環境變數: FAKE_NOW_ISO8601
+- 可模擬不同日期進行測試
+
+【執行保護】
+
+1. 防止重複執行:
+   - isAutoUpdateInProgress 標記
+
+2. 等待其他操作:
+   - waitForCalendarUpdateAvailability()
+   - 檢查 isUpdating, isLoading, hasLoadedInitialTasks
+   - 超時 30 秒取消
+
+3. 錯誤處理:
+   - updateError 記錄錯誤
+   - 不影響下次執行
+
+【記錄時間】
+
+更新成功:
+- lastUpdateDate = getCurrentDate()
+- 保存到 UserDefaults
+
+下次執行:
+- 檢查 hasUpdatedToday()
+- 如果是新的一天,再次執行
+
+===========================================
+八、持久化機制
+===========================================
+
+【UserDefaults Keys】
+
+private let lastUpdateStatusKey = "CalendarAssistant_LastUpdateStatus"
+private let lastUpdateDateKey = "CalendarAssistant_LastUpdateDate"
+private let autoUpdateEnabledKey = "CalendarAssistant_AutoUpdateEnabled"
+private let autoUpdateInputKey = "CalendarAssistant_AutoUpdateInput"
+
+【LastUpdateStatus 結構】
+
+struct LastUpdateStatus: Codable {
+    let addedTasks: [PendingTask]
+    let deletedTasks: [TodoTask]
+    let updatedTasks: [(original: TodoTask, updated: PendingTask)]
+}
+
+特殊處理:
+- tuple 不支援 Codable
+- 自訂編碼/解碼
+- 使用 UpdatedTaskPair 輔助結構
+
+【保存時機】
+
+1. 更新完成:
+   - performUpdate() 結束時
+   - 有任務變動時
+
+2. 自動保存:
+   - autoUpdateEnabled didSet
+   - autoUpdateInput didSet
+
+【載入時機】
+
+1. 初始化:
+   - init() 呼叫 loadLastUpdateStatus()
+
+2. App 啟動:
+   - 自動載入上次記錄
+
+===========================================
+九、UI/UX 設計細節
+===========================================
+
+【顏色系統】
+
+backgroundColor: #F3D4B7 (淺棕)
+accentColor: #E27844 (橘色)
+cardColor: #FEECD8 (淺米)
+
+任務卡片背景:
+- 新增: Color.green.opacity(0.1)
+- 刪除: Color.red.opacity(0.1)
+- 修改 (原始): Color.gray.opacity(0.1)
+- 修改 (更新): Color.blue.opacity(0.1)
+
+按鈕顏色:
+- 立即更新: accentColor
+- 停止更新: Color.red.opacity(0.85)
+- 撤回: Color.orange.opacity(0.85)
+
+【字體大小】
+
+標題: 22pt, bold
+區段標題: 18pt, medium
+任務標題: 16pt, medium
+任務內容: 14pt
+狀態文字: 14pt
+
+【佈局】
+
+視窗尺寸:
+- 寬度: 360
+- 最大高度: 650
+
+輸入框:
+- 最小高度: 200
+- 背景: Color.gray.opacity(0.08)
+
+任務卡片區域:
+- 最大高度: 300
+- ScrollView
+
+按鈕:
+- 高度: 50 (主要), 46 (次要)
+- 圓角: 12
+- 陰影: opacity 0.3, radius 4
+
+【動畫】
+
+關閉視窗: .spring(response: 0.3, dampingFraction: 0.8)
+展開/收起: withAnimation
+
+【互動】
+
+1. 點擊隱藏鍵盤:
+   - 標題區域
+   - Toggle 區域
+   - 任務卡片區域
+   - 按鈕區域
+
+2. 禁用狀態:
+   - 更新中時禁用輸入
+   - 輸入為空時禁用更新按鈕
+   - 沒有記錄時隱藏撤回按鈕
+
+===========================================
+十、性能優化
+===========================================
+
+【1. Singleton 模式】
+- 全局唯一實例
+- 避免重複計算
+- 狀態一致性
+
+【2. 自訂 URLSession】
+- 10 分鐘 timeout
+- 適應長時間 Cloud Function 執行
+
+【3. 重試機制】
+- 指數退避演算法
+- 處理 429 狀態碼
+- 最多重試 5 次
+
+【4. 懶加載】
+- 任務卡片按需顯示
+- 展開/收起機制
+
+【5. 快取優先】
+- 優先使用 todoViewModel.tasks
+- 避免重複 API 呼叫
+
+【6. 批次操作】
+- 支援一次新增/刪除/更新多個任務
+- 減少 API 呼叫次數
+
+【7. 狀態管理】
+- isUpdating 防止重複操作
+- isAutoUpdateInProgress 防止重複自動更新
+
+===========================================
+十一、已知問題與限制
+===========================================
+
+【1. GPT 指令遵從】
+- GPT 有時不遵守"不要重複呼叫"
+- 可能進行不必要的更新
+- 需要更精確的 prompt 工程
+
+【2. 任務匹配】
+- 撤回功能依賴標題和時間匹配
+- 如果任務被修改可能找不到
+
+【3. 超時處理】
+- 10 分鐘 timeout 可能不足
+- 大量任務處理可能超時
+
+【4. 本地快取】
+- executeUpdateTask 依賴本地快取
+- 快取不存在時需從 Firebase 重新載入
+
+【5. 測試模式】
+- 依賴環境變數 FAKE_NOW_ISO8601
+- 正式環境要確保不設置
+
+===========================================
+十二、未來改進方向
+===========================================
+
+【功能增強】
+- 支援更複雜的重複規則
+- 任務優先級自動調整
+- 智能衝突解決
+- 多人協作日曆
+
+【UI/UX】
+- 更豐富的任務卡片樣式
+- 拖曳調整任務時間
+- 月曆視圖整合
+- 動畫過渡效果
+
+【性能】
+- 增量更新而非全量
+- WebSocket 實時同步
+- 背景任務優化
+
+【AI 增強】
+- 學習使用者習慣
+- 預測任務時長
+- 智能時間分配
+- 多模型支援
+
+===========================================
+檔案結束
+===========================================

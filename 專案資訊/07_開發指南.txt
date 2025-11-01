@@ -1,0 +1,1506 @@
+================================================================================
+                        studyAssistant 開發指南
+================================================================================
+
+ 最後更新：2025-11-01
+ 版本：v1.0
+ 目的：提供開發環境設置、工作流程、最佳實踐與常見開發任務指引
+
+================================================================================
+                           一、開發環境需求
+================================================================================
+
+1. macOS 系統需求
+────────────────────────────────────────────────────────────────────────
+作業系統           macOS 14.0 (Sonoma) 或更新版本
+處理器             Apple Silicon (M1/M2/M3) 或 Intel
+記憶體             建議 16GB 以上
+儲存空間           至少 50GB 可用空間
+────────────────────────────────────────────────────────────────────────
+
+
+2. 必要開發工具
+────────────────────────────────────────────────────────────────────────
+工具名稱           版本要求              用途
+─────────────────────────────────────────────────────────────────────
+Xcode             15.0 或更新           iOS 應用開發
+Swift             6.1.2 或更新          程式語言
+Node.js           20.x LTS              Cloud Functions 開發
+npm               隨 Node.js 安裝       套件管理
+Firebase CLI      最新版                Firebase 部署工具
+Git               2.x                   版本控制
+────────────────────────────────────────────────────────────────────────
+
+
+3. iOS SDK 版本
+────────────────────────────────────────────────────────────────────────
+最低支援版本       iOS 17.0
+建議開發版本       iOS 18.0
+────────────────────────────────────────────────────────────────────────
+
+
+4. 第三方依賴
+────────────────────────────────────────────────────────────────────────
+iOS 依賴 (通過 Swift Package Manager 管理)：
+
+  Firebase/Firestore          - Firestore 資料庫
+  Firebase/Auth               - Firebase 認證
+  Firebase/Functions          - Cloud Functions 客戶端
+  GoogleSignIn                - Google OAuth 登入
+
+Node.js 依賴 (在 firebase_cloud_function/database_functions/):
+
+  firebase-admin: ^11.11.0    - Firebase Admin SDK
+  firebase-functions: ^4.5.0  - Cloud Functions SDK
+  zod: ^3.25.76               - 資料驗證
+  node-fetch: ^2.7.0          - HTTP 請求
+  typescript: ^5.0.0          - TypeScript 編譯器
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                        二、開發環境設置步驟
+================================================================================
+
+ 步驟 1：安裝基礎工具
+────────────────────────────────────────────────────────────────────────
+1. 安裝 Xcode (從 App Store)
+
+   - 開啟 App Store 搜尋 "Xcode"
+   - 安裝最新版本 (約 15GB)
+   - 安裝完成後開啟 Xcode 同意授權條款
+
+   驗證安裝：
+   ```bash
+   xcodebuild -version
+   ```
+
+2. 安裝 Xcode Command Line Tools
+
+   ```bash
+   xcode-select --install
+   ```
+
+3. 驗證 Swift 版本
+
+   ```bash
+   swift --version
+   ```
+
+   應顯示：Apple Swift version 6.1.2 或更新
+
+4. 安裝 Homebrew (套件管理器)
+
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+5. 安裝 Node.js (使用 Homebrew)
+
+   ```bash
+   brew install node@20
+   ```
+
+   驗證安裝：
+   ```bash
+   node --version   # 應顯示 v20.x.x
+   npm --version    # 應顯示 10.x.x
+   ```
+
+6. 安裝 Firebase CLI
+
+   ```bash
+   npm install -g firebase-tools
+   ```
+
+   驗證安裝：
+   ```bash
+   firebase --version
+   ```
+
+7. 安裝 Git (通常 macOS 已內建)
+
+   ```bash
+   git --version
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ 步驟 2：Clone 專案
+────────────────────────────────────────────────────────────────────────
+1. 使用 Git Clone 專案
+
+   ```bash
+   cd ~/Developer  # 或您的專案目錄
+   git clone <repository-url> studyAssistant
+   cd studyAssistant
+   ```
+
+2. 檢查專案結構
+
+   ```bash
+   ls -la
+   ```
+
+   應該看到：
+   - studyAssistant/           (iOS 程式碼)
+   - firebase_cloud_function/  (Cloud Functions)
+   - studyAssistant.xcodeproj/ (Xcode 專案)
+   - 專案資訊/                  (文檔)
+────────────────────────────────────────────────────────────────────────
+
+
+ 步驟 3：設定 iOS 專案
+────────────────────────────────────────────────────────────────────────
+1. 開啟 Xcode 專案
+
+   ```bash
+   open studyAssistant.xcodeproj
+   ```
+
+   或雙擊 studyAssistant.xcodeproj 檔案
+
+2. 設定開發團隊 (Development Team)
+
+   - 在 Xcode 中選擇專案根目錄
+   - 選擇 Target: studyAssistant
+   - 切換到 "Signing & Capabilities" 頁籤
+   - 選擇您的 Apple ID 開發團隊
+   - Bundle Identifier 建議修改為您自己的 (例如: com.yourname.studyAssistant)
+
+3. 安裝 Swift Package Dependencies
+
+   Xcode 應該會自動下載依賴，如果沒有：
+
+   - File → Packages → Resolve Package Versions
+   - 等待下載完成 (Firebase SDK 約 100MB)
+
+4. 配置 Firebase
+
+    重要：您需要自己的 Firebase 專案
+
+   a. 前往 https://console.firebase.google.com/
+   b. 建立新專案或使用現有專案
+   c. 新增 iOS 應用程式
+   d. 下載 GoogleService-Info.plist
+   e. 將檔案拖入 Xcode 專案根目錄 (確認 "Copy items if needed")
+
+    GoogleService-Info.plist 不應提交到 Git (已在 .gitignore 中)
+
+5. 配置 Google Sign-In
+
+   a. 在 Firebase Console 啟用 Google 驗證
+   b. 從 GoogleService-Info.plist 複製 REVERSED_CLIENT_ID
+   c. 在 Xcode 中：
+      - 選擇 Target → Info
+      - 展開 "URL Types"
+      - 確認有一個 URL Scheme 為您的 REVERSED_CLIENT_ID
+
+6. 建立並執行
+
+   - 選擇模擬器 (建議: iPhone 15 Pro, iOS 18.0)
+   - 按下 Cmd+R 或點擊 "Play" 按鈕
+   - 首次建置可能需要 5-10 分鐘
+────────────────────────────────────────────────────────────────────────
+
+
+ 步驟 4：設定 Cloud Functions
+────────────────────────────────────────────────────────────────────────
+1. 進入 Cloud Functions 目錄
+
+   ```bash
+   cd firebase_cloud_function/database_functions
+   ```
+
+2. 安裝 Node.js 依賴
+
+   ```bash
+   npm install
+   ```
+
+   這會安裝 package.json 中列出的所有依賴 (~150MB)
+
+3. 登入 Firebase
+
+   ```bash
+   firebase login
+   ```
+
+   會開啟瀏覽器進行 Google 帳號驗證
+
+4. 設定 Firebase 專案
+
+   ```bash
+   firebase use --add
+   ```
+
+   選擇您在步驟 3-4 建立的 Firebase 專案
+
+5. 編譯 TypeScript
+
+   ```bash
+   npm run build
+   ```
+
+   這會將 src/ 中的 TypeScript 編譯到 lib/
+
+6. 測試本地 Functions (可選)
+
+   ```bash
+   npm run serve
+   ```
+
+   啟動 Firebase Emulator，可在本地測試 Functions
+
+7. 部署到 Firebase
+
+   ```bash
+   npm run deploy
+   ```
+
+   或使用完整命令：
+   ```bash
+   firebase deploy --only functions
+   ```
+
+   首次部署可能需要 5-10 分鐘
+   部署區域：asia-east1
+
+8. 驗證部署
+
+   前往 Firebase Console → Functions
+   應該看到 8 個已部署的函數：
+   - createTask
+   - fetchTasks
+   - deleteTask
+   - updateTaskInstance
+   - updateUserProfile
+   - getUserProfile
+   - updateAppSettings
+   - getAppSettings
+────────────────────────────────────────────────────────────────────────
+
+
+ 步驟 5：設定 OpenAI API (用於聊天功能)
+────────────────────────────────────────────────────────────────────────
+ 聊天功能需要 OpenAI API Key
+
+1. 取得 API Key
+
+   - 前往 https://platform.openai.com/
+   - 註冊/登入帳號
+   - API Keys → Create new secret key
+   - 複製 Key (只顯示一次)
+
+2. 設定環境變數 (在 Cloud Functions)
+
+   ```bash
+   cd firebase_cloud_function/gpt_proxy
+   firebase functions:config:set openai.key="YOUR_API_KEY"
+   ```
+
+3. 重新部署 GPT Proxy
+
+   ```bash
+   firebase deploy --only functions
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ 步驟 6：驗證整體設置
+────────────────────────────────────────────────────────────────────────
+ 檢查清單：
+
+ Xcode 能夠成功建置專案 (Cmd+B)
+ 能夠在模擬器上執行應用程式
+ 能夠使用 Google 帳號登入
+ 能夠創建、編輯、刪除待辦任務
+ 任務能夠同步到 Firebase (檢查 Firestore Console)
+ 計時器功能正常運作
+ 聊天功能能夠回應 (需要 OpenAI API Key)
+ Cloud Functions 在 Firebase Console 顯示為 "Active"
+
+如果所有項目都打勾，恭喜！您的開發環境已設置完成 
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                           三、專案開發工作流程
+================================================================================
+
+ 日常開發流程
+────────────────────────────────────────────────────────────────────────
+1. 啟動開發
+
+   ```bash
+   cd ~/Developer/studyAssistant
+   git pull origin main           # 拉取最新程式碼
+   git checkout -b feature/新功能  # 建立功能分支
+   open studyAssistant.xcodeproj  # 開啟 Xcode
+   ```
+
+2. 進行開發
+
+   - 在 Xcode 中編輯程式碼
+   - 遵循 MVVM 架構原則 (參考 02_架構設計.txt)
+   - 定期儲存並建置 (Cmd+B)
+
+3. 測試變更
+
+   - 在模擬器測試 (Cmd+R)
+   - 在真機測試 (連接 iPhone)
+   - 執行單元測試 (Cmd+U)
+
+4. 提交變更
+
+   ```bash
+   git add .
+   git commit -m "feat: 簡短描述變更內容"
+   git push origin feature/新功能
+   ```
+
+5. 建立 Pull Request
+
+   - 前往 GitHub/GitLab
+   - 從 feature/新功能 → main
+   - 填寫 PR 描述
+   - 等待 Code Review
+
+6. 合併並部署
+
+   ```bash
+   git checkout main
+   git pull origin main
+
+   # 如果有 Cloud Functions 變更
+   cd firebase_cloud_function/database_functions
+   npm run build
+   npm run deploy
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ Git 分支策略
+────────────────────────────────────────────────────────────────────────
+分支類型           命名範例                   用途
+─────────────────────────────────────────────────────────────────────
+main              main                      穩定版本，可隨時發布
+develop           develop                   開發分支 (如果使用)
+feature/*         feature/task-priority     新功能開發
+bugfix/*          bugfix/timer-animation    Bug 修復
+hotfix/*          hotfix/login-crash        緊急修復
+────────────────────────────────────────────────────────────────────────
+
+
+ 程式碼風格指南
+────────────────────────────────────────────────────────────────────────
+Swift 程式碼風格：
+
+1. 命名規則
+   - 類別/結構體：PascalCase (TodoViewModel, UserProfile)
+   - 變數/函數：camelCase (fetchTasks, isLoading)
+   - 常數：camelCase (maxRetryCount)
+   - 列舉：PascalCase，成員 camelCase (RepeatType.daily)
+
+2. 縮排
+   - 使用 4 個空格 (不使用 Tab)
+   - Xcode 預設設定
+
+3. 程式碼組織
+   - 使用 // MARK: - 分隔程式碼區塊
+   - 順序：屬性 → 初始化 → 生命週期 → 公開方法 → 私有方法
+
+   範例：
+   ```swift
+   class TodoViewModel: ObservableObject {
+       // MARK: - Properties
+       @Published var tasks: [TodoTask] = []
+
+       private let firebaseService: FirebaseService
+
+       // MARK: - Initialization
+       init(firebaseService: FirebaseService = .shared) {
+           self.firebaseService = firebaseService
+       }
+
+       // MARK: - Public Methods
+       func addTask(_ task: TodoTask) async {
+           // ...
+       }
+
+       // MARK: - Private Methods
+       private func handleError(_ error: Error) {
+           // ...
+       }
+   }
+   ```
+
+4. SwiftUI 視圖組織
+   - 將複雜視圖拆分為子視圖
+   - 使用 ViewBuilder 組織邏輯
+   - 提取常數到頂部
+
+   範例：
+   ```swift
+   struct TodoView: View {
+       // MARK: - Properties
+       @StateObject private var viewModel = TodoViewModel()
+
+       // MARK: - Constants
+       private let spacing: CGFloat = 12
+
+       // MARK: - Body
+       var body: some View {
+           NavigationView {
+               content
+           }
+       }
+
+       // MARK: - Subviews
+       private var content: some View {
+           List {
+               ForEach(viewModel.tasks) { task in
+                   TaskRow(task: task)
+               }
+           }
+       }
+   }
+   ```
+
+5. 非同步處理
+   - 使用 async/await 而非閉包
+   - ViewModel 標記為 @MainActor
+   - 在 View 中使用 Task {}
+
+   範例：
+   ```swift
+   // ViewModel
+   @MainActor
+   class TodoViewModel: ObservableObject {
+       func addTask(_ task: TodoTask) async {
+           // 自動在 Main Thread
+       }
+   }
+
+   // View
+   Button("新增") {
+       Task {
+           await viewModel.addTask(newTask)
+       }
+   }
+   ```
+
+TypeScript/JavaScript 程式碼風格：
+
+1. 命名規則
+   - 函數：camelCase (createTask, validateData)
+   - 介面/型別：PascalCase (TodoTask, UserProfile)
+   - 常數：UPPER_SNAKE_CASE (MAX_RETRY_COUNT)
+
+2. 縮排
+   - 使用 2 個空格 (遵循 Google Style)
+
+3. ESLint 規則
+   - 使用專案的 .eslintrc.js
+   - 執行檢查：npm run lint
+   - 自動修正：eslint --fix src/
+
+4. TypeScript 型別
+   - 明確標記所有參數和回傳值型別
+   - 使用 interface 而非 type (除非必要)
+   - 避免使用 any
+
+   範例：
+   ```typescript
+   interface CreateTaskRequest {
+     task: TodoTask;
+   }
+
+   export const createTask = onCall(
+     { region: 'asia-east1' },
+     async (request: CallableRequest<CreateTaskRequest>): Promise<Response> => {
+       // ...
+     }
+   );
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ Commit Message 規範
+────────────────────────────────────────────────────────────────────────
+格式：<type>: <subject>
+
+Type 類型：
+  feat      - 新功能
+  fix       - Bug 修復
+  docs      - 文檔變更
+  style     - 程式碼風格 (不影響功能)
+  refactor  - 重構 (不是新功能也不是修復)
+  perf      - 效能優化
+  test      - 測試相關
+  chore     - 建置流程或輔助工具變更
+
+範例：
+  feat: 新增任務優先度功能
+  fix: 修復計時器動畫顯示錯誤
+  docs: 更新 API 文檔
+  refactor: 重構 TodoViewModel 資料載入邏輯
+  perf: 優化 Firestore 查詢效能
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                        四、常見開發任務指南
+================================================================================
+
+ 任務 1：新增一個資料模型
+────────────────────────────────────────────────────────────────────────
+1. 在 studyAssistant/Models/ 建立新檔案 (例如: Notification.swift)
+
+2. 定義結構體並符合 Codable, Identifiable
+
+   ```swift
+   struct Notification: Codable, Identifiable {
+       var id: String = UUID().uuidString
+       var userId: String
+       var title: String
+       var body: String
+       var scheduledFor: Date
+       var isRead: Bool = false
+       var createdAt: Date = Date()
+
+       // Firestore 欄位名稱映射 (如需要)
+       enum CodingKeys: String, CodingKey {
+           case id
+           case userId
+           case title
+           case body
+           case scheduledFor
+           case isRead
+           case createdAt
+       }
+   }
+   ```
+
+3. 如需在 Firestore 儲存，在 FirebaseService.swift 新增相關方法
+
+4. 更新 專案資訊/04_數據庫設計.txt 文檔
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 2：建立新的 ViewModel
+────────────────────────────────────────────────────────────────────────
+1. 在 studyAssistant/ViewModels/ 建立新檔案 (例如: NotificationViewModel.swift)
+
+2. 繼承 ObservableObject，標記為 @MainActor
+
+   ```swift
+   import SwiftUI
+   import Combine
+
+   @MainActor
+   class NotificationViewModel: ObservableObject {
+       // MARK: - Published Properties
+       @Published var notifications: [Notification] = []
+       @Published var isLoading: Bool = false
+       @Published var errorMessage: String?
+
+       // MARK: - Private Properties
+       private let firebaseService: FirebaseService
+       private var cancellables = Set<AnyCancellable>()
+
+       // MARK: - Initialization
+       init(firebaseService: FirebaseService = .shared) {
+           self.firebaseService = firebaseService
+       }
+
+       // MARK: - Public Methods
+       func fetchNotifications() async {
+           isLoading = true
+           defer { isLoading = false }
+
+           do {
+               // 從 Firebase 載入資料
+               // notifications = try await firebaseService.fetchNotifications()
+           } catch {
+               errorMessage = error.localizedDescription
+           }
+       }
+
+       func markAsRead(_ notification: Notification) async {
+           // 實作標記為已讀
+       }
+   }
+   ```
+
+3. 在 studyAssistantApp.swift 中註冊為環境物件 (如需全域使用)
+
+   ```swift
+   @StateObject var notificationViewModel = NotificationViewModel()
+
+   WindowGroup {
+       SignInView()
+           .environmentObject(notificationViewModel)
+   }
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 3：建立新的 SwiftUI 視圖
+────────────────────────────────────────────────────────────────────────
+1. 在 studyAssistant/Views/ 建立新檔案 (例如: NotificationView.swift)
+
+2. 建立視圖結構
+
+   ```swift
+   import SwiftUI
+
+   struct NotificationView: View {
+       // MARK: - Properties
+       @StateObject private var viewModel = NotificationViewModel()
+
+       // MARK: - Body
+       var body: some View {
+           NavigationView {
+               content
+                   .navigationTitle("通知")
+                   .toolbar {
+                       ToolbarItem(placement: .navigationBarTrailing) {
+                           Button("全部已讀") {
+                               Task {
+                                   await viewModel.markAllAsRead()
+                               }
+                           }
+                       }
+                   }
+           }
+           .task {
+               await viewModel.fetchNotifications()
+           }
+       }
+
+       // MARK: - Subviews
+       private var content: some View {
+           List {
+               ForEach(viewModel.notifications) { notification in
+                   NotificationRow(notification: notification)
+               }
+           }
+       }
+   }
+
+   // MARK: - Subview Components
+   struct NotificationRow: View {
+       let notification: Notification
+
+       var body: some View {
+           VStack(alignment: .leading, spacing: 8) {
+               Text(notification.title)
+                   .font(.headline)
+               Text(notification.body)
+                   .font(.subheadline)
+                   .foregroundColor(.secondary)
+           }
+       }
+   }
+
+   // MARK: - Preview
+   #Preview {
+       NotificationView()
+   }
+   ```
+
+3. 如需加入 Tab 導航，在 ContentView.swift 中新增
+
+   ```swift
+   TabView {
+       // 現有的 tabs...
+
+       NotificationView()
+           .tabItem {
+               Label("通知", systemImage: "bell")
+           }
+   }
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 4：新增 Cloud Function API
+────────────────────────────────────────────────────────────────────────
+1. 在 firebase_cloud_function/database_functions/src/index.ts 新增函數
+
+   ```typescript
+   import { onCall, CallableRequest } from 'firebase-functions/v2/https';
+   import { getFirestore } from 'firebase-admin/firestore';
+
+   interface CreateNotificationRequest {
+     notification: {
+       userId: string;
+       title: string;
+       body: string;
+       scheduledFor: string; // ISO timestamp
+     };
+   }
+
+   interface Response {
+     success: boolean;
+     notificationId?: string;
+     error?: string;
+   }
+
+   export const createNotification = onCall(
+     { region: 'asia-east1' },
+     async (request: CallableRequest<CreateNotificationRequest>): Promise<Response> => {
+       try {
+         const { notification } = request.data;
+
+         // 驗證輸入
+         if (!notification.userId || !notification.title) {
+           return { success: false, error: '缺少必要欄位' };
+         }
+
+         // 儲存到 Firestore
+         const db = getFirestore();
+         const notificationRef = await db.collection('notifications').add({
+           ...notification,
+           isRead: false,
+           createdAt: new Date().toISOString(),
+         });
+
+         return {
+           success: true,
+           notificationId: notificationRef.id,
+         };
+       } catch (error) {
+         console.error('Error creating notification:', error);
+         return { success: false, error: String(error) };
+       }
+     }
+   );
+   ```
+
+2. 編譯並部署
+
+   ```bash
+   cd firebase_cloud_function/database_functions
+   npm run build
+   npm run deploy
+   ```
+
+3. 在 iOS 端呼叫 (在 FirebaseService.swift 中)
+
+   ```swift
+   func createNotification(_ notification: Notification) async throws -> String {
+       let functions = Functions.functions(region: "asia-east1")
+
+       let notificationData: [String: Any] = [
+           "userId": notification.userId,
+           "title": notification.title,
+           "body": notification.body,
+           "scheduledFor": ISO8601DateFormatter().string(from: notification.scheduledFor)
+       ]
+
+       let result = try await functions.httpsCallable("createNotification").call([
+           "notification": notificationData
+       ])
+
+       guard let data = result.data as? [String: Any],
+             let success = data["success"] as? Bool,
+             success,
+             let notificationId = data["notificationId"] as? String else {
+           throw DataServiceError.networkError
+       }
+
+       return notificationId
+   }
+   ```
+
+4. 更新 專案資訊/05_API文檔.txt
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 5：修改 Firestore 資料庫結構
+────────────────────────────────────────────────────────────────────────
+ 注意：修改資料庫結構需要資料遷移計畫
+
+1. 更新 Model 定義 (Swift)
+
+2. 更新 Cloud Function 的型別定義 (TypeScript)
+
+3. 撰寫資料遷移腳本 (如需要)
+
+   範例：在 Cloud Function 中新增遷移函數
+   ```typescript
+   export const migrateTasksV2 = onRequest(
+     { region: 'asia-east1' },
+     async (req, res) => {
+       const db = getFirestore();
+       const tasksSnapshot = await db.collection('tasks').get();
+
+       const batch = db.batch();
+       tasksSnapshot.docs.forEach((doc) => {
+         const taskData = doc.data();
+         // 新增新欄位
+         batch.update(doc.ref, {
+           priority: taskData.priority || 'medium',
+           version: (taskData.version || 0) + 1,
+         });
+       });
+
+       await batch.commit();
+       res.send({ success: true, migrated: tasksSnapshot.size });
+     }
+   );
+   ```
+
+4. 執行遷移 (僅一次)
+
+   ```bash
+   curl https://asia-east1-<project-id>.cloudfunctions.net/migrateTasksV2
+   ```
+
+5. 驗證資料遷移成功
+
+6. 更新文檔
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 6：新增本地通知功能
+────────────────────────────────────────────────────────────────────────
+1. 在 Xcode 中啟用 Push Notifications Capability
+   - Target → Signing & Capabilities
+   - 點擊 "+ Capability"
+   - 新增 "Push Notifications"
+
+2. 請求通知權限 (在 App 啟動時)
+
+   ```swift
+   import UserNotifications
+
+   // 在 studyAssistantApp.swift 的 init()
+   func requestNotificationPermission() {
+       UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+           if granted {
+               print("通知權限已授予")
+           }
+       }
+   }
+   ```
+
+3. 排程本地通知
+
+   ```swift
+   func scheduleNotification(for task: TodoTask) {
+       let content = UNMutableNotificationContent()
+       content.title = "任務提醒"
+       content.body = task.title
+       content.sound = .default
+
+       let triggerDate = Calendar.current.dateComponents(
+           [.year, .month, .day, .hour, .minute],
+           from: task.startDate
+       )
+       let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
+
+       let request = UNNotificationRequest(
+           identifier: task.id,
+           content: content,
+           trigger: trigger
+       )
+
+       UNUserNotificationCenter.current().add(request) { error in
+           if let error = error {
+               print("排程通知失敗: \(error)")
+           }
+       }
+   }
+   ```
+
+4. 取消通知
+
+   ```swift
+   func cancelNotification(for taskId: String) {
+       UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [taskId])
+   }
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ 任務 7：整合第三方 Swift Package
+────────────────────────────────────────────────────────────────────────
+1. 在 Xcode 中：
+   - File → Add Package Dependencies...
+   - 輸入 Package URL (例如: https://github.com/onevcat/Kingfisher.git)
+   - 選擇版本 (建議使用最新穩定版)
+   - 選擇要加入的 Target
+   - 點擊 "Add Package"
+
+2. 在需要使用的檔案中 import
+
+   ```swift
+   import Kingfisher
+   ```
+
+3. 使用 Package 提供的功能
+
+4. 更新文檔記錄新依賴
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                           五、除錯與測試
+================================================================================
+
+ 除錯技巧
+────────────────────────────────────────────────────────────────────────
+1. 使用 Xcode Debugger
+
+   - 設定中斷點 (Breakpoint)：點擊行號左側
+   - 執行到中斷點：Cmd+R
+   - 檢查變數值：滑鼠懸停在變數上
+   - 繼續執行：F6 (Step Over), F7 (Step Into), F8 (Continue)
+   - LLDB 命令：在 Console 輸入 po variableName
+
+2. 使用 print() 輸出日誌
+
+   ```swift
+   print(" Tasks fetched: \(tasks.count)")
+   print(" Warning: userId is nil")
+   print(" Error: \(error.localizedDescription)")
+   ```
+
+3. 使用 os.log (更專業的日誌)
+
+   ```swift
+   import os.log
+
+   private let logger = Logger(subsystem: "com.studyAssistant", category: "TodoViewModel")
+
+   logger.info("Fetching tasks for user: \(userId)")
+   logger.error("Failed to fetch tasks: \(error.localizedDescription)")
+   ```
+
+4. Firebase Console 監控
+
+   - Firestore：檢查資料是否正確寫入
+   - Functions：查看 Cloud Functions 日誌
+   - Authentication：檢查使用者認證狀態
+
+5. Network Debugging
+
+   - Xcode → Debug → View → Network Inspector
+   - 查看所有網路請求
+   - 檢查 Firebase 呼叫是否成功
+────────────────────────────────────────────────────────────────────────
+
+
+🧪 單元測試
+────────────────────────────────────────────────────────────────────────
+1. 建立測試檔案
+
+   - File → New → File → Unit Test Case Class
+   - 命名：{ClassName}Tests.swift (例如: TodoViewModelTests.swift)
+
+2. 撰寫測試
+
+   ```swift
+   import XCTest
+   @testable import studyAssistant
+
+   @MainActor
+   class TodoViewModelTests: XCTestCase {
+       var viewModel: TodoViewModel!
+
+       override func setUp() {
+           super.setUp()
+           viewModel = TodoViewModel()
+       }
+
+       override func tearDown() {
+           viewModel = nil
+           super.tearDown()
+       }
+
+       func testAddTask() async {
+           let task = TodoTask(
+               title: "測試任務",
+               userId: "test-user-id"
+           )
+
+           await viewModel.addTask(task)
+
+           XCTAssertEqual(viewModel.tasks.count, 1)
+           XCTAssertEqual(viewModel.tasks.first?.title, "測試任務")
+       }
+   }
+   ```
+
+3. 執行測試
+
+   - 全部測試：Cmd+U
+   - 單一測試：點擊測試方法旁的 ▶️ 按鈕
+   - 查看結果：Test Navigator (Cmd+6)
+────────────────────────────────────────────────────────────────────────
+
+
+ 效能分析
+────────────────────────────────────────────────────────────────────────
+1. Instruments (Xcode 工具)
+
+   - Product → Profile (Cmd+I)
+   - 選擇 Template：
+     • Time Profiler - CPU 使用分析
+     • Leaks - 記憶體洩漏檢測
+     • Network - 網路活動監控
+   - 錄製並分析
+
+2. SwiftUI Preview 效能
+
+   - 使用 Preview 快速檢視 UI 變更
+   - 避免在 Preview 中呼叫網路請求
+   - 使用 Mock 資料
+
+   ```swift
+   #Preview {
+       TodoView()
+           .environmentObject(MockTodoViewModel())
+   }
+   ```
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                       六、部署與發布流程
+================================================================================
+
+📦 建立 Archive (準備上架)
+────────────────────────────────────────────────────────────────────────
+1. 選擇 Generic iOS Device 或實體裝置 (不能是模擬器)
+
+2. Product → Archive
+
+3. 等待建置完成 (5-10 分鐘)
+
+4. Organizer 會自動開啟
+
+5. 選擇 Archive → Distribute App
+
+6. 選擇發布方式：
+   - App Store Connect (正式上架)
+   - Ad Hoc (測試用)
+   - Development (開發用)
+
+7. 上傳到 App Store Connect
+
+8. 在 App Store Connect 中設定 App 資訊：
+   - 名稱、描述、截圖
+   - 定價、可用性
+   - 隱私政策
+
+9. 提交審核
+────────────────────────────────────────────────────────────────────────
+
+
+ 部署 Cloud Functions
+────────────────────────────────────────────────────────────────────────
+1. 確保所有變更已提交到 Git
+
+   ```bash
+   git status
+   git add .
+   git commit -m "feat: 更新 Cloud Functions"
+   ```
+
+2. 測試編譯
+
+   ```bash
+   cd firebase_cloud_function/database_functions
+   npm run build
+   ```
+
+3. 執行 Lint 檢查
+
+   ```bash
+   npm run lint
+   ```
+
+4. 部署
+
+   ```bash
+   npm run deploy
+   ```
+
+   或部署特定函數：
+   ```bash
+   firebase deploy --only functions:createTask,functions:fetchTasks
+   ```
+
+5. 驗證部署
+
+   - 前往 Firebase Console → Functions
+   - 檢查函數狀態為 "Active"
+   - 查看部署時間
+
+6. 測試部署後的函數
+
+   - 在 iOS App 中測試相關功能
+   - 檢查 Functions 日誌是否有錯誤
+────────────────────────────────────────────────────────────────────────
+
+
+ 安全性檢查清單 (發布前)
+────────────────────────────────────────────────────────────────────────
+ GoogleService-Info.plist 不在 Git 中
+ API Keys 使用環境變數而非硬編碼
+ Firestore Security Rules 已設定
+   範例規則：
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /tasks/{taskId} {
+         allow read, write: if request.auth != null &&
+                             request.auth.uid == resource.data.userId;
+       }
+       match /users/{userId} {
+         allow read, write: if request.auth != null &&
+                             request.auth.uid == userId;
+       }
+     }
+   }
+   ```
+ Cloud Functions 有適當的認證檢查
+ 使用者輸入資料有驗證 (Zod)
+ 敏感資料加密儲存
+ HTTPS 強制使用
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                         七、疑難排解
+================================================================================
+
+❓ 常見問題與解決方案
+────────────────────────────────────────────────────────────────────────
+問題：Xcode 無法建置，出現 "Command PhaseScriptExecution failed"
+
+解決方案：
+  1. Clean Build Folder (Shift+Cmd+K)
+  2. 刪除 DerivedData：
+     ```bash
+     rm -rf ~/Library/Developer/Xcode/DerivedData
+     ```
+  3. 重新開啟 Xcode
+────────────────────────────────────────────────────────────────────────
+
+問題：Swift Package 下載失敗
+
+解決方案：
+  1. File → Packages → Reset Package Caches
+  2. File → Packages → Update to Latest Package Versions
+  3. 檢查網路連線
+  4. 嘗試使用 VPN (某些地區可能無法存取 GitHub)
+────────────────────────────────────────────────────────────────────────
+
+問題：Google Sign-In 失敗，顯示 "Error 10"
+
+解決方案：
+  1. 檢查 GoogleService-Info.plist 是否正確加入專案
+  2. 驗證 REVERSED_CLIENT_ID 是否在 URL Types 中
+  3. 檢查 Bundle Identifier 是否與 Firebase Console 一致
+  4. 確認在 Firebase Console 啟用了 Google 驗證
+────────────────────────────────────────────────────────────────────────
+
+問題：Firebase Functions 部署失敗
+
+解決方案：
+  1. 檢查 Node.js 版本 (必須是 20)
+     ```bash
+     node --version
+     ```
+  2. 清除 node_modules 重新安裝
+     ```bash
+     rm -rf node_modules package-lock.json
+     npm install
+     ```
+  3. 檢查 Firebase 專案配額 (免費方案有限制)
+  4. 查看詳細錯誤訊息：
+     ```bash
+     firebase deploy --only functions --debug
+     ```
+────────────────────────────────────────────────────────────────────────
+
+問題：Firestore 資料無法同步
+
+解決方案：
+  1. 檢查網路連線
+  2. 驗證使用者已登入 (userId 不為 nil)
+  3. 檢查 Firestore Security Rules
+  4. 在 Firebase Console 手動新增資料測試
+  5. 檢查 FirebaseService 的錯誤日誌
+────────────────────────────────────────────────────────────────────────
+
+問題：App 在真機上閃退，但模擬器正常
+
+解決方案：
+  1. 連接真機，在 Xcode 中查看 Console 日誌
+  2. 檢查是否有權限問題 (相機、位置、通知等)
+  3. 驗證 Provisioning Profile 正確
+  4. 檢查是否有使用模擬器限定的 API
+────────────────────────────────────────────────────────────────────────
+
+問題：SwiftUI Preview 無法顯示
+
+解決方案：
+  1. 確保 Preview 程式碼正確
+  2. Cmd+Option+P 重新整理 Preview
+  3. Editor → Canvas (Cmd+Option+Enter) 顯示 Canvas
+  4. 重啟 Xcode
+  5. Clean Build Folder
+────────────────────────────────────────────────────────────────────────
+
+問題：計時器在背景不準確
+
+解決方案：
+  - iOS 會暫停背景 App 的 Timer
+  - 使用時間戳記而非 Timer 計數
+  - 記錄開始時間，回到前景時計算經過時間
+
+  範例：
+  ```swift
+  @Published var elapsedTime: TimeInterval = 0
+  private var startTime: Date?
+
+  func startTimer() {
+      startTime = Date()
+      timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+          if let startTime = self.startTime {
+              self.elapsedTime = Date().timeIntervalSince(startTime)
+          }
+      }
+  }
+  ```
+────────────────────────────────────────────────────────────────────────
+
+問題：ChatGPT 回應太慢或超時
+
+解決方案：
+  1. 檢查 OpenAI API 配額
+  2. 使用較小的模型 (gpt-4o-mini 而非 gpt-4)
+  3. 減少 max_tokens 參數
+  4. 實作請求超時處理：
+     ```swift
+     let task = Task {
+         try await chatViewModel.sendMessage(message)
+     }
+
+     try await withTimeout(seconds: 30) {
+         try await task.value
+     }
+     ```
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                        八、效能最佳化建議
+================================================================================
+
+ iOS App 效能優化
+────────────────────────────────────────────────────────────────────────
+1. SwiftUI 視圖優化
+
+   - 使用 @State 而非 @Published (對於純 View 內的狀態)
+   - 避免在 body 中執行複雜計算
+   - 使用 .id() 強制重新渲染而非條件判斷
+   - 拆分大型視圖為小元件
+
+    不佳：
+   ```swift
+   var body: some View {
+       List {
+           ForEach(viewModel.tasks.filter { !$0.isCompleted }) { task in
+               // ...
+           }
+       }
+   }
+   ```
+
+    較佳：
+   ```swift
+   var incompleteTasks: [TodoTask] {
+       viewModel.tasks.filter { !$0.isCompleted }
+   }
+
+   var body: some View {
+       List {
+           ForEach(incompleteTasks) { task in
+               // ...
+           }
+       }
+   }
+   ```
+
+2. 減少不必要的 @Published 更新
+
+   - 只在值真的改變時才更新
+   - 使用 didSet 檢查
+
+   ```swift
+   @Published var tasks: [TodoTask] = [] {
+       didSet {
+           guard tasks != oldValue else { return }
+           // 實際有變更才執行
+       }
+   }
+   ```
+
+3. 非同步圖片載入
+
+   - 使用 AsyncImage 或 Kingfisher
+   - 避免在主執行緒載入大圖
+
+4. 列表效能優化
+
+   - 使用 LazyVStack 而非 VStack (大量項目時)
+   - 限制每次載入的資料量 (分頁載入)
+
+5. 記憶體管理
+
+   - 使用 [weak self] 避免循環參照
+   - 取消不需要的 Combine 訂閱
+
+   ```swift
+   Timer.publish(every: 1, on: .main, in: .common)
+       .autoconnect()
+       .sink { [weak self] _ in
+           self?.updateTime()
+       }
+       .store(in: &cancellables)
+   ```
+────────────────────────────────────────────────────────────────────────
+
+
+ Firebase 效能優化
+────────────────────────────────────────────────────────────────────────
+1. Firestore 查詢優化
+
+   - 使用索引 (Firebase 會自動建議)
+   - 限制查詢結果數量
+
+   ```swift
+   // 限制 20 筆
+   db.collection("tasks")
+       .whereField("userId", isEqualTo: userId)
+       .order(by: "createdAt", descending: true)
+       .limit(to: 20)
+   ```
+
+2. 批次寫入
+
+   - 多個寫入操作使用 batch
+
+   ```swift
+   let batch = db.batch()
+   tasks.forEach { task in
+       let ref = db.collection("tasks").document(task.id)
+       batch.setData(task.toDictionary(), forDocument: ref)
+   }
+   try await batch.commit()
+   ```
+
+3. 快取策略
+
+   - 使用 Firestore 離線快取
+   - 本地優先讀取，背景同步
+
+   ```swift
+   let settings = FirestoreSettings()
+   settings.cacheSettings = PersistentCacheSettings()
+   db.settings = settings
+   ```
+
+4. 減少 Cloud Functions 冷啟動
+
+   - 使用 Min Instances (付費功能)
+   - 優化函數大小 (減少依賴)
+   - 使用 TypeScript 而非 JavaScript (更快)
+
+5. 資料結構優化
+
+   - 反正規化 (避免多次查詢)
+   - 儲存計算結果而非每次計算
+────────────────────────────────────────────────────────────────────────
+
+
+ 網路效能優化
+────────────────────────────────────────────────────────────────────────
+1. 減少網路請求次數
+
+   - 批次操作
+   - 使用 Firestore Realtime Listener 而非輪詢
+
+2. 壓縮資料
+
+   - 只傳輸必要欄位
+   - 使用較短的欄位名稱
+
+3. 錯誤處理與重試
+
+   - 實作指數退避重試
+   - 網路錯誤時顯示離線提示
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                         九、開發資源與參考
+================================================================================
+
+ 官方文檔
+────────────────────────────────────────────────────────────────────────
+Apple 官方
+  • Swift 官方文檔：https://swift.org/documentation/
+  • SwiftUI 教學：https://developer.apple.com/tutorials/swiftui
+  • Human Interface Guidelines：https://developer.apple.com/design/human-interface-guidelines/
+
+Firebase 官方
+  • Firebase iOS SDK：https://firebase.google.com/docs/ios/setup
+  • Firestore 文檔：https://firebase.google.com/docs/firestore
+  • Cloud Functions：https://firebase.google.com/docs/functions
+
+OpenAI
+  • API 文檔：https://platform.openai.com/docs
+  • Function Calling：https://platform.openai.com/docs/guides/function-calling
+────────────────────────────────────────────────────────────────────────
+
+
+ 開發工具
+────────────────────────────────────────────────────────────────────────
+推薦工具
+  • Xcode (必備)
+  • Visual Studio Code (編輯 TypeScript/Markdown)
+  • Postman (測試 API)
+  • Firebase Console (管理後端)
+  • GitHub Desktop (Git GUI)
+  • SF Symbols (系統圖示瀏覽器)
+────────────────────────────────────────────────────────────────────────
+
+
+ 學習資源
+────────────────────────────────────────────────────────────────────────
+推薦課程/書籍
+  • SwiftUI by Example (Paul Hudson)
+  • Hacking with Swift (免費教學)
+  • Stanford CS193p (SwiftUI 課程)
+  • Firebase 官方教學影片
+
+社群
+  • Swift Forums：https://forums.swift.org/
+  • Stack Overflow
+  • GitHub Issues
+────────────────────────────────────────────────────────────────────────
+
+================================================================================
+                            開發指南結束
+================================================================================
+
+ 提示：本文檔會隨著專案演進持續更新
+ 下次更新：當開發流程或工具鏈變更時
+🔗 相關文檔：
+   - 02_架構設計.txt (了解 MVVM 架構)
+   - 06_檔案結構說明.txt (了解專案組織)
+   - 08_已知問題與解決方案.txt (常見問題)
+
+如有任何開發問題，請查閱本指南或聯繫專案維護者。
+祝開發順利！

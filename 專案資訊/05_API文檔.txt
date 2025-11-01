@@ -1,0 +1,675 @@
+===========================================
+API 文檔 (API Documentation)
+===========================================
+
+【API 概述】
+studyAssistant 使用 Firebase Cloud Functions 提供後端 API 服務。
+所有 API 調用都需要 Firebase Authentication Token。
+
+【基本資訊】
+- 協議: HTTPS
+- 區域: asia-east1
+- 認證: Firebase Auth Token (自動附加)
+- 內容類型: application/json
+- 錯誤格式: { success: false, error: "錯誤訊息" }
+
+===========================================
+一、Cloud Functions 列表
+===========================================
+
+【Task Management - 任務管理】
+1. createTask         - 創建任務（含自動實例生成）
+2. fetchTasks         - 獲取任務列表（含實例）
+3. deleteTask         - 刪除任務
+4. updateTaskInstance - 更新任務實例
+
+【User Management - 用戶管理】
+5. updateUserProfile  - 更新用戶個人資料
+6. getUserProfile     - 獲取用戶個人資料
+
+【Settings Management - 設定管理】
+7. updateAppSettings  - 更新應用設定
+8. getAppSettings     - 獲取應用設定
+
+總計: 8 個 Cloud Functions
+
+===========================================
+二、任務管理 API
+===========================================
+
+【1. createTask】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 創建新任務，自動生成重複任務實例
+
+端點: createTask
+
+請求參數:
+{
+  "task": {
+    "title": "string",              // 必填，任務標題
+    "description": "string",         // 選填，任務描述
+    "category": "string",            // 必填，分類/科目
+    "isCompleted": boolean,          // 必填，是否完成
+    "isAllDay": boolean,             // 必填，是否全天
+    "dueDate": "ISO8601 string",     // 選填，到期日期
+    "startDate": "ISO8601 string",   // 選填，開始日期
+    "endDate": "ISO8601 string",     // 選填，結束日期
+    "color": "string",               // 必填，顏色 hex
+    "focusTime": number,             // 必填，專注時間（分鐘）
+    "repeatType": "string",          // 必填，重複類型
+    "repeatDays": [number],          // 選填，重複星期
+    "repeatDates": [number],         // 選填，重複日期
+    "repeatEndDate": "ISO8601 string", // 選填，重複結束日期
+    "userId": "string"               // 必填，用戶 ID
+  }
+}
+
+RepeatType 枚舉值:
+- "none"    - 不重複
+- "daily"   - 每天重複
+- "weekly"  - 每週重複（需配合 repeatDays）
+- "monthly" - 每月重複（需配合 repeatDates）
+
+回應格式:
+{
+  "success": true,
+  "taskId": "string",               // 創建的任務 ID
+  "instancesCreated": number        // 創建的實例數量
+}
+
+錯誤回應:
+{
+  "success": false,
+  "error": "錯誤訊息描述"
+}
+
+使用範例:
+let result = try await functions.httpsCallable("createTask").call([
+    "task": [
+        "title": "每日英文練習",
+        "category": "英文",
+        "isCompleted": false,
+        "isAllDay": false,
+        "color": "#FF6B6B",
+        "focusTime": 30,
+        "repeatType": "daily",
+        "userId": userId
+    ]
+])
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 驗證任務資料格式
+3. 創建主任務文檔
+4. 如果是重複任務，生成實例（最多 365 個）
+5. 返回結果
+
+【2. fetchTasks】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 獲取用戶的所有任務及其實例
+
+端點: fetchTasks
+
+請求參數:
+無（使用 Auth Token 自動識別用戶）
+
+回應格式:
+{
+  "success": true,
+  "tasks": [
+    {
+      "id": "string",
+      "title": "string",
+      "description": "string",
+      "category": "string",
+      "isCompleted": boolean,
+      "isAllDay": boolean,
+      "dueDate": { "_seconds": number, "_nanoseconds": number },
+      "startDate": { "_seconds": number, "_nanoseconds": number },
+      "endDate": { "_seconds": number, "_nanoseconds": number },
+      "color": "string",
+      "focusTime": number,
+      "repeatType": "string",
+      "repeatDays": [number],
+      "repeatDates": [number],
+      "parentId": "string" | null,
+      "instanceDate": { "_seconds": number, "_nanoseconds": number } | null,
+      "createdAt": { "_seconds": number, "_nanoseconds": number },
+      "updatedAt": { "_seconds": number, "_nanoseconds": number },
+      "version": number,
+      "isDeleted": boolean,
+      "userId": "string",
+      "instances": [                  // 任務實例列表
+        {
+          "id": "string",
+          "parentId": "string",
+          "instanceDate": { "_seconds": number, "_nanoseconds": number },
+          "isCompleted": boolean,
+          // ... 其他欄位繼承自父任務
+        }
+      ]
+    }
+  ]
+}
+
+使用範例:
+let result = try await functions.httpsCallable("fetchTasks").call()
+
+guard let data = result.data as? [String: Any],
+      let success = data["success"] as? Bool, success,
+      let tasksData = data["tasks"] as? [[String: Any]] else {
+    throw Error("獲取任務失敗")
+}
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 查詢用戶的所有任務（未刪除）
+3. 對每個任務，查詢其實例
+4. 組合任務與實例資料
+5. 返回結果
+
+【3. deleteTask】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 刪除任務（軟刪除）
+
+端點: deleteTask
+
+請求參數:
+{
+  "taskId": "string"                // 必填，任務 ID
+}
+
+回應格式:
+{
+  "success": true,
+  "message": "任務已刪除"
+}
+
+使用範例:
+let result = try await functions.httpsCallable("deleteTask").call([
+    "taskId": taskId
+])
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 驗證任務所有權
+3. 標記任務為已刪除（isDeleted = true）
+4. 如果是父任務，同時刪除所有實例
+5. 返回成功
+
+【4. updateTaskInstance】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 更新任務實例狀態
+
+端點: updateTaskInstance
+
+請求參數:
+{
+  "instanceId": "string",           // 必填，實例 ID
+  "updates": {
+    "isCompleted": boolean,         // 選填，完成狀態
+    "startDate": "ISO8601 string",  // 選填，開始時間
+    "endDate": "ISO8601 string",    // 選填，結束時間
+    // ... 其他可更新欄位
+  }
+}
+
+回應格式:
+{
+  "success": true,
+  "instance": {
+    // 更新後的實例資料
+  }
+}
+
+使用範例:
+let result = try await functions.httpsCallable("updateTaskInstance").call([
+    "instanceId": instanceId,
+    "updates": [
+        "isCompleted": true
+    ]
+])
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 驗證實例所有權
+3. 版本號檢查（樂觀並發控制）
+4. 更新實例資料
+5. 版本號遞增
+6. 返回更新後的實例
+
+===========================================
+三、用戶管理 API
+===========================================
+
+【5. updateUserProfile】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 更新用戶個人資料
+
+端點: updateUserProfile
+
+請求參數:
+{
+  "profile": {
+    "username": "string",           // 必填，使用者名稱
+    "motivationalQuote": "string",  // 必填，座右銘
+    "targetDate": "ISO8601 string", // 必填，目標日期
+    "userGoal": "string",           // 選填，學習目標
+    "learningStage": "string",      // 必填，學習階段
+    "version": number               // 必填，版本號
+  }
+}
+
+回應格式:
+{
+  "success": true,
+  "profile": {
+    // 更新後的個人資料
+  }
+}
+
+錯誤回應:
+{
+  "success": false,
+  "error": "資料已過期，請重新載入"  // 版本衝突
+}
+
+使用範例:
+let result = try await functions.httpsCallable("updateUserProfile").call([
+    "profile": [
+        "username": "小明",
+        "motivationalQuote": "每天進步一點點",
+        "targetDate": dateString,
+        "learningStage": "大學",
+        "version": currentVersion + 1
+    ]
+])
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 版本號檢查（防止覆蓋較新資料）
+3. 更新個人資料
+4. 更新 lastLoginAt
+5. 版本號遞增
+6. 返回更新後的資料
+
+【6. getUserProfile】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 獲取用戶個人資料
+
+端點: getUserProfile
+
+請求參數:
+無（使用 Auth Token 自動識別用戶）
+
+回應格式:
+{
+  "success": true,
+  "profile": {
+    "id": "string",
+    "email": "string",
+    "username": "string",
+    "motivationalQuote": "string",
+    "targetDate": { "_seconds": number, "_nanoseconds": number },
+    "userGoal": "string",
+    "learningStage": "string",
+    "isVIP": boolean,
+    "lastLoginAt": { "_seconds": number, "_nanoseconds": number },
+    "version": number,
+    "lastSyncedAt": { "_seconds": number, "_nanoseconds": number },
+    "isDeleted": boolean
+  }
+}
+
+使用範例:
+let result = try await functions.httpsCallable("getUserProfile").call()
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 查詢個人資料文檔
+3. 如果不存在，創建預設資料
+4. 返回個人資料
+
+===========================================
+四、設定管理 API
+===========================================
+
+【7. updateAppSettings】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 更新應用設定
+
+端點: updateAppSettings
+
+請求參數:
+{
+  "settings": {
+    "notificationsEnabled": boolean, // 必填，通知開關
+    "lastModified": "ISO8601 string" // 必填，最後修改時間
+  }
+}
+
+回應格式:
+{
+  "success": true,
+  "settings": {
+    // 更新後的設定
+  }
+}
+
+使用範例:
+let result = try await functions.httpsCallable("updateAppSettings").call([
+    "settings": [
+        "notificationsEnabled": true,
+        "lastModified": dateString
+    ]
+])
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 更新設定文檔
+3. 返回更新後的設定
+
+【8. getAppSettings】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+功能: 獲取應用設定
+
+端點: getAppSettings
+
+請求參數:
+無（使用 Auth Token 自動識別用戶）
+
+回應格式:
+{
+  "success": true,
+  "settings": {
+    "id": "string",
+    "notificationsEnabled": boolean,
+    "lastModified": { "_seconds": number, "_nanoseconds": number }
+  }
+}
+
+使用範例:
+let result = try await functions.httpsCallable("getAppSettings").call()
+
+伺服器端邏輯:
+1. 驗證用戶身份
+2. 查詢設定文檔
+3. 如果不存在，創建預設設定
+4. 返回設定資料
+
+===========================================
+五、錯誤處理機制
+===========================================
+
+【錯誤代碼】
+
+Authentication Errors:
+- unauthenticated       - 未登入
+- permission-denied     - 權限不足
+- token-expired        - Token 過期
+
+Validation Errors:
+- invalid-argument     - 參數無效
+- missing-required     - 缺少必填欄位
+- invalid-format       - 格式錯誤
+
+Data Errors:
+- not-found            - 資源不存在
+- already-exists       - 資源已存在
+- version-conflict     - 版本衝突
+- data-outdated        - 資料已過期
+
+System Errors:
+- internal             - 內部錯誤
+- unavailable          - 服務不可用
+- deadline-exceeded    - 請求超時
+
+【錯誤回應格式】
+
+{
+  "success": false,
+  "error": "錯誤訊息描述",
+  "code": "error-code",           // 選填
+  "details": {                    // 選填，詳細資訊
+    "field": "fieldName",
+    "value": "invalidValue"
+  }
+}
+
+【客戶端錯誤處理】
+
+範例:
+do {
+    let result = try await functions.httpsCallable("createTask").call(params)
+
+    guard let data = result.data as? [String: Any],
+          let success = data["success"] as? Bool, success else {
+        let error = (data as? [String: Any])?["error"] as? String ?? "未知錯誤"
+        throw AppError.apiError(error)
+    }
+
+    // 處理成功回應
+} catch let error as NSError {
+    if error.domain == FunctionsErrorDomain {
+        let code = FunctionsErrorCode(rawValue: error.code)
+        switch code {
+        case .unauthenticated:
+            // 處理未登入
+        case .permissionDenied:
+            // 處理權限不足
+        default:
+            // 處理其他錯誤
+        }
+    }
+}
+
+【重試機制】
+
+指數退避算法:
+- 初始延遲: 1 秒
+- 最大延遲: 32 秒
+- 最大重試: 3 次
+- 公式: delay = min(baseDelay * 2^retryCount, maxDelay)
+
+適用場景:
+- 網路錯誤
+- 暫時性服務不可用
+- Rate Limit 錯誤
+
+範例:
+func retryOperation<T>(
+    maxRetries: Int = 3,
+    operation: @escaping () async throws -> T
+) async throws -> T {
+    var lastError: Error?
+    var delay: TimeInterval = 1.0
+
+    for attempt in 0..<maxRetries {
+        do {
+            return try await operation()
+        } catch {
+            lastError = error
+            if attempt < maxRetries - 1 {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                delay = min(delay * 2, 32)
+            }
+        }
+    }
+
+    throw lastError ?? NSError(domain: "RetryError", code: -1)
+}
+
+===========================================
+六、API 調用示例
+===========================================
+
+【完整流程示例：創建並獲取任務】
+
+// 1. 創建任務
+let taskData: [String: Any] = [
+    "title": "複習數學",
+    "description": "第三章習題",
+    "category": "數學",
+    "isCompleted": false,
+    "isAllDay": false,
+    "dueDate": ISO8601DateFormatter().string(from: Date()),
+    "color": "#4CAF50",
+    "focusTime": 60,
+    "repeatType": "weekly",
+    "repeatDays": [1, 3, 5],  // 週一、三、五
+    "userId": Auth.auth().currentUser!.uid
+]
+
+let createResult = try await functions
+    .httpsCallable("createTask")
+    .call(["task": taskData])
+
+guard let createData = createResult.data as? [String: Any],
+      let success = createData["success"] as? Bool, success,
+      let taskId = createData["taskId"] as? String else {
+    throw Error("創建任務失敗")
+}
+
+print("任務創建成功，ID: \(taskId)")
+
+// 2. 獲取所有任務
+let fetchResult = try await functions
+    .httpsCallable("fetchTasks")
+    .call()
+
+guard let fetchData = fetchResult.data as? [String: Any],
+      let success = fetchData["success"] as? Bool, success,
+      let tasksData = fetchData["tasks"] as? [[String: Any]] else {
+    throw Error("獲取任務失敗")
+}
+
+print("獲取到 \(tasksData.count) 個任務")
+
+// 3. 更新任務實例
+if let firstTask = tasksData.first,
+   let instances = firstTask["instances"] as? [[String: Any]],
+   let firstInstance = instances.first,
+   let instanceId = firstInstance["id"] as? String {
+
+    let updateResult = try await functions
+        .httpsCallable("updateTaskInstance")
+        .call([
+            "instanceId": instanceId,
+            "updates": ["isCompleted": true]
+        ])
+
+    print("實例更新成功")
+}
+
+【完整流程示例：更新用戶資料】
+
+// 1. 獲取當前資料
+let getResult = try await functions
+    .httpsCallable("getUserProfile")
+    .call()
+
+guard let getData = getResult.data as? [String: Any],
+      let success = getData["success"] as? Bool, success,
+      let profileData = getData["profile"] as? [String: Any],
+      let currentVersion = profileData["version"] as? Int else {
+    throw Error("獲取個人資料失敗")
+}
+
+// 2. 更新資料
+let updateData: [String: Any] = [
+    "username": "新名稱",
+    "motivationalQuote": "加油！",
+    "targetDate": ISO8601DateFormatter().string(from: targetDate),
+    "learningStage": "高中",
+    "version": currentVersion + 1
+]
+
+let updateResult = try await functions
+    .httpsCallable("updateUserProfile")
+    .call(["profile": updateData])
+
+guard let updateData = updateResult.data as? [String: Any],
+      let success = updateData["success"] as? Bool, success else {
+    let error = updateData["error"] as? String ?? "更新失敗"
+    throw Error(error)
+}
+
+print("個人資料更新成功")
+
+===========================================
+七、性能考量
+===========================================
+
+【請求優化】
+
+1. 批次請求
+   - 盡量合併相關請求
+   - 減少網路往返次數
+
+2. 快取策略
+   - 本地快取常用資料
+   - 設定合理的快取失效時間
+
+3. 並行請求
+   - 使用 async let 並行獲取獨立資料
+   - 範例:
+     async let profile = fetchProfile()
+     async let settings = fetchSettings()
+     let (p, s) = await (try profile, try settings)
+
+【計費考量】
+
+Cloud Functions 計費:
+- 調用次數: 每月前 200 萬次免費
+- 運算時間: 每月前 40 萬 GB-秒免費
+- 網路流量: 每月前 5 GB 免費
+
+優化建議:
+- 減少不必要的 API 調用
+- 使用本地快取
+- 批次操作
+
+【監控與日誌】
+
+Firebase Console 提供:
+- 調用次數統計
+- 錯誤率監控
+- 執行時間分析
+- 詳細日誌查看
+
+建議監控指標:
+- API 調用成功率
+- 平均回應時間
+- 錯誤類型分布
+- 用戶活躍度
+
+===========================================
+八、版本管理
+===========================================
+
+【API 版本】
+當前版本: v1
+計劃: 未來可能引入版本化端點（如 v2/createTask）
+
+【向後兼容】
+- 新增欄位不影響舊客戶端
+- 保留已廢棄欄位一段時間
+- 提供遷移指南
+
+【變更日誌】
+2025-05-01: 初始版本發布
+- 8 個 Cloud Functions
+- 基本 CRUD 操作
+- 重複任務支援
+
+===========================================
+檔案結束
+===========================================

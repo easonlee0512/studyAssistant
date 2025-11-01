@@ -1,0 +1,1007 @@
+===========================================
+計時器功能 (Timer / Pomodoro)
+===========================================
+
+【功能概述】
+計時器功能提供正向計時和倒數計時兩種模式,支援可視化的圓環進度顯示、時間拖動調整、計時記錄保存、以及與任務和統計數據的深度整合。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【Models】
+- studyAssistant/Models/TimerRecord.swift (207行)
+  └─ 計時記錄資料結構、本地存儲管理器、統計計算
+
+【ViewModels】
+- studyAssistant/ViewModels/TimerManager.swift (719行)
+  └─ 計時器業務邏輯、時間差計算、記錄管理
+
+【Views】
+- studyAssistant/Views/TimerView.swift (581行)
+  └─ 計時器 UI 視圖及子組件
+
+【總代碼量】約 1,507 行
+
+===========================================
+二、資料模型 (TimerRecord.swift)
+===========================================
+
+【1. TimerRecord 結構】
+
+計時記錄資料結構:
+
+struct TimerRecord: Identifiable, Codable {
+    var id: String              // UUID 字串
+    var userId: String          // 用戶ID
+    var subject: String         // 科目/主題
+    var startTime: Date         // 開始時間
+    var endTime: Date           // 結束時間
+    var duration: Int           // 持續時間(秒)
+    var isCompleted: Bool       // 是否完成
+    var createdAt: Date         // 建立時間
+    var lastModifiedAt: Date    // 最後修改時間
+    var isDeleted: Bool         // 是否已刪除(軟刪除)
+}
+
+【計算屬性】
+- durationInMinutes: Double
+  └─ 將持續時間從秒轉換為分鐘
+
+【初始化方法】
+init(userId:subject:startTime:endTime:isCompleted:)
+- 自動計算 duration
+- 自動生成 UUID
+- 設定 createdAt 和 lastModifiedAt
+
+【2. TimerRecordManager 類別】
+
+本地存儲管理器 (單例模式):
+
+class TimerRecordManager {
+    static let shared = TimerRecordManager()
+    private let userDefaults = UserDefaults.standard
+    private let recordsKey = "timerRecords"
+    private var records: [TimerRecord] = []
+}
+
+【核心方法】
+
+A. 數據持久化
+   - loadRecords() - 從 UserDefaults 載入記錄
+   - saveRecords() - 保存記錄到 UserDefaults
+   - 使用 JSONEncoder/JSONDecoder
+
+B. CRUD 操作
+   - addRecord(_ record:) - 新增記錄
+   - getAllRecords() -> [TimerRecord] - 獲取所有記錄
+   - getRecords(userId:) - 獲取指定用戶的記錄
+   - getRecords(userId:from:to:) - 獲取時間範圍記錄
+   - updateRecord(_ record:) - 更新記錄
+   - deleteRecord(id:) - 軟刪除記錄
+   - clearRecords() - 完全清除所有記錄
+
+C. 統計數據
+   - getStatistics(userId:) - 獲取用戶統計
+   - getStatistics(userId:from:to:) - 獲取時間範圍統計
+
+【3. TimerStatistics 結構】
+
+統計數據輔助類型:
+
+struct TimerStatistics {
+    // 按科目統計
+    var subjectStats: [String: SubjectStats] = [:]
+
+    // 按日期統計
+    var dailyStats: [Date: DailyStats] = [:]
+
+    // 總計
+    var totalDuration: Int = 0
+    var totalSessions: Int = 0
+    var completedSessions: Int = 0
+    var incompleteSessions: Int = 0
+    var totalTime: TimeInterval = 0
+    var averageSessionTime: TimeInterval = 0
+}
+
+【子結構】
+
+SubjectStats:
+- totalDuration: Int - 總時長(秒)
+- sessionCount: Int - 計時次數
+- completedCount: Int - 完成次數
+
+DailyStats:
+- totalDuration: Int - 每日總時長
+- sessionCount: Int - 每日計時次數
+- subjects: Set<String> - 涉及的科目集合
+
+【靜態方法】
+static func calculate(from records: [TimerRecord]) -> TimerStatistics
+
+計算邏輯:
+1. 遍歷所有記錄
+2. 累計總時長和次數
+3. 按科目分組統計
+4. 按日期分組統計
+5. 計算平均時間
+
+===========================================
+三、業務邏輯層 (TimerManager.swift)
+===========================================
+
+【類別定義】
+class TimerManager: ObservableObject
+
+計時器核心管理類,採用**時間差計算法**實現精確計時。
+
+【核心屬性】
+
+A. 計時器基本屬性
+   - timeRemaining: TimeInterval - 剩餘時間(秒)
+   - isRunning: Bool - 運行狀態
+   - isCountUp: Bool - 正向/倒數模式
+   - elapsedTime: TimeInterval - 已過時間(正向模式)
+   - progress: Double - 進度值(0.0~1.0)
+   - subject: String - 當前科目
+   - hasSynced: Bool - 同步狀態標記
+
+B. 時間組件
+   - hours: Int - 小時(0~3)
+   - minutes: Int - 分鐘(0~59)
+   - seconds: Int - 秒數(0~59)
+
+C. 記憶變數
+   - lastUsedHours/Minutes/Seconds: Int - 上次設定
+   - hasUsedBefore: Bool - 是否使用過
+   - initialHours/Minutes/Seconds: Int - 初始設定
+
+D. 時間範圍設定
+   - minTime: Int = 0 - 最少時間(分鐘)
+   - maxTime: Int = 180 - 最多時間(3小時)
+
+E. 時間差計算變數
+   - startTime: Date? - 開始時間點
+   - pauseTime: Date? - 暫停時間點
+   - totalPausedTime: TimeInterval - 累計暫停時間
+   - initialTimeRemaining: TimeInterval - 初始剩餘時間
+
+F. 記錄與關聯
+   - actualStartTime: Date? - 實際開始時間
+   - recordManager: TimerRecordManager - 記錄管理器
+   - currentUserId: String - 當前用戶ID
+   - todoViewModel: TodoViewModel? - 任務視圖模型
+   - currentTaskId: String? - 當前任務ID
+   - staticViewModel: StaticViewModel? - 統計視圖模型
+
+G. UI 更新
+   - timerSubscription: AnyCancellable? - 計時器訂閱
+
+【核心方法】
+
+1. 初始化與清理
+   ────────────
+
+   init()
+   - 初始化時間組件
+   - 監聽 .userDidLogout 通知
+
+   clearTimerState()
+   - 停止計時並保存記錄
+   - 重置所有狀態變數
+   - 清除計時器訂閱
+   - 釋放 ViewModel 參考
+
+   handleUserLogout()
+   - 處理用戶登出事件
+   - 呼叫 clearTimerState()
+
+2. 時間組件管理
+   ────────────
+
+   updateTimeComponents()
+   - 從 timeRemaining 計算時分秒
+   - hours = timeRemaining / 3600
+   - minutes = (timeRemaining / 60) % 60
+   - seconds = timeRemaining % 60
+
+   updateTimer()
+   - 限制 hours 最大為 3
+   - 當 hours == 3 時,minutes/seconds 歸零
+   - 從時分秒計算 timeRemaining
+   - 更新進度條: progress = (timeRemaining - minTime*60) / (maxTime*60)
+
+3. 模式切換
+   ────────
+
+   toggleCountMode()
+   - 停止現有計時器
+   - 切換 isCountUp 標記
+   - 重置計時器
+
+   邏輯:
+   - 切換到正計時: progress = 0.0
+   - 切換到倒數:
+     - 有使用記錄 → 使用上次設定
+     - 無使用記錄 → 使用預設 30 分鐘
+
+4. 計時器控制
+   ────────────
+
+   toggleTimer()
+   - isRunning: 呼叫 pauseTimer()
+   - !isRunning: 呼叫 startTimer()
+
+   startTimer()
+   - 首次啟動:
+     - 記錄 startTime 和 actualStartTime
+     - 記錄初始時間設定
+     - 設定 initialTimeRemaining (倒數模式)
+
+   - 從暫停恢復:
+     - 檢查用戶是否調整時間
+     - 調整過 → 重置計時狀態
+     - 未調整 → 累計暫停時間
+
+   - 啟動 UI 更新計時器
+
+   pauseTimer()
+   - 記錄 pauseTime
+   - 計算已過時間
+   - 更新顯示的時間組件
+   - 停止 UI 更新計時器
+
+   resetTimer()
+   - 如果運行中,先保存記錄
+   - 停止計時器
+   - 清除時間點記錄
+   - 倒數模式: 恢復到初始時間
+   - 正計時模式: 歸零
+
+5. UI 更新機制
+   ────────────
+
+   startDisplayTimer()
+   - 使用 Timer.publish(every: 1) 每秒更新
+   - 訂閱並儲存到 timerSubscription
+
+   updateTimerDisplay()
+   - 計算有效經過時間:
+     effectiveElapsedTime = now - startTime - totalPausedTime
+
+   - 正向計時:
+     - elapsedTime = effectiveElapsedTime
+     - progress = (elapsedTime % 3600) / 3600 (每小時一週期)
+
+   - 倒數計時:
+     - timeRemaining = max(0, initialTimeRemaining - effectiveElapsedTime)
+     - 更新時間組件
+     - 檢查是否歸零 → 保存記錄 → 停止計時
+
+   stopDisplayTimer()
+   - 取消 timerSubscription
+
+6. 進度拖動
+   ────────
+
+   updateProgressFromDrag(progress: Double)
+   - 只在倒數模式且未運行時有效
+   - 根據 progress 計算 selectedTime
+   - 更新 timeRemaining
+   - 更新時分秒
+
+7. 記錄保存
+   ────────
+
+   saveTimerRecord(isCompleted: Bool)
+   - 檢查 actualStartTime 存在
+   - 建立 TimerRecord 物件
+   - 計算專注時間(秒)
+   - 使用 recordManager.addRecord() 保存
+
+   - 同步專注時間到統計: syncFocusTimeToStatistics()
+
+   - 更新任務 focusTime (需 >= 60秒):
+     - 獲取任務: todoViewModel.getTaskById()
+     - 更新 task.focusTime (分鐘)
+     - 保存任務: todoViewModel.updateTask()
+
+8. 統計同步
+   ────────
+
+   syncFocusTimeToStatistics(subject:focusTimeInSeconds:)
+   - 需 >= 30秒才同步
+   - 獲取科目類別: getCurrentSubjectCategory()
+   - 呼叫 staticViewModel.updateCategoryFocusTime()
+
+   getCurrentSubjectCategory() -> String?
+   - 根據 currentTaskId 獲取任務
+   - 返回任務的 category
+   - 使用 DispatchSemaphore 等待異步結果(最多1秒)
+
+9. 任務關聯
+   ────────
+
+   setTodoViewModel(_ viewModel:)
+   - 設置 todoViewModel
+   - 呼叫 updateCurrentTask()
+
+   updateCurrentTask()
+   - 獲取今日所有任務
+   - 篩選時間範圍內且未完成的任務
+   - 選擇最早創建的任務
+   - 更新 subject 和 currentTaskId
+
+10. 應用程式生命週期
+    ────────────────
+
+    appWillEnterForeground()
+    - 如果運行中,更新計時顯示
+    - 重新啟動 UI 更新計時器
+    - 設置 hasSynced = true
+
+    appDidEnterBackground()
+    - 停止 UI 更新計時器
+    - 保持計時狀態
+
+11. 統計數據
+    ────────
+
+    getStatistics() -> TimerStatistics
+    - 呼叫 recordManager.getStatistics(userId:)
+
+    getStatistics(from:to:) -> TimerStatistics
+    - 呼叫 recordManager.getStatistics(userId:from:to:)
+
+    getAllTimerRecords() -> [TimerRecord]
+    - 呼叫 recordManager.getRecords(userId:)
+
+【時間差計算法原理】
+
+傳統方法問題:
+- 每秒減少或增加 timeRemaining
+- 累積誤差,不精確
+- 暫停/恢復後不準確
+
+時間差計算法:
+1. 記錄開始時間點: startTime
+2. 記錄初始剩餘時間: initialTimeRemaining (倒數)
+3. 每次更新時:
+   - 計算當前時間與開始時間的差值
+   - 減去累計暫停時間
+   - 倒數: timeRemaining = initialTimeRemaining - 差值
+   - 正數: elapsedTime = 差值
+
+優點:
+- 精確到毫秒
+- 不受更新頻率影響
+- 支援暫停/恢復
+- 支援背景計時
+
+【暫停時調整時間機制】
+
+問題:
+- 用戶在暫停時可能調整時間
+- 恢復後應該使用新時間還是舊時間?
+
+解決方案:
+1. 暫停時更新 timeRemaining 和時間組件
+2. 恢復時檢查用戶是否調整了時間
+3. 如果調整:
+   - 重置 startTime 為當前時間
+   - 重置 initialTimeRemaining 為新時間
+   - 清除 totalPausedTime
+4. 如果未調整:
+   - 累計暫停時間
+   - 繼續原計時
+
+方法:
+adjustTimeComponentsWhenPaused()
+- 在暫停狀態下手動調整時呼叫
+- 直接更新 timeRemaining
+
+===========================================
+四、視圖層 (TimerView.swift)
+===========================================
+
+【視圖結構】
+struct TimerView: View
+
+計時器主視圖,採用組件化設計。
+
+【依賴注入】
+- @EnvironmentObject var timerManager: TimerManager
+- @EnvironmentObject var todoViewModel: TodoViewModel
+- @EnvironmentObject var staticViewModel: StaticViewModel
+
+【本地狀態】
+- isDragging: Bool - 是否正在拖動進度點
+- showTimeTooltip: Bool - 顯示時間提示
+
+【視圖佈局】
+
+ZStack {
+    背景色 (#F3D4B7)
+
+    VStack {
+        // 頂部固定區域 (高度 100)
+        模式切換按鈕 (COUNT/COUNTDOWN)
+
+        Spacer()
+
+        // 中間計時器圓環
+        ZStack {
+            TimerCircle
+            TimerDisplay
+        }
+
+        Spacer()
+
+        // 底部控制區域 (高度 150)
+        TimerControls
+    }
+}
+
+【子視圖組件】
+
+1. TimerCircle
+   ────────────
+   計時器圓環視圖
+
+   結構:
+   ZStack {
+       // 外部陰影圓 (280x280)
+       Circle (透明)
+
+       // 淺色背景圓環 (280x280, #F2D7CB)
+       Circle (填充 + 陰影)
+
+       // 白色內圓 (240x240, #F5ECE3)
+       Circle (填充 + 陰影)
+
+       // 灰色進度背景環 (260 直徑, 20 線寬)
+       Circle (描邊 #F2D7CB 0.7透明)
+
+       // 橙色進度環 (260 直徑, 20 線寬)
+       Circle (描邊漸變: #E09772 → #E87D45)
+         .trim(from: 0, to: progressToDisplay())
+         .rotationEffect(-90°)
+
+       // 12個時間刻度
+       ForEach(0..<12) { i in
+           Rectangle (寬度: 1~2, 高度: 8)
+             .offset(y: -110~-118)
+       }
+
+       // 可拖動進度點
+       DraggablePoint
+   }
+
+   progressToDisplay() -> Double:
+   - 倒數模式: 根據 timeRemaining 計算
+   - 正向模式: 使用 timerManager.progress
+
+2. DraggablePoint
+   ────────────
+   可拖動的進度點
+
+   Circle (白色, 28x28, 陰影)
+     .offset(圓周位置)
+     .gesture(DragGesture)
+
+   拖動邏輯:
+   - 只在倒數模式且未運行時有效
+   - 計算拖動位置的角度
+   - 轉換為進度值 (0~1)
+   - 呼叫 timerManager.updateProgressFromDrag()
+
+3. TimerDisplay
+   ────────────
+   時間顯示與輸入
+
+   ZStack {
+       Circle (白色內圓, 200x200)
+
+       VStack {
+           // 時間顯示
+           HStack {
+               時:分:秒
+           }
+
+           // 科目名稱
+           Text(subject)
+         }
+   }
+
+   時間顯示邏輯:
+   - 正計時或運行中: 固定數字文字
+   - 倒數且未運行: TimePickerWheel (可滑動)
+
+   onChange 監聽:
+   - hours/minutes/seconds 變更時
+   - 呼叫 timerManager.updateTimer()
+   - 呼叫 adjustTimeComponentsWhenPaused()
+   - 限制 hours == 3 時 minutes/seconds 歸零
+
+4. TimePickerWheel
+   ────────────
+   時間滾輪選擇器
+
+   Text (兩位數格式)
+     .gesture(DragGesture)
+
+   滑動邏輯:
+   - 向上滑: 數值增加
+   - 向下滑: 數值減少
+   - 累積偏移量達到閾值(80) 才改變
+   - 循環範圍 (0~3, 0~59)
+   - 禁用條件: hours == 3 時禁用 minutes/seconds
+
+   狀態:
+   - dragOffset: CGFloat - 當前拖動偏移
+   - accumulatedOffset: CGFloat - 累積偏移
+   - lastDragValue: Int - 上次處理的值
+
+5. TimerControls
+   ────────────
+   控制按鈕
+
+   HStack(spacing: 20) {
+       重置按鈕 (150x60, 圓角20)
+       開始/暫停按鈕 (150x60, 圓角20)
+   }
+
+   iOS 26+ 使用玻璃效果:
+   .glassEffect(.regular.tint(#E27844 0.8透明).interactive())
+
+   iOS 26 以下使用純色背景:
+   RoundedRectangle.fill(#E09772)
+
+【生命週期】
+
+onAppear:
+- 設置 TodoViewModel: timerManager.setTodoViewModel()
+- 設置 StaticViewModel: timerManager.setStaticViewModel()
+- 如果運行中: appWillEnterForeground()
+
+onReceive(.todoDataDidChange):
+- 更新當前任務: timerManager.updateCurrentTask()
+
+【動畫】
+
+- 模式切換: 無動畫
+- 運行狀態: easeInOut(duration: 0.2)
+- 時間輪切換: easeInOut(duration: 0.1)
+
+===========================================
+五、資料流程圖
+===========================================
+
+【啟動計時流程】
+
+用戶點擊 "開始"
+  ↓
+TimerControls.toggleTimer()
+  ↓
+timerManager.toggleTimer()
+  ↓
+timerManager.startTimer()
+  ↓
+首次啟動?
+  ├─ 是: 記錄 startTime, actualStartTime
+  │       記錄 initialTimeRemaining
+  │       記錄初始時間設定
+  │
+  └─ 否: 從暫停恢復
+         檢查用戶是否調整時間
+         └─ 調整: 重置計時狀態
+         └─ 未調整: 累計暫停時間
+  ↓
+startDisplayTimer()
+  ↓
+Timer.publish(every: 1) 訂閱
+  ↓
+每秒執行 updateTimerDisplay()
+  ↓
+計算有效經過時間
+  ↓
+正向計時?
+  ├─ 是: elapsedTime = 經過時間
+  │      progress = (elapsedTime % 3600) / 3600
+  │
+  └─ 否: timeRemaining = initialTimeRemaining - 經過時間
+         updateTimeComponents()
+         檢查是否歸零
+         └─ 是: 保存記錄
+                停止計時
+  ↓
+UI 自動更新
+
+【暫停計時流程】
+
+用戶點擊 "暫停"
+  ↓
+timerManager.toggleTimer()
+  ↓
+timerManager.pauseTimer()
+  ↓
+記錄 pauseTime
+  ↓
+計算已過時間
+  ↓
+倒數模式: 更新 timeRemaining 和時間組件
+  ↓
+stopDisplayTimer()
+  ↓
+取消計時器訂閱
+
+【重置計時流程】
+
+用戶點擊 "重置"
+  ↓
+timerManager.resetTimer()
+  ↓
+如果運行中: saveTimerRecord(isCompleted: false)
+  ↓
+停止計時器
+  ↓
+清除時間點記錄
+  ↓
+倒數模式?
+  ├─ 是: 恢復到初始時間設定
+  │      (initialHours/Minutes/Seconds)
+  │
+  └─ 否: elapsedTime = 0
+         progress = 0
+  ↓
+UI 更新
+
+【切換模式流程】
+
+用戶點擊 "COUNT/COUNTDOWN"
+  ↓
+timerManager.toggleCountMode()
+  ↓
+停止現有計時器
+  ↓
+isCountUp.toggle()
+  ↓
+resetTimer()
+  ↓
+切換到正計時?
+  ├─ 是: progress = 0
+  │
+  └─ 否: 有使用記錄?
+         ├─ 是: 使用 lastUsedHours/Minutes/Seconds
+         └─ 否: 預設 30 分鐘
+  ↓
+UI 更新
+
+【拖動調整時間流程】
+
+用戶拖動進度點
+  ↓
+DraggablePoint.gesture(DragGesture)
+  ↓
+計算拖動位置角度
+  ↓
+轉換為進度值 (0~1)
+  ↓
+timerManager.updateProgressFromDrag(progress)
+  ↓
+計算 selectedTime = minTime + (maxTime-minTime) * progress
+  ↓
+更新 timeRemaining = selectedTime * 60
+  ↓
+updateTimeComponents()
+  ↓
+UI 更新 (圓環 + 時間顯示)
+
+【時間輪調整流程】
+
+用戶在時間輪上滑動
+  ↓
+TimePickerWheel.gesture(DragGesture)
+  ↓
+累積拖動偏移
+  ↓
+超過閾值(80)?
+  ├─ 向上: value = nextValue()
+  └─ 向下: value = previousValue()
+  ↓
+onChange(hours/minutes/seconds)
+  ↓
+限制 hours <= 3
+  ↓
+hours == 3? → minutes/seconds = 0
+  ↓
+timerManager.updateTimer()
+  ↓
+adjustTimeComponentsWhenPaused()
+  ↓
+UI 更新
+
+【保存記錄流程】
+
+計時結束 / 暫停後重置
+  ↓
+timerManager.saveTimerRecord(isCompleted)
+  ↓
+建立 TimerRecord
+  ↓
+計算 focusTimeInSeconds
+  ↓
+recordManager.addRecord(record)
+  ↓
+syncFocusTimeToStatistics()
+  ├─ 獲取科目類別
+  ├─ staticViewModel.updateCategoryFocusTime()
+  └─ 更新統計數據
+  ↓
+focusTime >= 60秒?
+  ├─ 是: 更新任務 focusTime
+  │      ├─ todoViewModel.getTaskById()
+  │      ├─ task.focusTime += 分鐘數
+  │      └─ todoViewModel.updateTask()
+  │
+  └─ 否: 跳過
+
+【背景/前景切換流程】
+
+進入背景:
+  ↓
+timerManager.appDidEnterBackground()
+  ↓
+stopDisplayTimer()
+  (計時狀態保持,不停止計時)
+
+返回前景:
+  ↓
+timerManager.appWillEnterForeground()
+  ↓
+updateTimerDisplay() (重新計算時間)
+  ↓
+startDisplayTimer() (重新訂閱)
+  ↓
+hasSynced = true
+
+===========================================
+六、UI/UX 設計細節
+===========================================
+
+【顏色系統】
+
+主背景: #F3D4B7 (淺棕色)
+圓環外層: #F2D7CB (淺粉棕)
+圓環內層: #F5ECE3 (淺米白)
+進度漸變: #E09772 → #E87D45 (橙色漸變)
+按鈕顏色: #E09772 / #E27844 (橙棕色)
+刻度顏色: #E09772 / #D9BDA9 (強調/次要)
+科目文字: #9F9A9A (灰色)
+
+【圓環尺寸】
+
+外圈: 280x280
+內圈: 240x240
+進度環: 260 直徑, 20 線寬
+顯示區: 200x200
+進度點: 28x28, 陰影 radius: 3
+
+【字體】
+
+模式按鈕: Inder, 20pt, tracking: 0.5
+時間數字: PingFang TC, 35pt, semibold
+科目名稱: PingFang TC, 16pt, medium
+控制按鈕: headline, semibold
+
+【間距與佈局】
+
+頂部區域: 固定 100 高度
+底部區域: 固定 150 高度
+按鈕間距: 20
+按鈕尺寸: 150x60
+按鈕圓角: 20
+
+【動畫與陰影】
+
+圓環陰影: color.opacity(0.1), radius: 10, y: 5
+進度環陰影: color.opacity(0.1), radius: 2, y: 1
+進度點陰影: color.opacity(0.3), radius: 3, y: 2
+按鈕陰影: color.opacity(0.15), radius: 8, y: 4
+
+運行狀態切換: easeInOut(duration: 0.2)
+時間輪切換: easeInOut(duration: 0.1)
+
+【刻度系統】
+
+總刻度: 12個
+強調刻度: 每3個 (0, 3, 6, 9)
+  - 顏色: #E09772, 透明度 0.8
+  - 寬度: 2
+  - 長度偏移: -110
+
+次要刻度: 其他
+  - 顏色: #D9BDA9, 透明度 0.4
+  - 寬度: 1
+  - 長度偏移: -118
+
+【iOS 版本適配】
+
+iOS 26+:
+- 使用 .glassEffect() 玻璃效果
+- .tint(#E27844 0.8透明)
+- .interactive()
+
+iOS 26 以下:
+- 使用 RoundedRectangle.fill()
+- 純色背景 #E09772
+- 陰影效果
+
+===========================================
+七、性能優化
+===========================================
+
+【1. 時間差計算法】
+- 避免每秒累加誤差
+- 精確到毫秒級別
+- 支援暫停/恢復
+- 支援背景計時
+
+【2. 更新頻率優化】
+- 從 0.1 秒改為 1 秒更新
+- 減少 CPU 使用
+- 避免進度點頻繁跳動
+
+【3. 本地存儲】
+- 使用 UserDefaults 存儲記錄
+- 避免網路請求
+- 快速讀寫
+
+【4. 懶加載統計】
+- 只在需要時計算統計
+- 按需過濾記錄
+
+【5. 組件化視圖】
+- 分離子視圖
+- 減少重繪範圍
+- TimerCircle, TimerDisplay, TimerControls
+
+【6. 條件渲染】
+- 根據狀態決定是否可拖動
+- 根據模式決定顯示內容
+
+【7. 背景計時優化】
+- 進入背景時停止 UI 更新
+- 保持計時狀態
+- 返回前景時重新計算
+
+【8. 防止重複保存】
+- 檢查 actualStartTime 存在
+- 避免重複呼叫 saveTimerRecord
+
+===========================================
+八、整合機制
+===========================================
+
+【1. 與任務管理整合】
+
+關聯邏輯:
+- timerManager 持有 todoViewModel 參考
+- 啟動計時時獲取當前任務:
+  - 篩選今日時間範圍內的未完成任務
+  - 選擇最早創建的任務
+- 設置 subject 為任務標題
+- 設置 currentTaskId
+
+更新 focusTime:
+- 計時結束時
+- 將專注時間(分鐘)累加到任務的 focusTime
+- 呼叫 todoViewModel.updateTask()
+
+監聽變更:
+- 監聽 .todoDataDidChange 通知
+- 任務變更時重新獲取當前任務
+
+【2. 與統計分析整合】
+
+同步機制:
+- timerManager 持有 staticViewModel 參考
+- 計時結束時呼叫 syncFocusTimeToStatistics()
+
+數據流:
+1. 獲取當前任務的類別
+2. 計算專注時間(分鐘)
+3. 呼叫 staticViewModel.updateCategoryFocusTime()
+4. 更新該類別的 focusTime
+
+條件:
+- 專注時間 >= 30 秒才同步
+- 專注時間 < 1 分鐘不記錄到統計
+
+【3. 與用戶認證整合】
+
+用戶ID 管理:
+- setCurrentUserId(_ userId:)
+- 所有記錄綁定 userId
+
+登出處理:
+- 監聽 .userDidLogout 通知
+- 呼叫 clearTimerState()
+- 清除所有狀態和參考
+
+【4. 與通知系統整合】
+
+監聽:
+- .userDidLogout - 用戶登出
+- .todoDataDidChange - 任務變更
+
+發送:
+- 目前沒有發送通知
+- 透過 EnvironmentObject 自動更新 UI
+
+===========================================
+九、已知問題與限制
+===========================================
+
+【1. StaticViewModel 獲取問題】
+- 之前嘗試透過 UIApplication 遞歸查找
+- 改為直接注入 staticViewModel
+- 解決了統計不更新的問題
+
+【2. 時間限制】
+- 最多 3 小時
+- hours == 3 時強制 minutes/seconds = 0
+- 無法設定更長的計時
+
+【3. 背景限制】
+- iOS 背景任務有時間限制
+- 長時間背景可能被系統終止
+- 使用時間差計算法減輕影響
+
+【4. 拖動靈敏度】
+- 拖動閾值固定為 80
+- 某些用戶可能覺得不夠靈敏
+
+【5. 記錄存儲限制】
+- 使用 UserDefaults 存儲
+- 記錄過多可能影響性能
+- 沒有自動清理機制
+
+===========================================
+十、未來改進方向
+===========================================
+
+【1. 功能增強】
+- 番茄鐘模式 (25分鐘 + 5分鐘休息)
+- 計時目標設定
+- 計時提醒音效/震動
+- 計時完成獎勵機制
+
+【2. 數據管理】
+- 記錄雲端同步
+- 記錄歸檔功能
+- 記錄匯出 (CSV/PDF)
+- 自動清理舊記錄
+
+【3. UI/UX】
+- 自訂圓環顏色
+- 更多時間範圍選項
+- 全螢幕計時模式
+- 橫屏支援
+
+【4. 統計功能】
+- 計時趨勢圖
+- 每日/每週報告
+- 科目時間分佈圖
+- 完成率分析
+
+【5. 整合深化】
+- 計時中顯示任務詳情
+- 計時中快速切換任務
+- 計時記錄與日曆同步
+- 計時數據分享
+
+===========================================
+檔案結束
+===========================================

@@ -1,0 +1,1497 @@
+===========================================
+用戶設定功能 (User Settings & Profile)
+===========================================
+
+【功能概述】
+用戶設定功能提供個人資料管理、應用偏好設定、學習計劃設定、以及 Google OAuth 認證整合。
+本功能是整個應用的基礎，負責身份驗證、用戶資料管理、應用設定同步等核心功能。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【Models】
+- studyAssistant/Models/UserProfile.swift (103 lines)
+  └─ 用戶個人資料數據結構
+
+- studyAssistant/Models/AppSettings.swift (44 lines)
+  └─ 應用設定數據結構
+
+- studyAssistant/Models/StudySettings.swift (114 lines)
+  └─ 學習偏好設定數據結構
+
+【ViewModels】
+- studyAssistant/ViewModels/UserSettingsViewModel.swift (172 lines)
+  └─ 用戶設定與資料管理核心邏輯
+
+- studyAssistant/ViewModels/ProfileViewModel.swift (41 lines)
+  └─ 簡化的個人資料操作邏輯
+
+【Views】
+- studyAssistant/Views/ProfileSettingView.swift (386 lines)
+  └─ 個人資料編輯視圖
+
+- studyAssistant/Views/SettingsView.swift (197 lines)
+  └─ 應用設定主視圖
+
+- studyAssistant/Views/SettingsComponents.swift (96 lines)
+  └─ 可重用的設定UI元件
+
+- studyAssistant/signInView.swift (31 lines)
+  └─ 登入/主視圖路由（已廢棄）
+
+- studyAssistant/Login.swift (231 lines)
+  └─ 登入視圖與動畫效果
+
+【Services】
+- studyAssistant/Authentication.swift (273 lines)
+  └─ Google OAuth 認證服務
+
+【Core】
+- studyAssistant/studyAssistantApp.swift (244 lines)
+  └─ AuthState 身份驗證狀態管理、App 生命週期管理
+
+===========================================
+二、資料模型詳解
+===========================================
+
+【1. UserProfile - 用戶個人資料】
+檔案位置: studyAssistant/Models/UserProfile.swift
+
+資料結構:
+struct UserProfile: Codable, Identifiable {
+    var id: String                  // 用戶唯一識別碼 (Firebase Auth UID)
+    var email: String               // 電子郵件
+    var username: String            // 使用者名稱
+    var motivationalQuote: String   // 座右銘/激勵語
+    var targetDate: Date            // 目標日期
+    var userGoal: String            // 學習目標
+    var learningStage: String       // 學習階段
+    var isVIP: Bool                 // VIP 狀態
+    var lastLoginAt: Date           // 最後登入時間
+    var version: Int                // 版本號（用於衝突解決）
+    var lastSyncedAt: Date?         // 最後同步時間
+    var isDeleted: Bool             // 軟刪除標記
+}
+
+核心方法:
+
+1. static func defaultProfile() -> UserProfile
+   作用: 創建預設個人資料
+   返回值:
+   - username: "新用戶"
+   - motivationalQuote: "開始你的學習之旅吧！"
+   - targetDate: 180天後
+   - learningStage: "大學"
+   - isVIP: false
+   - version: 1
+
+2. init?(documentId: String, data: [String: Any])
+   作用: 從 Firestore 文檔數據初始化
+   特點:
+   - 安全解析所有欄位
+   - 處理 Timestamp 轉換
+   - 可選欄位有預設值
+   - 解析失敗返回 nil
+
+3. var toFirestore: [String: Any]
+   作用: 轉換為 Firestore 可儲存格式
+   處理:
+   - Date 轉換為 Timestamp
+   - 可選值安全處理
+   - 返回字典格式
+
+用途:
+- 儲存用戶基本資訊
+- 提供個人化顯示（座右銘、目標日期）
+- 追蹤登入狀態和活躍度
+- 版本控制與衝突解決
+
+【2. AppSettings - 應用設定】
+檔案位置: studyAssistant/Models/AppSettings.swift
+
+資料結構:
+struct AppSettings: Codable {
+    var id: String                  // 設定唯一識別碼
+    var notificationsEnabled: Bool  // 通知開關
+    var lastModified: Date          // 最後修改時間
+}
+
+核心方法:
+
+1. static func defaultSettings() -> AppSettings
+   作用: 創建預設應用設定
+   返回值:
+   - notificationsEnabled: true
+   - lastModified: 當前時間
+
+2. init?(documentId: String, data: [String: Any])
+   作用: 從 Firestore 數據初始化
+   特點: 安全解析與錯誤處理
+
+3. var toFirestore: [String: Any]
+   作用: 轉換為 Firestore 格式
+
+用途:
+- 應用偏好設定
+- 通知控制
+- 未來擴展（深色模式、語言等）
+
+【3. StudySettings - 學習偏好設定】
+檔案位置: studyAssistant/Models/StudySettings.swift
+
+資料結構:
+struct StudySettings: Codable {
+    var id: String?
+    var userId: String
+    var studyDuration: Double = 60          // 預設讀書時間(分鐘)
+    var selectedDays: [Int] = [1,2,3,4,5]   // 偏好讀書日(1=週一)
+    var dailyStartHours: [String: Int] = [:]    // 每天開始時間(小時)
+    var dailyStartMinutes: [String: Int] = [:]  // 每天開始時間(分鐘)
+    var dailyEndHours: [String: Int] = [:]      // 每天結束時間(小時)
+    var dailyEndMinutes: [String: Int] = [:]    // 每天結束時間(分鐘)
+    var tone: String = "沉著穩重的專家"      // GPT 語氣
+    var isStudyDatePreferenceEnabled: Bool = true   // 讀書日期偏好開關
+    var isStudyTimePreferenceEnabled: Bool = true   // 讀書時長偏好開關
+    var updatedAt: Timestamp
+}
+
+核心方法:
+
+1. init(userId: String)
+   作用: 創建新的學習設定
+   初始化:
+   - studyDuration: 60分鐘
+   - selectedDays: [1,2,3,4,5] (週一至週五)
+   - 每天預設時間: 9:00 - 17:00
+   - tone: "沉著穩重的專家"
+   - 兩個偏好開關: true
+
+2. init?(document: DocumentSnapshot)
+   作用: 從 Firestore 文檔初始化
+   特點: 所有欄位都有預設值
+
+3. func toFirestoreData() -> [String: Any]
+   作用: 轉換為 Firestore 格式
+
+4. func getStartTimeForDay(_ day: Int) -> Date
+   作用: 取得特定星期的開始時間
+   參數: day (1=週一, 7=週日)
+   返回: Date 物件
+   預設: 9:00
+
+5. func getEndTimeForDay(_ day: Int) -> Date
+   作用: 取得特定星期的結束時間
+   參數: day (1=週一, 7=週日)
+   返回: Date 物件
+   預設: 17:00
+
+6. mutating func setStartTimeForDay(_ day: Int, date: Date)
+   作用: 設定特定星期的開始時間
+   處理: 提取小時和分鐘並存入字典
+
+7. mutating func setEndTimeForDay(_ day: Int, date: Date)
+   作用: 設定特定星期的結束時間
+   處理: 提取小時和分鐘並存入字典
+
+8. private func createDate(hour: Int, minute: Int) -> Date
+   作用: 根據小時和分鐘創建 Date 物件
+   特點: 基於當前日期設定時間
+
+用途:
+- 學習計劃偏好設定
+- GPT 日曆助手參考
+- 任務安排建議
+- 個性化學習體驗
+
+===========================================
+三、業務邏輯層詳解
+===========================================
+
+【1. AuthState - 身份驗證狀態管理】
+檔案位置: studyAssistant/studyAssistantApp.swift (16-77 lines)
+
+類型: ObservableObject (全局狀態管理)
+
+Published 屬性:
+@Published var isLoggedIn: Bool = false      // 登入狀態
+@Published var isLoading: Bool = false       // 載入狀態
+@Published var errorMessage: String? = nil   // 錯誤訊息
+@Published var currentUser: User? = nil      // Firebase Auth 用戶
+
+核心方法:
+
+1. init()
+   作用: 初始化身份驗證狀態監聽器
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 設定 Firebase Auth 監聽器        │
+   │    Auth.auth().addStateDidChangeListener│
+   │                                     │
+   │ 2. 監聽到用戶狀態變化時:            │
+   │    ├─ 更新 isLoggedIn               │
+   │    ├─ 更新 currentUser              │
+   │    └─ 發送通知:                     │
+   │       ├─ .userDidLogin (登入)       │
+   │       └─ .userDidLogout (登出)      │
+   │                                     │
+   │ 3. 檢查當前是否已有登入用戶         │
+   │    self.currentUser = Auth.auth().currentUser│
+   └─────────────────────────────────────┘
+
+   特點:
+   - 自動監聽 Firebase Auth 狀態
+   - 發送通知給其他元件
+   - 在主線程更新 UI
+   - 弱引用避免內存洩漏
+
+2. @MainActor func signInWithGoogle() async
+   作用: 執行 Google 登入流程
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 設定載入狀態                     │
+   │    isLoading = true                 │
+   │    errorMessage = nil               │
+   │                                     │
+   │ 2. 呼叫 Authentication.googleOauth()│
+   │    (詳見 Authentication 部分)       │
+   │                                     │
+   │ 3. 錯誤處理                         │
+   │    ├─ AuthenticationError           │
+   │    │  └─ 設定 errorMessage          │
+   │    └─ 其他錯誤                      │
+   │       └─ 設定通用錯誤訊息           │
+   │                                     │
+   │ 4. 恢復載入狀態                     │
+   │    isLoading = false                │
+   └─────────────────────────────────────┘
+
+   特點:
+   - @MainActor 保證 UI 更新在主線程
+   - async/await 非阻塞操作
+   - 友好的錯誤訊息
+
+3. @MainActor func signOut() async
+   作用: 執行登出流程
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 設定載入狀態                     │
+   │    isLoading = true                 │
+   │    errorMessage = nil               │
+   │                                     │
+   │ 2. 呼叫 Authentication.logout()     │
+   │    (詳見 Authentication 部分)       │
+   │                                     │
+   │ 3. 錯誤處理                         │
+   │    └─ 設定錯誤訊息                  │
+   │                                     │
+   │ 4. 恢復載入狀態                     │
+   │    isLoading = false                │
+   └─────────────────────────────────────┘
+
+通知機制:
+extension Notification.Name {
+    static let userDidLogin = Notification.Name("userDidLogin")
+    static let userDidLogout = Notification.Name("userDidLogout")
+}
+
+【2. UserSettingsViewModel - 用戶設定核心邏輯】
+檔案位置: studyAssistant/ViewModels/UserSettingsViewModel.swift
+
+類型: @MainActor ObservableObject
+
+Published 屬性:
+@Published var userProfile: UserProfile          // 用戶資料
+@Published var appSettings: AppSettings          // 應用設定
+@Published var syncStatus: SyncStatus = .notSynced  // 同步狀態
+@Published var errorMessage: String?            // 錯誤訊息
+@Published var isLoading = false                 // 載入狀態
+
+私有屬性:
+private let dataService: DataServiceProtocol     // 資料服務
+private var authStateListener: AuthStateDidChangeListenerHandle?  // Auth 監聽器
+private var profileListener: ListenerRegistration?  // Profile 監聽器
+
+核心方法:
+
+1. init(dataService: DataServiceProtocol = FirebaseService.shared)
+   作用: 初始化 ViewModel
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 設定資料服務                     │
+   │    self.dataService = dataService   │
+   │                                     │
+   │ 2. 初始化預設值                     │
+   │    userProfile = UserProfile.defaultProfile()│
+   │    appSettings = AppSettings.defaultSettings()│
+   │                                     │
+   │ 3. 非同步載入資料                   │
+   │    Task { await loadData() }        │
+   │                                     │
+   │ 4. 設定監聽器                       │
+   │    ├─ setupAuthListener()           │
+   │    └─ setupProfileListener()        │
+   └─────────────────────────────────────┘
+
+2. deinit
+   作用: 清理資源
+   處理:
+   - 移除 Auth 監聽器
+   - 移除 Profile 監聽器
+
+3. func loadData() async
+   作用: 載入用戶資料和應用設定
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 並行獲取資料 (async let)         │
+   │    async let profile = dataService.fetchUserProfile()│
+   │    async let settings = dataService.fetchAppSettings()│
+   │                                     │
+   │ 2. 等待兩個請求完成                 │
+   │    let (profileResult, settingsResult) = await ...│
+   │                                     │
+   │ 3. 更新狀態                         │
+   │    self.userProfile = profileResult │
+   │    self.appSettings = settingsResult│
+   │    self.syncStatus = .synced        │
+   │                                     │
+   │ 4. 錯誤處理                         │
+   │    catch:                           │
+   │      ├─ syncStatus = .error(.syncError)│
+   │      └─ errorMessage = ...          │
+   └─────────────────────────────────────┘
+
+   特點:
+   - async let 並行請求，提升性能
+   - 統一錯誤處理
+   - 同步狀態追蹤
+
+4. func updateUserProfile(username:motivationalQuote:targetDate:learningStage:) async
+   作用: 更新用戶個人資料
+
+   參數:
+   - username: String (使用者名稱)
+   - motivationalQuote: String (座右銘)
+   - targetDate: Date (目標日期)
+   - learningStage: String (學習階段)
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 創建更新的 Profile               │
+   │    var updatedProfile = userProfile │
+   │    updatedProfile.username = username│
+   │    updatedProfile.motivationalQuote = ...│
+   │    updatedProfile.version += 1      │
+   │                                     │
+   │ 2. 呼叫資料服務更新                 │
+   │    try await dataService.updateUserProfile(updatedProfile)│
+   │                                     │
+   │ 3. 更新本地狀態                     │
+   │    userProfile = updatedProfile     │
+   │    syncStatus = .synced             │
+   │    errorMessage = nil               │
+   │                                     │
+   │ 4. 發送通知                         │
+   │    NotificationCenter.default.post( │
+   │      name: .userProfileDidChange, ...) │
+   │                                     │
+   │ 5. 錯誤處理                         │
+   │    catch:                           │
+   │      ├─ syncStatus = .error(.syncError)│
+   │      └─ errorMessage = ...          │
+   └─────────────────────────────────────┘
+
+   特點:
+   - 版本號遞增（樂觀並發控制）
+   - 發送通知讓其他視圖更新
+   - 詳細的錯誤訊息
+
+5. func updateAppSettings(notificationsEnabled: Bool) async
+   作用: 更新應用設定
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 創建更新的 Settings              │
+   │    var updatedSettings = appSettings│
+   │    updatedSettings.notificationsEnabled = ...│
+   │    updatedSettings.lastModified = Date()│
+   │                                     │
+   │ 2. 呼叫資料服務更新                 │
+   │    try await dataService.updateAppSettings(...)│
+   │                                     │
+   │ 3. 更新本地狀態                     │
+   │    appSettings = updatedSettings    │
+   │    syncStatus = .synced             │
+   │                                     │
+   │ 4. 錯誤處理                         │
+   │    catch:                           │
+   │      ├─ syncStatus = .error(.syncError)│
+   │      └─ errorMessage = ...          │
+   └─────────────────────────────────────┘
+
+6. func clearAllData()
+   作用: 清除所有用戶資料（登出時呼叫）
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 重置用戶個人檔案                 │
+   │    userProfile = UserProfile.defaultProfile()│
+   │                                     │
+   │ 2. 重置應用設定                     │
+   │    appSettings = AppSettings.defaultSettings()│
+   │                                     │
+   │ 3. 重置狀態                         │
+   │    syncStatus = .notSynced          │
+   │    errorMessage = nil               │
+   │                                     │
+   │ 4. 清理本地計時記錄                 │
+   │    TimerRecordManager.shared.clearRecords()│
+   │                                     │
+   │ 5. 發送登出通知                     │
+   │    NotificationCenter.default.post( │
+   │      name: .userDidLogout, ...)     │
+   └─────────────────────────────────────┘
+
+7. private func setupAuthListener()
+   作用: 設定身份驗證監聽器
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ Auth.auth().addStateDidChangeListener│
+   │   ↓                                 │
+   │ 監聽到用戶狀態變化                  │
+   │   ↓                                 │
+   │ 用戶登入 (user != nil):             │
+   │   ├─ loadData() 載入資料            │
+   │   └─ setupProfileListener() 設定監聽│
+   │   ↓                                 │
+   │ 用戶登出 (user == nil):             │
+   │   ├─ userProfile = defaultProfile() │
+   │   └─ profileListener?.remove()      │
+   └─────────────────────────────────────┘
+
+8. private func setupProfileListener()
+   作用: 設定 Firestore Profile 即時監聽器
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 檢查用戶登入狀態                 │
+   │    guard let userId = Auth.auth().currentUser?.uid│
+   │                                     │
+   │ 2. 移除舊的監聽器                   │
+   │    profileListener?.remove()        │
+   │                                     │
+   │ 3. 設定 Firestore 監聽              │
+   │    db.collection("profiles")        │
+   │      .document(userId)              │
+   │      .addSnapshotListener { ... }   │
+   │                                     │
+   │ 4. 監聽到變化時:                    │
+   │    ├─ 解析新的資料                  │
+   │    ├─ 更新 userProfile              │
+   │    └─ 發送 .userProfileDidChange 通知│
+   └─────────────────────────────────────┘
+
+【3. ProfileViewModel - 簡化的個人資料操作】
+檔案位置: studyAssistant/ViewModels/ProfileViewModel.swift
+
+類型: @MainActor ObservableObject
+
+Published 屬性:
+@Published private(set) var profile: UserProfile?
+
+核心方法:
+
+1. func loadProfile() async throws -> UserProfile?
+   作用: 載入當前用戶的個人資料
+
+   流程:
+   profile = try await firebaseService.fetchUserProfile()
+   return profile
+
+2. func saveProfile(username:userGoal:targetDate:learningStage:) async throws
+   作用: 儲存個人資料
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. 檢查登入狀態                     │
+   │    guard let userId = Auth.auth().currentUser?.uid│
+   │                                     │
+   │ 2. 創建/更新 Profile                │
+   │    let currentProfile = profile ?? UserProfile.defaultProfile()│
+   │    var updatedProfile = currentProfile│
+   │    updatedProfile.id = userId       │
+   │    updatedProfile.username = username│
+   │    ...                              │
+   │                                     │
+   │ 3. 呼叫服務更新                     │
+   │    try await firebaseService.updateUserProfile(updatedProfile)│
+   │                                     │
+   │ 4. 更新本地狀態                     │
+   │    profile = updatedProfile         │
+   └─────────────────────────────────────┘
+
+3. func clearAllData()
+   作用: 清除本地資料（登出時）
+   實現: profile = nil
+
+===========================================
+四、認證機制詳解
+===========================================
+
+【Authentication - Google OAuth 整合】
+檔案位置: studyAssistant/Authentication.swift
+
+核心方法:
+
+1. @MainActor func googleOauth() async throws
+   作用: 執行 Google OAuth 登入流程
+
+   完整流程:
+   ┌─────────────────────────────────────────────────────┐
+   │ 第一步: 網路連接檢查                                │
+   │ ├─ checkNetworkConnection()                         │
+   │ │  └─ 使用 NWPathMonitor 檢查網路狀態               │
+   │ │     ├─ 顯示網路類型 (WiFi/行動數據)               │
+   │ │     ├─ 顯示可用網路介面                           │
+   │ │     └─ 返回是否已連接                             │
+   │ │                                                   │
+   │ ├─ 如果標準檢測失敗:                                │
+   │ │  └─ tryAlternativeNetwork()                      │
+   │ │     ├─ 測試多個域名: google.com, apple.com, etc. │
+   │ │     └─ canConnect(to:port:) TCP 連接測試         │
+   │ │        └─ 3秒超時機制                             │
+   │ │                                                   │
+   │ └─ 所有測試失敗: 拋出 "無法連接到網路" 錯誤         │
+   ├─────────────────────────────────────────────────────┤
+   │ 第二步: Bundle ID 檢查                              │
+   │ ├─ 檢查 Bundle.main.bundleIdentifier                │
+   │ ├─ 預期: "eason.studyAssistant"                    │
+   │ ├─ 不符時:                                          │
+   │ │  ├─ DEBUG 模式: 警告但繼續                        │
+   │ │  └─ RELEASE 模式: 拋出錯誤                        │
+   ├─────────────────────────────────────────────────────┤
+   │ 第三步: 取得 Google OAuth Client ID                │
+   │ ├─ guard let clientID = FirebaseApp.app()?.options.clientID│
+   │ └─ 創建 GIDConfiguration                            │
+   ├─────────────────────────────────────────────────────┤
+   │ 第四步: 環境檢查                                    │
+   │ ├─ #if targetEnvironment(simulator)                │
+   │ │  └─ 顯示模擬器特定說明                            │
+   │ └─ 實際設備直接繼續                                 │
+   ├─────────────────────────────────────────────────────┤
+   │ 第五步: 取得 Root View Controller                  │
+   │ ├─ 取得 UIWindowScene                               │
+   │ └─ 取得 rootViewController                          │
+   ├─────────────────────────────────────────────────────┤
+   │ 第六步: 執行 Google Sign In                        │
+   │ ├─ 檢查是否已有登入用戶                             │
+   │ │  if let currentUser = GIDSignIn.sharedInstance.currentUser│
+   │ │     └─ 直接使用現有 Token                         │
+   │ │                                                   │
+   │ ├─ 否則執行標準登入:                                │
+   │ │  let result = try await GIDSignIn.sharedInstance.signIn(│
+   │ │    withPresenting: rootViewController)            │
+   │ │                                                   │
+   │ └─ 取得 idToken 和 accessToken                      │
+   ├─────────────────────────────────────────────────────┤
+   │ 第七步: Firebase Auth 登入                          │
+   │ ├─ let credential = GoogleAuthProvider.credential(  │
+   │ │     withIDToken: idToken, accessToken: ...)       │
+   │ └─ try await Auth.auth().signIn(with: credential)   │
+   └─────────────────────────────────────────────────────┘
+
+   錯誤處理:
+   - GIDSignInError.canceled → "您已取消登入流程"
+   - GIDSignInError.EMM → "需要企業管理驗證"
+   - NSURLError.notConnectedToInternet → "您目前未連接到網路"
+   - NSURLError.timedOut → "連接逾時，請檢查您的網路速度"
+   - NSURLError.cannotFindHost → "無法連接到 Google 伺服器"
+
+2. func logout() async throws
+   作用: 執行登出流程
+
+   流程:
+   ┌─────────────────────────────────────┐
+   │ 1. Google Sign-In 登出              │
+   │    GIDSignIn.sharedInstance.signOut()│
+   │                                     │
+   │ 2. 清理網路緩存                     │
+   │    URLCache.shared.removeAllCachedResponses()│
+   │                                     │
+   │ 3. 重置 URLSession                  │
+   │    URLSession.shared.reset { ... }  │
+   │                                     │
+   │ 4. Firebase Auth 登出               │
+   │    try Auth.auth().signOut()        │
+   └─────────────────────────────────────┘
+
+3. private func checkNetworkConnection() async -> Bool
+   作用: 檢查網路連接狀態
+
+   使用 NWPathMonitor 檢測:
+   - 網路狀態 (satisfied/unsatisfied)
+   - 網路類型 (WiFi/行動數據)
+   - 可用介面列表
+
+4. private func tryAlternativeNetwork() async -> Bool
+   作用: 嘗試替代網路檢測方法
+
+   測試域名: google.com, apple.com, cloudflare.com, github.com
+
+5. private func canConnect(to host: String, port: Int) async -> Bool
+   作用: TCP 層級連接測試
+
+   特點:
+   - 使用 NWConnection
+   - 3秒超時機制
+   - 返回連接成功/失敗
+
+===========================================
+五、視圖層詳解
+===========================================
+
+【1. LoginView - 登入視圖】
+檔案位置: studyAssistant/Login.swift (231 lines)
+
+設計特點:
+- 動態漸層背景
+- 平滑動畫效果
+- 品牌色調一致
+
+State 屬性:
+@State private var animateGradient = false
+@State private var titleOffset: CGFloat = -100
+@State private var buttonScale: CGFloat = 0.8
+@State private var buttonOpacity: Double = 0
+@State private var showingLogo = false
+@State private var rotationAngle: Double = 0
+
+主題色調:
+private let primaryColor = Color.hex(hex: "B88C5A")
+private let backgroundColor1 = Color.hex(hex: "F3D4B7")
+private let backgroundColor2 = Color.hex(hex: "E9CBA5")
+private let accentColor = Color.hex(hex: "FEECD8")
+
+UI 結構:
+┌─────────────────────────────────────┐
+│ ZStack {                            │
+│   ├─ AnimatedGradientBackground()   │
+│   │                                 │
+│   └─ VStack {                       │
+│       ├─ Logo 動畫區                │
+│       │  ├─ 三層圓形背景            │
+│       │  └─ books.vertical.fill     │
+│       │     └─ 旋轉 + 縮放動畫      │
+│       │                             │
+│       ├─ 標題區                     │
+│       │  ├─ "學習助手" (42pt)       │
+│       │  └─ "你的個人學習夥伴"      │
+│       │     └─ 偏移動畫             │
+│       │                             │
+│       ├─ Spacer                     │
+│       │                             │
+│       └─ 登入區                     │
+│          ├─ Google 登入按鈕         │
+│          ├─ LoadingView             │
+│          └─ 錯誤訊息                │
+│   }                                 │
+│ }                                   │
+└─────────────────────────────────────┘
+
+動畫效果:
+
+1. Logo 動畫
+   onAppear {
+       withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
+           showingLogo = true  // 縮放從 0.1 到 1
+       }
+       withAnimation(Animation.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
+           rotationAngle = 10  // 旋轉 ±10度
+       }
+   }
+
+2. 標題動畫
+   - 主標題延遲 0.3s 從上方滑入
+   - 副標題延遲 0.4s 從上方滑入
+   - 使用彈簧動畫
+
+3. 按鈕動畫
+   - 延遲 0.6s 淡入
+   - 按壓時縮小到 0.95
+   - 100ms 後恢復並執行登入
+
+4. 背景動畫
+   - 漸層方向持續變化（6秒循環）
+   - 15個隨機裝飾圓形
+   - 模糊效果增加深度
+
+【AnimatedGradientBackground】
+LinearGradient(
+    colors: [B88C5A, E9CBA5, F3D4B7, E9CBA5.opacity(0.8)],
+    startPoint: animateGradient ? .topLeading : .bottomLeading,
+    endPoint: animateGradient ? .bottomTrailing : .topTrailing
+)
+.onAppear {
+    withAnimation(.linear(duration: 6).repeatForever(autoreverses: true)) {
+        animateGradient.toggle()
+    }
+}
+
+【LoadingView】
+自定義旋轉指示器:
+- 背景圓環（半透明）
+- 前景圓環（持續旋轉）
+- 白色配色
+
+【2. ProfileSettingView - 個人資料設定】
+檔案位置: studyAssistant/Views/ProfileSettingView.swift (386 lines)
+
+State 屬性:
+@State private var username: String = ""
+@State private var motivationalQuote: String = ""
+@State private var targetDate = Date()
+@State private var selectedStage: String = "大學"
+@State private var isLoading = true
+@State private var showError = false
+@State private var errorMessage = ""
+@State private var showingLogoutAlert = false
+@State private var showingSuccessMessage = false
+
+學習階段選項:
+let learningStages = ["國中", "高中", "大學", "研究所", "語言學習"]
+
+主題色調:
+let backgroundColor = Color(#F3D4B7)
+let cardColor = Color(#FEECD8)
+let accentColor = Color(#E28A5F)
+
+UI 結構:
+┌─────────────────────────────────────┐
+│ ZStack {                            │
+│   ├─ 背景色                         │
+│   │                                 │
+│   └─ VStack {                       │
+│       ├─ 頂部導航欄                 │
+│       │  ├─ 返回按鈕                │
+│       │  ├─ "個人資料設定"          │
+│       │  └─ 重新整理按鈕            │
+│       │                             │
+│       └─ ScrollView {               │
+│           ├─ 登入信息               │
+│           ├─ 使用者名稱欄位         │
+│           ├─ 座右銘欄位             │
+│           ├─ 目標日期選擇器         │
+│           ├─ 學習階段選擇器         │
+│           ├─ 儲存變更按鈕           │
+│           └─ 登出按鈕               │
+│       }                             │
+│   }                                 │
+│   │                                 │
+│   └─ Overlay: 載入指示器            │
+│ }                                   │
+│ .alert("錯誤", ...)                 │
+│ .alert("儲存成功", ...)             │
+│ .alert("確認登出", ...)             │
+└─────────────────────────────────────┘
+
+核心功能:
+
+1. profileField(title:text:iconName:) -> some View
+   可重用的輸入欄位元件
+
+   HStack {
+       Image(systemName: iconName)
+       Text(title)
+       Spacer()
+       TextField("", text: text)
+           .multilineTextAlignment(.trailing)
+   }
+   .padding()
+   .background(cardColor)
+   .cornerRadius(10)
+
+2. loadProfile() async
+   載入個人資料
+
+   流程:
+   - 設定 isLoading = true
+   - await viewModel.loadData()
+   - 更新 UI 狀態（主線程）
+   - 錯誤處理
+   - isLoading = false
+
+3. saveProfile() async
+   儲存個人資料
+
+   流程:
+   - 設定 isLoading = true
+   - await viewModel.updateUserProfile(...)
+   - 檢查錯誤或顯示成功訊息
+   - 發送 .userProfileDidChange 通知
+   - isLoading = false
+
+4. logout()
+   登出功能
+
+   流程:
+   - await authState.signOut()
+   - viewModel.clearAllData()
+   - App 自動切換到登入視圖
+
+【AuthChangeObserver】
+監聽 .userAuthDidChange 通知的觀察器
+
+class AuthChangeObserver: ObservableObject {
+    @Published var shouldReloadProfile = false
+    private var cancellables = Set<AnyCancellable>()
+
+    init() {
+        NotificationCenter.default.publisher(for: .userAuthDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.shouldReloadProfile = true
+            }
+            .store(in: &cancellables)
+    }
+}
+
+使用:
+.onChange(of: authObserver.shouldReloadProfile) { newValue in
+    if newValue {
+        Task {
+            await loadProfile()
+            authObserver.shouldReloadProfile = false
+        }
+    }
+}
+
+【3. SettingsView - 應用設定視圖】
+檔案位置: studyAssistant/Views/SettingsView.swift (197 lines)
+
+UI 結構:
+┌─────────────────────────────────────┐
+│ NavigationStack {                   │
+│   ZStack {                          │
+│     ├─ 背景色                       │
+│     │                               │
+│     └─ ScrollView {                 │
+│         VStack {                    │
+│           ├─ 用戶資訊區域           │
+│           │  NavigationLink →       │
+│           │  ProfileSettingView     │
+│           │    ├─ 圓形頭像          │
+│           │    ├─ 使用者名稱        │
+│           │    ├─ 到期日期          │
+│           │    └─ 右箭頭            │
+│           │                         │
+│           ├─ "統計資料"             │
+│           │  NavigationLink →       │
+│           │  StatisticsView         │
+│           │                         │
+│           ├─ "一般設定"             │
+│           │  SettingRowNew          │
+│           │    └─ 通知 Toggle       │
+│           │                         │
+│           └─ "關於"                 │
+│              ├─ 版本 1.0.0          │
+│              ├─ 隱私政策            │
+│              └─ 使用條款            │
+│         }                           │
+│     }                               │
+│   }                                 │
+│ }                                   │
+└─────────────────────────────────────┘
+
+核心功能:
+
+1. 用戶資訊顯示
+   - 顯示使用者名稱
+   - 計算剩餘天數到目標日期
+   - 點擊導航到 ProfileSettingView
+
+2. 通知設定
+   SettingRowNew(
+       iconName: "bell.fill",
+       title: "通知",
+       isOn: Binding(
+           get: { viewModel.appSettings.notificationsEnabled },
+           set: { newValue in
+               Task {
+                   await viewModel.updateAppSettings(
+                       notificationsEnabled: newValue
+                   )
+               }
+           }
+       )
+   )
+
+【4. SettingsComponents - 可重用元件】
+檔案位置: studyAssistant/Views/SettingsComponents.swift (96 lines)
+
+元件列表:
+
+1. VIPFeatureText
+   顯示 VIP 功能文字
+
+   Text(text)
+       .font(.system(size: 16))
+       .foregroundColor(Color.black)
+
+2. SettingRowNew
+   帶 Toggle 的設定行
+
+   HStack {
+       Image(systemName: iconName)
+       Text(title)
+       Spacer()
+       Toggle("", isOn: $isOn)
+   }
+
+3. SettingRowText
+   純文字設定行（帶右箭頭）
+
+   HStack {
+       Image(systemName: iconName)
+       Text(title)
+       Spacer()
+       Image(systemName: "chevron.right")
+   }
+
+===========================================
+六、資料流程詳解
+===========================================
+
+【登入流程】
+
+用戶點擊 "以 Google 帳號登入"
+  ↓
+LoginView 呼叫 authState.signInWithGoogle()
+  ↓
+AuthState.signInWithGoogle()
+  ├─ isLoading = true
+  └─ 呼叫 Authentication.googleOauth()
+      ↓
+Authentication.googleOauth()
+  ├─ 檢查網路連接
+  ├─ 檢查 Bundle ID
+  ├─ 取得 Google OAuth Client ID
+  ├─ 取得 Root View Controller
+  ├─ 執行 Google Sign In
+  └─ Firebase Auth 登入
+      ↓
+Firebase Auth 狀態變化
+  ↓
+AuthState.init() 中的監聽器觸發
+  ├─ isLoggedIn = true
+  ├─ currentUser = user
+  └─ NotificationCenter.post(.userDidLogin)
+      ↓
+studyAssistantApp 檢測到 authState.isLoggedIn = true
+  ↓
+切換到 ContentView()
+  ↓
+ContentView.task {
+    ├─ todoViewModel.loadTasks()
+    ├─ staticViewModel.fetchStatistics()
+    ├─ settingsViewModel.loadData()
+    └─ calendarAssistantViewModel.performDailyAutoUpdateIfNeeded()
+}
+  ↓
+UserSettingsViewModel.setupAuthListener() 觸發
+  └─ loadData()
+      ↓
+UserSettingsViewModel.setupProfileListener() 設定
+  └─ 監聽 Firestore /profiles/{userId}
+      ↓
+載入完成，應用準備就緒
+
+【登出流程】
+
+用戶在 ProfileSettingView 點擊 "登出"
+  ↓
+顯示確認對話框
+  ↓
+用戶確認
+  ↓
+ProfileSettingView.logout()
+  └─ Task {
+      ├─ await authState.signOut()
+      └─ viewModel.clearAllData()
+  }
+      ↓
+AuthState.signOut()
+  └─ Authentication.logout()
+      ├─ GIDSignIn.sharedInstance.signOut()
+      ├─ URLCache.shared.removeAllCachedResponses()
+      ├─ URLSession.shared.reset { ... }
+      └─ Auth.auth().signOut()
+          ↓
+Firebase Auth 狀態變化
+  ↓
+AuthState 監聽器觸發
+  ├─ isLoggedIn = false
+  ├─ currentUser = nil
+  └─ NotificationCenter.post(.userDidLogout)
+      ↓
+各個 ViewModel 接收 .userDidLogout 通知:
+  ├─ TodoViewModel: 清除任務
+  ├─ TimerManager: 停止計時器
+  ├─ StaticViewModel: 清除統計
+  ├─ ChatViewModel: 清除對話
+  └─ CalendarAssistantViewModel: 清除狀態
+      ↓
+UserSettingsViewModel.clearAllData()
+  ├─ userProfile = defaultProfile()
+  ├─ appSettings = defaultSettings()
+  ├─ TimerRecordManager.clearRecords()
+  └─ NotificationCenter.post(.userDidLogout)
+      ↓
+studyAssistantApp 檢測到 authState.isLoggedIn = false
+  ↓
+切換到 LoginView()
+
+【設定更新流程】
+
+用戶在 SettingsView 切換通知開關
+  ↓
+SettingRowNew Toggle 觸發 setter
+  ↓
+Task {
+    await viewModel.updateAppSettings(
+        notificationsEnabled: newValue
+    )
+}
+  ↓
+UserSettingsViewModel.updateAppSettings()
+  ├─ 創建 updatedSettings
+  ├─ updatedSettings.lastModified = Date()
+  └─ try await dataService.updateAppSettings(updatedSettings)
+      ↓
+FirebaseService.updateAppSettings()
+  └─ Cloud Functions: updateAppSettings
+      ├─ 驗證請求身份
+      ├─ 驗證資料格式
+      └─ 更新 Firestore /settings/{userId}
+          ↓
+成功返回
+  ↓
+UserSettingsViewModel 更新本地狀態
+  ├─ appSettings = updatedSettings
+  └─ syncStatus = .synced
+      ↓
+UI 自動更新（@Published）
+
+【個人資料更新流程】
+
+用戶在 ProfileSettingView 修改資料並儲存
+  ↓
+ProfileSettingView.saveProfile()
+  ↓
+await viewModel.updateUserProfile(...)
+  ↓
+UserSettingsViewModel.updateUserProfile()
+  ├─ 創建 updatedProfile
+  ├─ updatedProfile.version += 1
+  └─ try await dataService.updateUserProfile(updatedProfile)
+      ↓
+FirebaseService.updateUserProfile()
+  └─ Cloud Functions: updateUserProfile
+      ├─ 驗證身份
+      ├─ 檢查版本號
+      └─ 更新 Firestore /profiles/{userId}
+          ↓
+成功返回
+  ↓
+UserSettingsViewModel 更新狀態
+  ├─ userProfile = updatedProfile
+  ├─ syncStatus = .synced
+  └─ NotificationCenter.post(.userProfileDidChange)
+      ↓
+Firestore 監聽器觸發
+  └─ 更新本地 userProfile（確保一致性）
+      ↓
+其他視圖接收 .userProfileDidChange 通知並更新
+
+【Firestore 即時監聽流程】
+
+UserSettingsViewModel 初始化
+  ↓
+setupAuthListener() 設定 Auth 監聽
+  ↓
+用戶登入後
+  ↓
+setupProfileListener() 被呼叫
+  ├─ profileListener?.remove()
+  └─ db.collection("profiles").document(userId)
+      .addSnapshotListener { snapshot, error in ... }
+      ↓
+監聽器活躍
+  ↓
+Firestore 資料變化時
+  ↓
+addSnapshotListener 回調觸發
+  ├─ 解析新資料
+  ├─ Task { @MainActor in
+  │     self.userProfile = profile
+  │     NotificationCenter.post(.userProfileDidChange)
+  │   }
+  └─ 錯誤處理
+      ↓
+所有依賴 UserProfile 的 UI 自動更新
+
+【App 生命週期】
+
+App 啟動
+  ↓
+studyAssistantApp.init()
+  ├─ FirebaseApp.configure()
+  ├─ 設定 TabBar 外觀
+  └─ GIDSignIn.restorePreviousSignIn { ... }
+      ↓
+檢查 authState.isLoggedIn
+  ├─ true: ContentView
+  └─ false: LoginView
+      ↓
+ContentView.task { 載入初始資料 }
+  ↓
+App 準備就緒
+  ↓
+.onChange(of: scenePhase)
+  ├─ .active: 重新載入資料
+  ├─ .background: 清理資源
+  └─ .inactive: 無操作
+
+===========================================
+七、通知機制詳解
+===========================================
+
+【系統通知列表】
+
+1. .userDidLogin
+   定義: studyAssistantApp.swift
+   發送時機: AuthState 檢測到用戶登入
+   監聽者: (目前沒有直接監聽者)
+   用途: 通知系統用戶已登入
+
+2. .userDidLogout
+   定義: studyAssistantApp.swift
+   發送時機:
+   - AuthState 檢測到用戶登出
+   - UserSettingsViewModel.clearAllData()
+   監聽者: 所有 ViewModel
+   用途: 清除狀態
+
+3. .userAuthDidChange
+   定義: NotificationConstants.swift
+   發送時機: 用戶登入/登出時
+   監聽者: ProfileSettingView (透過 AuthChangeObserver)
+   用途: 重新載入用戶資料
+
+4. .userProfileDidChange
+   定義: NotificationConstants.swift
+   發送時機:
+   - UserSettingsViewModel.updateUserProfile() 成功後
+   - Firestore 監聽器檢測到變化
+   - ProfileSettingView.saveProfile() 成功後
+   監聽者: TodoView, CalendarAssistantViewModel 等
+   用途: 刷新顯示的用戶資訊
+
+【通知使用模式】
+
+發送通知:
+NotificationCenter.default.post(
+    name: .userProfileDidChange,
+    object: nil
+)
+
+監聽通知 (Combine):
+NotificationCenter.default.publisher(for: .userProfileDidChange)
+    .receive(on: RunLoop.main)
+    .sink { [weak self] _ in
+        Task { await self?.loadProfile() }
+    }
+    .store(in: &cancellables)
+
+監聽通知 (SwiftUI):
+.onReceive(NotificationCenter.default.publisher(for: .userProfileDidChange)) { _ in
+    Task { await loadData() }
+}
+
+===========================================
+八、安全性與隱私
+===========================================
+
+【1. 認證安全】
+
+Google OAuth 2.0:
+- 使用官方 GoogleSignIn SDK
+- 不儲存密碼
+- Token 自動刷新
+- 支援雙重驗證
+
+Firebase Auth:
+- ID Token 驗證
+- 自動刷新機制
+- 會話持久化
+
+Bundle ID 驗證:
+#if DEBUG
+print("DEBUG 模式: Bundle ID 不匹配不影響功能")
+#else
+throw AuthenticationError.runtimeError("應用程式配置錯誤")
+#endif
+
+【2. 資料隔離】
+
+用戶資料隔離:
+- 所有資料按 userId 隔離
+- Firestore Security Rules 強制執行
+- Cloud Functions 驗證 Auth Token
+
+Firestore Security Rules:
+match /profiles/{userId} {
+  allow read, write: if request.auth != null &&
+                        request.auth.uid == userId;
+}
+
+Cloud Functions 驗證:
+if (!context.auth) {
+  throw new https.HttpsError('unauthenticated', '需要登入');
+}
+const userId = context.auth.uid;
+if (data.userId !== userId) {
+  throw new https.HttpsError('permission-denied', '無權限');
+}
+
+【3. 資料傳輸安全】
+
+HTTPS 加密:
+- 所有 API 請求使用 HTTPS
+- Firebase 自動強制 HTTPS
+- TLS 1.2+ 加密
+
+資料驗證:
+- Cloud Functions 驗證所有輸入
+- 客戶端驗證基本格式
+- Firestore 型別檢查
+
+【4. 隱私保護】
+
+最小化資料收集:
+- 只收集必要的個人資訊
+- 不收集敏感資訊
+- 不追蹤位置
+
+本地資料清理:
+func clearAllData() {
+    userProfile = UserProfile.defaultProfile()
+    appSettings = AppSettings.defaultSettings()
+    TimerRecordManager.shared.clearRecords()
+    NotificationCenter.default.post(name: .userDidLogout)
+}
+
+登出時清理:
+URLCache.shared.removeAllCachedResponses()
+URLSession.shared.reset { ... }
+
+【5. 版本控制】
+
+樂觀並發控制:
+struct UserProfile {
+    var version: Int
+}
+
+updatedProfile.version += 1
+
+Cloud Functions 檢查:
+if (currentProfile.version >= newProfile.version) {
+  throw new https.HttpsError('aborted', '資料已過期');
+}
+
+===========================================
+九、性能優化
+===========================================
+
+【1. 並行資料載入】
+
+async let 並行請求:
+func loadData() async {
+    async let profile = dataService.fetchUserProfile()
+    async let settings = dataService.fetchAppSettings()
+
+    let (profileResult, settingsResult) = await (try profile, try settings)
+
+    self.userProfile = profileResult
+    self.appSettings = settingsResult
+}
+
+優勢:
+- 總時間 = max(請求1, 請求2)
+- 而非 請求1 + 請求2
+
+【2. 本地緩存】
+
+ViewModel 內存緩存:
+@Published var userProfile: UserProfile
+@Published var appSettings: AppSettings
+
+UserDefaults 緩存:
+TimerRecordManager.shared.clearRecords()
+
+【3. Firestore 監聽器優化】
+
+單一監聽器:
+private var profileListener: ListenerRegistration?
+
+profileListener?.remove()
+profileListener = db.collection("profiles")...
+
+避免內存洩漏:
+deinit {
+    authStateListener.map { Auth.auth().removeStateDidChangeListener($0) }
+    profileListener?.remove()
+}
+
+弱引用:
+.addSnapshotListener { [weak self] snapshot, error in
+    guard let self = self else { return }
+    ...
+}
+
+【4. UI 更新優化】
+
+主線程更新:
+Task { @MainActor in
+    self.userProfile = profile
+}
+
+DispatchQueue.main.async {
+    self.showError = true
+}
+
+批次更新:
+DispatchQueue.main.async {
+    self.username = profile.username
+    self.motivationalQuote = profile.motivationalQuote
+    self.targetDate = profile.targetDate
+    self.selectedStage = profile.learningStage
+}
+
+【5. 網路請求優化】
+
+超時機制:
+DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+    socket.cancel()
+}
+
+會話恢復:
+if let currentUser = GIDSignIn.sharedInstance.currentUser {
+    // 直接使用現有 Token
+    return
+}
+
+===========================================
+十、已知問題與限制
+===========================================
+
+【1. 功能限制】
+
+未實現:
+- 帳戶刪除
+- 資料匯出
+- Email/Apple 登入
+- 頭像上傳
+- 多語言支援
+- 離線模式
+
+設定選項有限:
+- 只有通知開關
+- 沒有深色模式設定
+- 沒有字體大小設定
+
+【2. 已知問題】
+
+模擬器限制:
+#if targetEnvironment(simulator)
+print("在模擬器上需要使用 Safari 完成登入")
+#endif
+
+網路檢查可能誤報:
+// NWPathMonitor 有時會誤報
+// 需要 tryAlternativeNetwork() 二次確認
+
+【3. 性能考量】
+
+Firestore 計費:
+- 每次 loadData() 2 次讀取
+- 監聽器持續消耗
+- 需要成本優化
+
+===========================================
+十一、未來改進方向
+===========================================
+
+【功能增強】
+- 多種登入方式 (Apple, Email)
+- 個人化主題
+- 資料匯出
+- 頭像上傳
+- 更多設定選項
+
+【UI/UX】
+- 更豐富的動畫
+- 設定搜尋功能
+- 快速設定捷徑
+- 觸覺反饋
+
+【技術優化】
+- 離線模式
+- 本地資料庫
+- 生物辨識登入
+- 完善測試
+
+【整合】
+- iCloud 同步
+- Apple Watch
+- 小工具 (Widgets)
+- 家庭共享
+
+===========================================
+十二、總結
+===========================================
+
+【核心架構】
+MVVM 架構:
+- Models: UserProfile, AppSettings, StudySettings
+- ViewModels: UserSettingsViewModel, ProfileViewModel, AuthState
+- Views: LoginView, ProfileSettingView, SettingsView
+
+【關鍵特性】
+1. Google OAuth 認證（多層網路檢查）
+2. Firestore 即時同步
+3. 樂觀並發控制
+4. 通知機制
+5. 生命週期管理
+
+【資料流程】
+登入 → Auth 狀態變化 → 載入資料 → 設定監聽器 → 應用就緒
+更新 → Cloud Functions → Firestore → 監聽器觸發 → UI 更新
+登出 → 清理認證 → 清理資料 → 通知所有元件 → 返回登入
+
+【檔案總覽】
+Models: 3 files, 261 lines
+ViewModels: 2 files, 213 lines
+Views: 5 files, 941 lines
+Services: 1 file, 273 lines
+Core: 1 file, 244 lines (含 AuthState)
+總計: 12 files, 1,932 lines
+
+===========================================
+檔案結束
+===========================================

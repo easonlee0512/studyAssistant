@@ -1,0 +1,523 @@
+===========================================
+架構設計 (Architecture Design)
+===========================================
+
+【架構總覽】
+studyAssistant 採用 MVVM (Model-View-ViewModel) 架構模式，
+結合 SwiftUI 的聲明式 UI 和 Combine 的響應式編程，
+實現清晰的職責分離和高可維護性。
+
+===========================================
+一、MVVM 架構說明
+===========================================
+
+【架構層次】
+
+┌─────────────────────────────────────────┐
+│                  View                   │  SwiftUI Views
+│            (Presentation Layer)         │
+├─────────────────────────────────────────┤
+│                                         │
+│              ViewModel                  │  ObservableObject
+│           (Business Logic)              │  @Published Properties
+│                                         │
+├─────────────────────────────────────────┤
+│                                         │
+│                 Model                   │  Data Models
+│              (Data Layer)               │  Codable Structs
+│                                         │
+├─────────────────────────────────────────┤
+│                                         │
+│               Services                  │  Firebase, OpenAI
+│          (External Services)            │  Network Calls
+│                                         │
+└─────────────────────────────────────────┘
+
+【Model (資料模型層)】
+職責:
+- 定義應用的資料結構
+- 實現 Codable 協議進行序列化
+- 包含資料驗證邏輯
+- 與 Firestore 文檔映射
+
+範例檔案:
+- TodoTask.swift
+- UserProfile.swift
+- AppSettings.swift
+- Static.swift
+- StudySettings.swift
+
+【View (視圖層)】
+職責:
+- 顯示 UI 元件
+- 處理用戶交互
+- 綁定 ViewModel 的資料
+- 不包含業務邏輯
+
+範例檔案:
+- TodoView.swift
+- TimerView.swift
+- ChatView.swift
+- StatisticsView.swift
+- SettingsView.swift
+
+【ViewModel (視圖模型層)】
+職責:
+- 處理業務邏輯
+- 管理應用狀態
+- 與 Services 層通信
+- 提供 @Published 屬性供 View 綁定
+- 處理錯誤
+
+範例檔案:
+- TodoViewModel.swift
+- TimerManager.swift
+- ChatViewModel.swift
+- StaticViewModel.swift
+- UserSettingsViewModel.swift
+
+【Services (服務層)】
+職責:
+- 封裝外部服務調用
+- Firebase 操作
+- OpenAI API 調用
+- 網路請求處理
+
+範例檔案:
+- FirebaseService.swift
+- Authentication.swift
+- OpenAIService.swift (集成在 ChatViewModel)
+
+===========================================
+二、資料流程圖
+===========================================
+
+【典型資料流程 - 任務創建】
+
+User Action (點擊新增按鈕)
+    ↓
+View (TodoView)
+    ↓
+ViewModel (TodoViewModel.addTask())
+    ├─ 1. 創建本地任務
+    ├─ 2. 樂觀更新 UI (@Published tasks)
+    └─ 3. 呼叫 Service
+        ↓
+    Service (FirebaseService.saveTask())
+        ├─ 調用 Cloud Function
+        └─ Firestore 寫入
+            ↓
+        成功/失敗
+            ↓
+    ViewModel 處理結果
+        ├─ 成功: 更新任務 ID
+        └─ 失敗: 回滾本地狀態
+            ↓
+    View 自動更新 (SwiftUI 綁定)
+
+【即時數據同步流程】
+
+Firestore 數據變化
+    ↓
+Snapshot Listener (setupProfileListener)
+    ↓
+ViewModel 接收變化
+    ├─ 解析新數據
+    └─ 更新 @Published 屬性
+        ↓
+    發送 NotificationCenter 通知
+        ↓
+    相關 View 自動重新渲染
+
+【認證流程】
+
+User 點擊 Google 登入
+    ↓
+LoginView
+    ↓
+AuthState.signInWithGoogle()
+    ↓
+Authentication.googleOauth()
+    ├─ 1. 網路檢查
+    ├─ 2. Google OAuth
+    ├─ 3. Firebase Auth
+    └─ 4. 狀態更新
+        ↓
+    AuthState 監聽器觸發
+        ↓
+    App 切換到 ContentView
+        ↓
+    ViewModels 載入用戶資料
+
+===========================================
+三、各層職責說明
+===========================================
+
+【Model Layer 職責】
+
+✓ 定義純數據結構
+✓ 實現 Codable
+✓ 包含計算屬性
+✓ Firestore 映射方法
+✗ 不包含業務邏輯
+✗ 不直接調用 API
+
+範例:
+struct TodoTask: Identifiable, Codable {
+    var id: String
+    var title: String
+    var isCompleted: Bool
+
+    // Firestore 映射
+    init?(documentId: String, data: [String: Any]) {
+        // 解析邏輯
+    }
+
+    var toFirestore: [String: Any] {
+        // 轉換邏輯
+    }
+}
+
+【ViewModel Layer 職責】
+
+✓ 持有 @Published 屬性
+✓ 處理所有業務邏輯
+✓ 調用 Service 層
+✓ 錯誤處理
+✓ 狀態管理
+✗ 不直接操作 UI
+✗ 不包含 View 邏輯
+
+範例:
+@MainActor
+class TodoViewModel: ObservableObject {
+    @Published var tasks: [TodoTask] = []
+    @Published var isLoading = false
+
+    private let firebaseService: FirebaseService
+
+    func addTask(_ task: TodoTask) async {
+        // 樂觀更新
+        tasks.append(task)
+
+        do {
+            // 調用 Service
+            let savedTask = try await firebaseService.saveTask(task)
+            // 更新 ID
+            if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+                tasks[index] = savedTask
+            }
+        } catch {
+            // 回滾
+            tasks.removeAll { $0.id == task.id }
+            handleError(error)
+        }
+    }
+}
+
+【View Layer 職責】
+
+✓ 聲明式 UI
+✓ 綁定 ViewModel 資料
+✓ 處理用戶事件
+✓ 導航邏輯
+✗ 不包含業務邏輯
+✗ 不直接調用 API
+
+範例:
+struct TodoView: View {
+    @StateObject var viewModel = TodoViewModel()
+
+    var body: some View {
+        List(viewModel.tasks) { task in
+            TaskRow(task: task)
+        }
+        .onAppear {
+            Task {
+                await viewModel.loadTasks()
+            }
+        }
+    }
+}
+
+【Service Layer 職責】
+
+✓ 封裝外部服務
+✓ API 調用
+✓ 網路請求
+✓ 數據轉換
+✗ 不包含業務邏輯
+✗ 不持有應用狀態
+
+範例:
+class FirebaseService {
+    func saveTask(_ task: TodoTask) async throws -> TodoTask {
+        // Cloud Function 調用
+        let response = try await functions
+            .httpsCallable("saveTask")
+            .call(task.toFirestore)
+
+        // 解析響應
+        return try parseTaskResponse(response)
+    }
+}
+
+===========================================
+四、設計模式應用
+===========================================
+
+【1. MVVM Pattern】
+應用場景: 整個應用架構
+優勢:
+- 清晰的職責分離
+- 易於測試
+- 支援 SwiftUI 綁定
+- 可重用 ViewModel
+
+【2. Singleton Pattern】
+應用場景:
+- FirebaseService.shared
+- TimerRecordManager.shared
+- CalendarAssistantViewModel.shared
+
+優勢:
+- 全局唯一實例
+- 狀態共享
+- 資源管理
+
+【3. Observer Pattern】
+應用場景:
+- @Published / @ObservedObject
+- NotificationCenter
+- Firestore Snapshot Listeners
+
+優勢:
+- 響應式更新
+- 鬆耦合
+- 即時同步
+
+【4. Repository Pattern】
+應用場景:
+- FirebaseService 作為資料存取層
+
+優勢:
+- 抽象數據源
+- 易於切換後端
+- 集中式數據管理
+
+【5. Protocol-Oriented Programming】
+應用場景:
+- DataServiceProtocol
+
+優勢:
+- 依賴注入
+- 易於測試（Mock）
+- 解耦
+
+【6. Factory Pattern】
+應用場景:
+- Task 實例生成（服務端）
+
+優勢:
+- 集中創建邏輯
+- 複雜對象構建
+
+【7. Strategy Pattern】
+應用場景:
+- 不同計時模式（正數/倒數）
+
+優勢:
+- 行為可替換
+- 易於擴展
+
+===========================================
+五、通信機制
+===========================================
+
+【1. SwiftUI Binding】
+用於: View ↔ ViewModel
+
+@StateObject var viewModel: TodoViewModel
+// View 自動訂閱 ViewModel 變化
+
+【2. NotificationCenter】
+用於: 跨模組通信
+
+通知列表:
+- .userDidLogin
+- .userDidLogout
+- .userProfileDidChange
+- .taskDidUpdate
+
+【3. Combine Publishers】
+用於: 異步事件流
+
+範例:
+NotificationCenter.default.publisher(for: .userProfileDidChange)
+    .sink { notification in
+        // 處理
+    }
+    .store(in: &cancellables)
+
+【4. Closures / Callbacks】
+用於: 簡單回調
+
+範例:
+func performAction(completion: @escaping (Result<Data, Error>) -> Void) {
+    // 異步操作
+}
+
+【5. async/await】
+用於: 異步操作
+
+範例:
+func loadTasks() async throws -> [TodoTask] {
+    return try await firebaseService.fetchTasks()
+}
+
+===========================================
+六、錯誤處理架構
+===========================================
+
+【錯誤類型層次】
+
+AppError (頂層)
+    ├─ NetworkError
+    │   ├─ noConnection
+    │   ├─ timeout
+    │   └─ serverError
+    ├─ AuthenticationError
+    │   ├─ notAuthenticated
+    │   └─ tokenExpired
+    ├─ DataError
+    │   ├─ invalidFormat
+    │   └─ saveFailed
+    └─ OpenAIError
+        ├─ rateLimitExceeded
+        └─ invalidResponse
+
+【錯誤處理流程】
+
+Service 拋出錯誤
+    ↓
+ViewModel catch 錯誤
+    ├─ 記錄日誌
+    ├─ 回滾狀態
+    └─ 設定 errorMessage
+        ↓
+View 顯示錯誤
+    ├─ Alert
+    └─ Toast
+
+【重試機制】
+
+指數退避算法:
+delay = baseDelay * 2^retryCount
+maxRetries = 3
+
+適用於:
+- 網路請求失敗
+- OpenAI API 429 錯誤
+- Firestore 寫入失敗
+
+===========================================
+七、狀態管理
+===========================================
+
+【狀態分類】
+
+1. Local State (@State)
+   - 僅 View 內部使用
+   - UI 臨時狀態
+
+2. Shared State (@StateObject, @ObservedObject)
+   - 跨 View 共享
+   - ViewModel 管理
+
+3. Environment State (@EnvironmentObject)
+   - 全局狀態
+   - 依賴注入
+
+4. Persistent State (UserDefaults, Firestore)
+   - 持久化資料
+   - 跨會話保存
+
+【狀態同步策略】
+
+樂觀更新:
+1. 立即更新 UI
+2. 異步保存到後端
+3. 失敗時回滾
+
+即時監聽:
+1. Firestore Snapshot Listener
+2. 自動更新本地狀態
+3. 通知相關 View
+
+版本控制:
+1. 每次更新 version++
+2. 服務端檢查版本
+3. 衝突時拒絕舊版本
+
+===========================================
+八、依賴注入
+===========================================
+
+【注入方式】
+
+1. 構造函數注入:
+class TodoViewModel {
+    private let dataService: DataServiceProtocol
+
+    init(dataService: DataServiceProtocol = FirebaseService.shared) {
+        self.dataService = dataService
+    }
+}
+
+2. Environment 注入:
+@EnvironmentObject var authState: AuthState
+
+3. Singleton 注入:
+let service = FirebaseService.shared
+
+【優勢】
+- 易於測試（Mock）
+- 解耦合
+- 靈活替換實現
+
+===========================================
+九、測試架構
+===========================================
+
+【測試層次】
+
+Unit Tests:
+- Model 測試
+- ViewModel 邏輯測試
+- Service 測試（Mock）
+
+Integration Tests:
+- ViewModel + Service
+- 數據流測試
+
+UI Tests:
+- SwiftUI Preview
+- UI 自動化測試
+
+【Mock 策略】
+
+protocol DataServiceProtocol {
+    func fetchTasks() async throws -> [TodoTask]
+}
+
+class MockDataService: DataServiceProtocol {
+    var mockTasks: [TodoTask] = []
+
+    func fetchTasks() async throws -> [TodoTask] {
+        return mockTasks
+    }
+}
+
+===========================================
+檔案結束
+===========================================

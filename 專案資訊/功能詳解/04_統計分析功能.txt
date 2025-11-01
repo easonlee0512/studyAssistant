@@ -1,0 +1,935 @@
+===========================================
+統計分析功能 (Statistics & Analytics)
+===========================================
+
+【功能概述】
+統計分析功能提供學習數據的可視化呈現,包括每日統計、全部時間統計、類別統計、專注時間追蹤、任務完成率分析、Token 使用量追蹤、以及自動數據同步清理機制。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【Models】
+- studyAssistant/Models/Static.swift (49行)
+  └─ LearningStatistic 資料結構
+
+【ViewModels】
+- studyAssistant/ViewModels/StaticViewModel.swift (599行)
+  └─ 統計數據管理、CRUD 操作、數據計算、Token 追蹤
+
+【Views】
+- studyAssistant/Views/StatisticsView.swift (789行)
+  └─ 統計視圖、圖表展示、每日/全部統計切換
+
+【總代碼量】約 1,437 行
+
+===========================================
+二、資料模型 (Static.swift)
+===========================================
+
+【LearningStatistic 結構】
+
+struct LearningStatistic: Identifiable, Codable {
+    var id: String?                   // Firestore 文件 ID (可選)
+    var userId: String                // 用戶 ID
+    var category: String              // 類別名稱
+    var progress: Double              // 進度 (0.0-1.0)
+    var taskcount: Int                // 任務總數
+    var taskcompletecount: Int        // 完成任務數
+    var totalFocusTime: Int           // 總專注時間(分鐘)
+    var date: Date                    // 建立日期
+    var updatedAt: Date               // 更新時間
+    var version: Int                  // 版本號
+}
+
+【計算屬性】
+completionRate: Double
+- 計算: taskcompletecount / taskcount
+- 返回: 任務完成率 (0.0-1.0)
+
+【初始化】
+支援預設參數初始化:
+- id: 可選(新建時為 nil)
+- progress, taskcount, taskcompletecount, totalFocusTime: 預設為 0
+- date, updatedAt: 預設為當前時間
+- version: 預設為 1
+
+【用途】
+- 按類別追蹤學習統計
+- 支援專注時間累計
+- 任務數量與完成率統計
+- 進度追蹤
+
+===========================================
+三、業務邏輯層 (StaticViewModel.swift)
+===========================================
+
+【類別定義】
+@MainActor
+class StaticViewModel: ObservableObject
+
+【核心屬性】
+
+A. 數據管理
+   @Published var statistics: [LearningStatistic] = []
+   @Published var isLoading = false
+   @Published var errorMessage: String?
+   @Published var tokenUsage = TokenUsageStats()
+
+B. 服務依賴
+   private let db = Firestore.firestore()
+   private let functions = Functions.functions(region: "asia-east1")
+
+【Token 使用量結構】
+
+struct TokenUsageStats {
+    var totalTokens: Int = 0
+    var modelUsage: [String: ModelTokenUsage] = [:]
+    var lastUpdated: Date = Date()
+}
+
+struct ModelTokenUsage {
+    var total: Int
+    var prompt: Int?        // 提示詞 tokens
+    var completion: Int?    // 回應 tokens
+}
+
+【初始化與監聽】
+
+init()
+- 呼叫 setupAuthListener()
+- 呼叫 setupNotificationObserver()
+
+setupAuthListener()
+- 監聽 Firebase Auth 狀態變化
+- 用戶登入: 載入統計和 Token 使用量
+- 用戶登出: 清空數據
+
+setupNotificationObserver()
+- 監聽 .taskDeleted 通知
+- 處理任務刪除時的統計更新
+
+【核心方法】
+
+1. 數據載入
+   ────────
+
+   func fetchStatistics() async
+
+   流程:
+   1. 檢查用戶登入狀態
+   2. 呼叫 Cloud Functions: fetchStatistics
+   3. 解析回應數據:
+      - success: Bool
+      - statistics: [[String: Any]]
+
+   4. 轉換數據:
+      - convertToTimestamps() 轉換日期
+      - 建立 LearningStatistic 陣列
+
+   5. 更新 statistics 屬性
+   6. 呼叫 fetchTokenUsageStats()
+
+   錯誤處理:
+   - 捕獲並記錄所有錯誤
+   - 設置 errorMessage
+   - 輸出詳細的錯誤資訊
+
+   func fetchTokenUsageStats() async
+
+   流程:
+   1. 檢查用戶登入
+   2. 呼叫 Cloud Functions: fetchTokenUsage
+   3. 解析 tokenUsage 數據:
+      - totalTokens: Int
+      - modelUsage: [String: Any]
+      - lastUpdated: Date
+
+   4. 建立 TokenUsageStats
+   5. 更新 tokenUsage 屬性
+
+2. 數據保存
+   ────────
+
+   func saveStatistic(_ statistic: LearningStatistic) async -> Bool
+
+   流程:
+   1. 更新 updatedAt 為當前時間
+   2. 準備數據字典
+   3. convertTimestampsToStrings() 轉換日期為 ISO 8601
+   4. 建立參數:
+      - statistic: 轉換後的數據
+      - statisticId: 如果存在
+
+   5. 呼叫 Cloud Functions: updateStatistic
+   6. 檢查回應 success
+   7. 重新載入 statistics
+   8. 返回成功/失敗
+
+3. 類別操作
+   ────────
+
+   func updateCategoryFocusTime(category: String, additionalTime: Int) async
+   - 查找現有統計
+   - 存在: 累加 totalFocusTime
+   - 不存在: 建立新統計
+   - 呼叫 saveStatistic()
+
+   func updateCategoryTaskStats(category: String, completedCount: Int, totalCount: Int) async
+   - 查找現有統計
+   - 更新 taskcount 和 taskcompletecount
+   - 呼叫 saveStatistic()
+
+   func updateCategoryStats(category: String, completedCount: Int, totalCount: Int, totalFocusTime: Int) async
+   - 同時更新任務統計和專注時間
+   - 避免多次 Cloud Functions 呼叫
+   - 輸出調試訊息
+
+   func updateCategoryProgress(category: String, progress: Double) async
+   - 更新類別進度值
+   - 類似上述方法
+
+4. 查詢方法
+   ────────
+
+   func totalFocusTimeByCategory() -> [String: Int]
+   - 計算每個類別的總專注時間
+   - 返回字典: [類別: 分鐘數]
+
+   func getCategoryProgress() -> [String: Double]
+   - 獲取每個類別的進度
+   - 返回字典: [類別: 進度值]
+
+   func getCategoryTaskCompletionRate() -> [String: Double]
+   - 計算每個類別的完成率
+   - 公式: taskcompletecount / taskcount
+   - 返回字典: [類別: 完成率]
+
+   func categoryCount() -> Int
+   - 返回類別數量
+   - 使用 Set 去重
+
+5. 刪除操作
+   ────────
+
+   func deleteStatistic(_ statisticId: String) async
+
+   流程:
+   1. 檢查登入
+   2. 呼叫 Cloud Functions: deleteStatistic
+   3. 檢查回應 success
+   4. 從本地陣列移除
+   5. 輸出成功訊息
+
+6. 通知處理
+   ────────
+
+   @objc func handleTaskDeleted(_ notification: Notification)
+
+   流程:
+   1. 獲取 category (從 userInfo)
+   2. 忽略空或"未分類"
+   3. 檢查該類別是否還有其他任務:
+      - 沒有 → 刪除統計記錄
+      - 有 → 更新任務計數
+
+   邏輯:
+   - 建立 TodoViewModel 實例
+   - 呼叫 tasksForCategory() 獲取剩餘任務
+   - 計算完成數和總數
+   - 呼叫 updateCategoryTaskStats()
+
+【輔助方法】
+
+convertTimestampsToStrings(_ data: [String: Any]) -> [String: Any]
+- 遞迴轉換 Timestamp 為 ISO 8601 字串
+- 處理嵌套字典和陣列
+- 用於發送到 Cloud Functions
+
+convertToTimestamps(_ data: [String: Any]) -> [String: Any]
+- 遞迴轉換日期字串或序列化格式為 Timestamp
+- 支援兩種格式:
+  - {_seconds: ..., _nanoseconds: ...}
+  - ISO 8601 字串
+- 用於解析 Cloud Functions 回應
+
+===========================================
+四、視圖層 (StatisticsView.swift)
+===========================================
+
+【視圖結構】
+struct StatisticsView: View
+
+【依賴注入】
+@EnvironmentObject var timerManager: TimerManager
+@EnvironmentObject var todoViewModel: TodoViewModel
+@EnvironmentObject var staticViewModel: StaticViewModel
+@Environment(\.dismiss) var dismiss
+
+【狀態管理】
+
+A. 時間範圍
+   @State private var timeRange: TimeRange = .day
+
+   enum TimeRange {
+       case day = "每日"
+       case all = "全部"
+   }
+
+B. 每日統計數據
+   @State private var timerRecords: [TimerRecord] = []
+   @State private var todayTasks: [(task: String, isCompleted: Bool)] = []
+   @State private var formattedDate: String = ""
+   @State private var maxFocusTime: Int = 0
+   @State private var earliestStartTime: Date?
+   @State private var latestEndTime: Date?
+   @State private var hourlyDistribution: [Int: Int] = [:]
+
+C. UI 狀態
+   @State private var isSyncing: Bool = false
+
+【視圖佈局】
+
+ZStack {
+    backgroundColor (#F3D4B7)
+
+    VStack {
+        // 自定義導航欄
+        HStack {
+            返回按鈕
+            Spacer
+            "統計" 標題
+            Spacer
+            空按鈕(平衡佈局)
+        }
+
+        // 時間範圍選擇器
+        Picker("時間範圍", selection: $timeRange) {
+            ForEach(TimeRange.allCases) { ... }
+        }
+        .pickerStyle(SegmentedPickerStyle())
+
+        // 同步指示器
+        if isSyncing {
+            ProgressView + "正在更新統計資料..."
+        }
+
+        // 內容區域
+        ScrollView {
+            if timeRange == .day {
+                dailyStatisticsView
+            } else {
+                allTimeStatisticsView
+            }
+        }
+    }
+}
+.onAppear {
+    syncStatisticsWithTasks()
+    loadData()
+}
+
+【子視圖】
+
+1. dailyStatisticsView
+   ────────────────
+
+   每日統計視圖:
+
+   VStack {
+       // 日期顯示卡片
+       Text(formattedDate)  // "M月d日 EEEE"
+           .background(#E09772)
+
+       // 總計學習時間卡片
+       VStack {
+           // 總學習時間
+           VStack {
+               "總學習時間" 標題
+               formatDuration(getTotalFocusTime()) 大字
+               允許APP時間(如有)
+           }
+
+           Divider
+
+           // 最長集中時間
+           VStack {
+               "最長集中時間" 標題
+               formatDuration(maxFocusTime) 大字
+           }
+
+           Divider
+
+           // 專注次數和完成率
+           HStack {
+               VStack {
+                   圖示 + "專注次數"
+                   "\(timerRecords.count)次" 大字
+               }
+
+               VStack {
+                   圖示 + "完成率"
+                   "\(Int(completionRate * 100))%" 大字
+
+                   // 進度條
+                   GeometryReader {
+                       ZStack(alignment: .leading) {
+                           灰底 Capsule
+                           橙色 Capsule (寬度按比例)
+                             .overlay(百分比文字)
+                       }
+                   }
+               }
+           }
+       }
+       .background(White)
+       .cornerRadius(12)
+       .shadow()
+   }
+
+2. allTimeStatisticsView
+   ────────────────────
+
+   全部時間統計視圖:
+
+   VStack {
+       // 任務完成情況區塊
+       VStack {
+           "任務完成情況" 標題
+
+           ForEach(taskCompletionRates) { category in
+               VStack {
+                   HStack {
+                       類別名稱 (寬度80)
+                       Spacer
+                       "已完成/總數" 標籤
+                   }
+
+                   // 進度條
+                   GeometryReader {
+                       ZStack(alignment: .leading) {
+                           灰底 Capsule
+                           橙色 Capsule
+                             .overlay(百分比)
+                       }
+                   }
+               }
+           }
+       }
+       .background(White)
+
+       // 總專注時長區塊
+       VStack {
+           "總專注時長" 標題
+
+           HStack {
+               VStack {
+                   "總時長："
+                   "\(hours)h\(minutes)m" 大字
+               }
+               .background(#F5F5F5)
+
+               VStack {
+                   "專注次數："
+                   "\(totalCategories)個" 大字
+               }
+               .background(#F5F5F5)
+           }
+
+           ForEach(categoryTimes) { category in
+               HStack {
+                   類別名稱
+                   Spacer
+                   "\(hours)小時\(mins)分鐘" 大字
+               }
+               .background(#F5F5F5)
+           }
+       }
+       .background(White)
+
+       // Token使用量區塊
+       VStack {
+           "API Token 使用量" 標題
+
+           HStack {
+               VStack {
+                   "總計使用量："
+                   "\(totalTokens) tokens" 大字
+               }
+               .background(#F5F5F5)
+
+               VStack {
+                   "最後更新："
+                   formatDate(lastUpdated) 大字
+               }
+               .background(#F5F5F5)
+           }
+
+           // 各模型使用量
+           ForEach(modelUsage) { model in
+               VStack {
+                   HStack {
+                       模型名稱
+                       Spacer
+                       "\(total) tokens" 大字
+                   }
+
+                   // 提示詞和回應tokens
+                   HStack {
+                       HStack {
+                           "提示詞:"
+                           "\(promptTokens) tokens"
+                       }
+                       .background(#E5F1FF)
+
+                       HStack {
+                           "回應:"
+                           "\(completionTokens) tokens"
+                       }
+                       .background(#F5E5FF)
+                   }
+               }
+               .background(#F5F5F5)
+           }
+       }
+       .background(White)
+   }
+
+【數據載入方法】
+
+1. loadData()
+   ────────
+   根據 timeRange 載入不同數據:
+   - .day: 載入計時記錄和今日任務
+   - .all: 載入統計數據和 Token 使用量
+
+2. syncStatisticsWithTasks() async
+   ────────────────────────────
+   同步任務與統計數據:
+
+   流程:
+   1. 設置 isSyncing = true
+   2. 獲取所有統計記錄
+   3. 獲取所有任務
+   4. 按類別分組計算:
+      - total: 任務總數
+      - completed: 已完成數
+      - focusTime: 總專注時間
+
+   5. 檢查並刪除無效類別:
+      - 遍歷 statistics
+      - 如果類別不在實際任務中
+      - 呼叫 deleteStatistic()
+
+   6. 更新或創建有效類別:
+      - 遍歷 categoryStats
+      - 呼叫 updateCategoryStats()
+
+   7. 重新載入統計數據
+   8. 設置 isSyncing = false
+
+   重要邏輯:
+   - 忽略空類別、"未分類"和重複任務
+   - 確保統計數據與實際任務同步
+   - 自動清理無效統計
+
+3. loadTimerRecords()
+   ────────────────
+   載入今日計時記錄:
+
+   流程:
+   1. 獲取所有記錄
+   2. 篩選今日記錄
+   3. 計算最長專注時間
+   4. 計算最早開始和最晚結束時間
+   5. 計算小時分布 (hourlyDistribution)
+   6. 更新狀態
+
+4. loadTodayTasks()
+   ────────────────
+   載入今日任務:
+
+   流程:
+   1. 獲取今日所有任務
+   2. 對每個任務:
+      - 非重複任務: 使用 task.isCompleted
+      - 重複任務: 獲取今日實例,使用 instance.isCompleted
+
+   3. 組合為 [(task: String, isCompleted: Bool)]
+   4. 更新 todayTasks
+
+5. updateDateDisplay()
+   ────────────────
+   格式化今日日期: "M月d日 EEEE"
+
+【計算方法】
+
+getTotalFocusTime() -> Int
+- 累加所有 timerRecords 的 duration
+
+getCompletionRateValue() -> Double
+- 計算: 已完成任務數 / 總任務數
+- 返回 0.0-1.0
+
+getColorForHour(_ hour: Int) -> Color
+- 根據小時返回顏色:
+  - 0-6: #8B9DFA (藍色)
+  - 6-12: #9AD0B7 (綠色)
+  - 12-18: #E3B587 (橙色)
+  - 18-24: #D896C7 (粉色)
+
+【輔助函數】
+
+formatDuration(_ seconds: Int, short: Bool = false) -> String
+- short = false: "HH:MM:SS" 或 "MM:SS"
+- short = true: "Xh Ym" 或 "Ym"
+
+===========================================
+五、資料流程圖
+===========================================
+
+【每日統計流程】
+
+用戶進入統計頁面
+  ↓
+onAppear
+  ↓
+syncStatisticsWithTasks()
+  ├─ fetchStatistics()
+  ├─ loadTasks()
+  ├─ 計算 categoryStats
+  ├─ 刪除無效類別
+  └─ 更新有效類別
+  ↓
+loadData()
+  ├─ loadTimerRecords()
+  │    ├─ 獲取所有記錄
+  │    ├─ 篩選今日
+  │    ├─ 計算最長時間
+  │    └─ 計算小時分布
+  │
+  └─ loadTodayTasks()
+       ├─ 獲取今日任務
+       ├─ 處理重複任務實例
+       └─ 組合完成狀態
+  ↓
+updateDateDisplay()
+  ↓
+顯示 dailyStatisticsView
+
+【全部統計流程】
+
+用戶切換到"全部"
+  ↓
+onChange(timeRange)
+  ↓
+loadData()
+  ├─ fetchStatistics()
+  │    ├─ Cloud Functions: fetchStatistics
+  │    ├─ 解析回應
+  │    └─ 更新 statistics
+  │
+  └─ fetchTokenUsageStats()
+       ├─ Cloud Functions: fetchTokenUsage
+       ├─ 解析 totalTokens, modelUsage
+       └─ 更新 tokenUsage
+  ↓
+顯示 allTimeStatisticsView
+  ├─ 任務完成情況
+  ├─ 總專注時長
+  └─ Token 使用量
+
+【專注時間更新流程】
+
+計時結束
+  ↓
+TimerManager.syncFocusTimeToStatistics()
+  ↓
+獲取任務類別
+  ↓
+StaticViewModel.updateCategoryFocusTime()
+  ├─ 查找現有統計
+  ├─ 累加 totalFocusTime
+  └─ saveStatistic()
+       ├─ 準備數據
+       ├─ convertTimestampsToStrings()
+       ├─ Cloud Functions: updateStatistic
+       └─ fetchStatistics() 重新載入
+  ↓
+UI 自動更新
+
+【任務刪除流程】
+
+TodoViewModel.deleteTask()
+  ↓
+發送 .taskDeleted 通知
+  (userInfo: ["category": category])
+  ↓
+StaticViewModel.handleTaskDeleted()
+  ↓
+獲取該類別剩餘任務
+  ↓
+剩餘任務為空?
+  ├─ 是: deleteStatistic(statisticId)
+  │      ├─ Cloud Functions: deleteStatistic
+  │      └─ 從本地陣列移除
+  │
+  └─ 否: updateCategoryTaskStats()
+         ├─ 重新計算任務數
+         └─ saveStatistic()
+  ↓
+UI 更新
+
+===========================================
+六、整合機制
+===========================================
+
+【與任務管理整合】
+
+1. 任務新增:
+   - ChatViewModel.checkAndCreateStatisticsForCategory()
+   - 類別不存在 → 建立新統計
+   - 類別存在 → 不操作(由同步機制處理)
+
+2. 任務刪除:
+   - 發送 .taskDeleted 通知
+   - StaticViewModel 監聽並處理
+   - 更新或刪除統計
+
+3. 任務完成:
+   - TodoViewModel.toggleTaskCompletion()
+   - 不直接更新統計
+   - 由 syncStatisticsWithTasks() 同步
+
+【與計時器整合】
+
+計時結束時:
+- TimerManager.syncFocusTimeToStatistics()
+- 獲取任務類別
+- updateCategoryFocusTime()
+- totalFocusTime += 分鐘數
+
+條件:
+- 專注時間 >= 30秒 才同步
+- 轉換為分鐘(向下取整)
+
+【與聊天助手整合】
+
+Token 使用追蹤:
+- ChatViewModel 呼叫 GPT API
+- 解析 usage 資訊
+- 呼叫 Cloud Functions: updateTokenUsage
+- StaticViewModel.fetchTokenUsageStats() 顯示
+
+【自動同步機制】
+
+何時觸發:
+1. onAppear (進入統計頁面)
+2. 切換時間範圍
+3. 任務刪除通知
+
+syncStatisticsWithTasks() 確保:
+- 統計數據與實際任務一致
+- 自動清理無效類別
+- 重新計算任務數和專注時間
+
+===========================================
+七、Cloud Functions API
+===========================================
+
+【使用的函數】
+
+1. fetchStatistics
+   請求: 無參數 (userId 從 Auth 獲取)
+   回應: {
+     success: Bool,
+     statistics: [LearningStatistic]
+   }
+
+2. updateStatistic
+   請求: {
+     statistic: {統計數據},
+     statisticId: String? (可選)
+   }
+   回應: {
+     success: Bool,
+     statisticId: String (如果是新建)
+   }
+
+3. deleteStatistic
+   請求: {
+     statisticId: String
+   }
+   回應: {
+     success: Bool
+   }
+
+4. fetchTokenUsage
+   請求: 無參數
+   回應: {
+     success: Bool,
+     tokenUsage: {
+       totalTokens: Int,
+       modelUsage: {
+         "模型名": {
+           total: Int,
+           prompt: Int,
+           completion: Int
+         }
+       },
+       lastUpdated: Date
+     }
+   }
+
+5. updateTokenUsage
+   (由 ChatViewModel 呼叫,非 StaticViewModel)
+   請求: {
+     model: String,
+     promptTokens: Int,
+     completionTokens: Int,
+     totalTokens: Int
+   }
+
+===========================================
+八、UI/UX 設計細節
+===========================================
+
+【顏色系統】
+
+主背景: #F3D4B7 (淺棕色)
+卡片背景: White
+次要背景: #F5F5F5 (淺灰)
+強調色: #E09772 (橙棕色)
+文字顏色: Black, #333333
+分隔線: 系統預設
+
+Token 標籤背景:
+- 提示詞: #E5F1FF (淺藍)
+- 回應: #F5E5FF (淺紫)
+
+小時顏色:
+- 0-6: #8B9DFA (藍)
+- 6-12: #9AD0B7 (綠)
+- 12-18: #E3B587 (橙)
+- 18-24: #D896C7 (粉)
+
+【字體大小】
+
+- 標題: .title2 (.title3 for 區塊標題)
+- 大數字: 60pt, 40pt, 25pt (bold)
+- 正文: .headline, .subheadline
+- 小標籤: .caption
+
+【佈局】
+
+- 卡片圓角: 12
+- 卡片陰影: opacity 0.05, radius 5
+- 間距: 15, 20
+- 水平內邊距: 15, 5
+- 垂直間距: 15, 20
+
+【進度條】
+
+- 高度: 12 (每日), 25 (全部)
+- 形狀: Capsule
+- 灰底: opacity 0.2-0.3
+- 橙色填充: 根據比例
+- 文字覆蓋: 居中,bold
+
+===========================================
+九、性能優化
+===========================================
+
+【1. 快取機制】
+- 統計數據快取在 statistics 陣列
+- 避免頻繁 Cloud Functions 呼叫
+- 只在必要時重新載入
+
+【2. 自動同步】
+- syncStatisticsWithTasks() 確保一致性
+- 批次計算所有類別
+- 單次 Cloud Functions 呼叫更新
+
+【3. 懶加載】
+- 使用 ScrollView + LazyVStack
+- 只渲染可見卡片
+
+【4. 條件渲染】
+- 根據 timeRange 切換視圖
+- 避免同時渲染兩種統計
+
+【5. 狀態管理】
+- isSyncing 顯示載入狀態
+- 防止重複觸發同步
+
+【6. 數據轉換】
+- convertTimestampsToStrings/ToTimestamps
+- 統一處理日期格式
+- 避免手動轉換錯誤
+
+===========================================
+十、已知問題與限制
+===========================================
+
+【1. 同步時機】
+- 目前只在進入頁面和切換範圍時同步
+- 背景任務變更可能不即時反映
+
+【2. Token 追蹤】
+- 依賴 ChatViewModel 手動更新
+- 可能遺漏某些 API 呼叫
+
+【3. 歷史數據】
+- 沒有歷史數據歸檔
+- 所有數據混合在一起
+
+【4. 性能】
+- syncStatisticsWithTasks() 可能耗時
+- 大量任務時計算較慢
+
+【5. 小時分布圖】
+- hourlyDistribution 已計算但未顯示
+- 缺少視覺化圖表
+
+===========================================
+十一、未來改進方向
+===========================================
+
+【功能增強】
+- 週/月統計視圖
+- 趨勢圖表 (折線圖)
+- 類別比較分析
+- 目標設定與追蹤
+- 匯出統計報告 (PDF/CSV)
+- 自訂統計週期
+
+【UI/UX】
+- 更豐富的圖表類型
+  - 圓餅圖 (類別分布)
+  - 折線圖 (時間趨勢)
+  - 熱力圖 (小時分布)
+- 互動式圖表 (點擊查看詳情)
+- 動畫過渡效果
+- 自訂顏色主題
+
+【數據管理】
+- 歷史數據歸檔
+- 數據清理策略
+- 匯出/匯入功能
+- 雲端備份
+
+【整合深化】
+- 實時數據同步
+- 推送通知 (達成目標)
+- Siri 捷徑整合
+- Widget 支援
+
+【性能】
+- 增量同步
+- 背景任務處理
+- 數據壓縮
+- 分頁載入
+
+===========================================
+檔案結束
+===========================================

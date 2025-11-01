@@ -1,0 +1,1120 @@
+===========================================
+任務管理功能 (Todo Task Management)
+===========================================
+
+【功能概述】
+任務管理是本專案的核心功能之一,提供完整的待辦事項 CRUD 操作、重複任務支援、任務實例管理、以及跨日期任務顯示等進階功能。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【Models】
+- studyAssistant/Models/TodoTask.swift (367行)
+  └─ 資料結構定義:TodoTask、TaskInstance、RepeatType
+
+【ViewModels】
+- studyAssistant/ViewModels/TodoViewModel.swift (628行)
+  └─ 業務邏輯層,處理所有任務相關操作
+
+【Views】
+- studyAssistant/Views/TodoView.swift (883行) - 主視圖
+- studyAssistant/Views/TodoAddView.swift (690行) - 新增任務
+- studyAssistant/Views/TodoEditView.swift (654行) - 編輯任務
+- studyAssistant/Views/TodoDetailView.swift (261行) - 任務詳情
+
+【總代碼量】約 3,483 行
+
+===========================================
+二、資料模型 (TodoTask.swift)
+===========================================
+
+【1. RepeatType 枚舉】
+定義任務重複類型:
+- .none: 不重複
+- .daily: 每天重複
+- .weekly: 每週重複
+- .monthly: 每月重複
+
+實現了 Hashable 和 Codable 協議,支援比較和序列化。
+
+【2. TaskInstance 結構】
+用於表示重複任務的單個實例:
+
+struct TaskInstance {
+    let id: String              // 實例唯一ID
+    var date: Date              // 實例日期
+    var isCompleted: Bool       // 完成狀態
+    var parentTaskId: String    // 父任務ID
+}
+
+關鍵方法:
+- init?(documentId:data:) - 從 Firestore 資料建立
+- toFirestore - 轉換為 Firestore 格式
+
+【3. TodoTask 結構】
+主要任務資料結構:
+
+struct TodoTask: Identifiable, Codable, Equatable {
+    // 基本資訊
+    let id: String              // Firestore 文件 ID
+    var title: String           // 任務標題
+    var note: String            // 任務備註
+    var color: Color            // 任務顏色標記
+    var category: String        // 任務類別
+
+    // 時間設定
+    var isAllDay: Bool          // 是否全天任務
+    var startDate: Date         // 開始日期
+    var endDate: Date           // 結束日期
+
+    // 重複設定
+    var repeatType: RepeatType  // 重複類型
+    var repeatEndDate: Date?    // 重複結束日期
+    var instances: [TaskInstance] // 任務實例陣列
+
+    // 狀態與追蹤
+    var isCompleted: Bool       // 完成狀態
+    var focusTime: Int          // 專注時間(分鐘)
+    var createdAt: Date         // 建立時間
+    var userId: String          // 使用者ID
+}
+
+【重要方法】
+
+A. shouldDisplay(on date: Date) -> Bool
+   判斷任務是否應該在指定日期顯示
+
+   邏輯:
+   1. 檢查是否有該日期的已完成實例
+   2. 檢查日期是否在任務起始日之後
+   3. 檢查是否超過重複結束日期
+   4. 根據 repeatType 判斷:
+      - .daily: 每天都顯示
+      - .weekly: 計算週期內的偏移量
+      - .monthly: 計算月內的偏移量
+      - .none: 只在 startDate~endDate 區間顯示
+
+B. hasCompletedInstance(on date: Date) -> Bool
+   檢查特定日期是否有已完成的實例
+
+C. toFirestore / init(documentId:data:)
+   Firestore 資料轉換方法
+
+【顏色處理】
+使用 SwiftUI Color 類型,存儲時轉換為 RGBA 組件:
+{
+    "red": CGFloat,
+    "green": CGFloat,
+    "blue": CGFloat,
+    "opacity": CGFloat
+}
+
+===========================================
+三、業務邏輯層 (TodoViewModel.swift)
+===========================================
+
+【類別定義】
+@MainActor
+class TodoViewModel: ObservableObject
+
+使用 @MainActor 確保所有 UI 更新在主線程執行。
+
+【核心屬性】
+
+A. 任務資料
+- tasks: [TodoTask] - 任務陣列 (@Published)
+- hasLoadedInitialTasks: Bool - 是否已載入初始資料
+
+B. 新增任務表單
+- newTaskTitle: String
+- newTaskNote: String
+- newTaskColor: Color
+- newTaskCategory: String
+- newTaskIsAllDay: Bool
+- newTaskStartDate: Date
+- newTaskEndDate: Date
+- newTaskRepeatType: RepeatType
+- newTaskRepeatEndDate: Date?
+
+C. 狀態管理
+- isLoading: Bool - 載入中狀態
+- errorMessage: String? - 錯誤訊息
+- keyboardHeight: CGFloat - 鍵盤高度
+
+D. 快取與優化
+- lastTasksLoadTime: Date? - 上次載入時間
+- cacheTimeInterval: TimeInterval = 60 - 快取時間(秒)
+- isLoadingTasks: Bool - 防止重複載入
+- completionUpdateQueue - 完成狀態更新佇列
+
+【核心方法】
+
+1. 資料載入
+   ────────────
+   func loadTasks() async throws
+   - 檢查使用者登入狀態
+   - 使用快取機制(60秒內不重複載入)
+   - 防止併發載入
+   - 呼叫 FirebaseService.fetchTodoTasks()
+
+   func forceReloadTasks() async throws
+   - 強制重新載入,忽略快取
+
+2. 任務 CRUD
+   ────────────
+   func addTask(_ task: TodoTask) async
+   - 確認使用者登入
+   - 設定 userId
+   - 處理重複任務的 repeatEndDate
+   - 呼叫 FirebaseService.saveTodoTask()
+   - 強制重新載入以顯示新任務
+
+   func updateTask(_ task: TodoTask) async throws
+   - 保存原始任務狀態(用於錯誤恢復)
+   - 更新 Firestore
+   - 更新本地任務列表
+   - 發送 todoDataDidChange 通知
+   - 失敗時恢復原始狀態
+
+   func deleteTask(_ task: TodoTask) async throws
+   - 確認使用者權限(只能刪除自己的任務)
+   - 呼叫 FirebaseService.deleteTodoTask()
+   - 從本地陣列移除
+   - 發送 taskDeleted 通知(包含類別資訊)
+
+3. 任務完成狀態切換
+   ────────────────
+   func toggleTaskCompletion(_ task: TodoTask) async
+   - 只處理非重複任務
+   - 立即更新本地狀態(樂觀更新)
+   - 加入更新佇列
+   - 異步處理更新
+
+   func processCompletionQueue() async
+   - 處理完成狀態更新佇列
+   - 支援重試機制(最多3次)
+   - 失敗時恢復本地狀態
+   - 防止併發處理
+
+4. 任務實例管理
+   ────────────
+   func toggleInstanceCompletion(_ instance: TaskInstance, in task: TodoTask) async throws
+   - 立即更新本地實例狀態
+   - 呼叫 FirebaseService.updateTaskInstanceCompletion()
+   - 失敗時恢復狀態
+
+   func getInstancesForDate(_ date: Date, task: TodoTask) -> [TaskInstance]
+   - 獲取特定日期的任務實例
+
+   func updateInstance/deleteInstance
+   - 更新或刪除任務實例
+
+5. 任務過濾與排序
+   ────────────────
+   func tasksForDate(_ date: Date) -> [TodoTask]
+   - 使用 task.shouldDisplay(on:) 過濾
+
+   func tasksForCategory(_ category: String) -> [TodoTask]
+   - 按類別過濾
+
+   func sortedTasks(by date: Date) -> [TodoTask]
+   - 按開始時間排序
+
+   func sortedTasksWithCompletionStatus(by date: Date) -> [TodoTask]
+   - 未完成任務在前,已完成在後
+   - 同狀態按開始時間排序
+
+6. 表單管理
+   ────────
+   func initNewTaskForm(selectedDate: Date)
+   - 初始化新增任務表單
+   - 重置所有欄位為預設值
+
+【通知機制】
+
+監聽通知:
+- .todoDataDidChange - 資料變更時重新載入
+- .userAuthDidChange - 驗證狀態變更
+
+發送通知:
+- .todoDataDidChange - 任務變更後通知其他元件
+- .todoTaskDidUpdate - 局部更新通知
+- .taskDeleted - 任務刪除通知
+
+【錯誤處理】
+
+enum ValidationError: LocalizedError {
+    case emptyTitle      // 標題為空
+    case notLoggedIn     // 未登入
+    case unauthorized    // 無權限
+}
+
+【優化機制】
+
+1. 快取策略
+   - 60秒內使用快取資料
+   - 避免頻繁網路請求
+
+2. 樂觀更新
+   - 立即更�� UI
+   - 背景同步到伺服器
+   - 失敗時回滾
+
+3. 更新佇列
+   - 防止頻繁更新請求
+   - 支援重試機制
+   - 批次處理更新
+
+4. 防止重複載入
+   - isLoadingTasks 標記
+   - 併發控制
+
+===========================================
+四、主視圖 (TodoView.swift)
+===========================================
+
+【視圖結構】
+struct TodoView: View
+
+依賴注入:
+- @EnvironmentObject var viewModel: TodoViewModel
+- @EnvironmentObject var settingsViewModel: UserSettingsViewModel
+- @EnvironmentObject var staticViewModel: StaticViewModel
+
+【狀態管理】
+
+A. 日期與選擇
+- selectedDate: Date - 當前選擇的日期
+- showingAddTask: Bool - 顯示新增任務視圖
+- showingEditTask: Bool - 顯示編輯任務視圖
+- showingTodoDetail: Bool - 顯示任務詳情
+- taskToEdit: TodoTask? - 待編輯的任務
+
+B. UI 狀態
+- isLoading: Bool - 載入狀態
+- showError: Bool - 顯示錯誤
+- errorMessage: String - 錯誤訊息
+- offset: CGFloat - 動畫偏移
+
+C. 快取與優化
+- isInitialized: Bool - 是否已初始化
+- lastLoadTime: Date? - 上次載入時間
+- lastUserProfileLoadTime: Date? - 上次載入用戶資料時間
+- cachedUserGoal: String - 快取的用戶目標
+
+D. 環境監聽
+- @Environment(\.scenePhase) - 應用程式狀態
+
+【視圖佈局】
+
+NavigationView {
+    GeometryReader {
+        ZStack {
+            backgroundColor (F3D4B7)
+
+            VStack {
+                // 固定頂部區域
+                VStack {
+                    倒數天數/用戶目標
+                    當前日期 + 返回今日按鈕
+                    WeekPagerView (週曆)
+                    "To Do List" 標題 + 新增按鈕
+                }
+
+                // 可滾動任務列表
+                DayPagerView (日期分頁視圖)
+            }
+
+            // 載入指示器
+            if viewModel.isLoading {
+                ProgressView()
+            }
+        }
+
+        // 浮層
+        if showingAddTask {
+            TodoAddView (新增任務)
+        }
+
+        if showingEditTask {
+            TodoEditView (編輯任務)
+        }
+
+        if showingTodoDetail {
+            TodoDetailView (任務詳情)
+        }
+    }
+}
+
+【核心子視圖】
+
+1. WeekPagerView
+   ────────────
+   週曆分頁視圖,支援水平滑動切換週
+
+   特點:
+   - 使用 TabView 實現分頁
+   - 預先準備 101 週(-50~+50)
+   - 背景框固定,內容可滑動
+   - 支援震動反饋
+
+   包含子視圖:
+   - WeekContent: 顯示單週的7天
+
+2. DayPagerView
+   ────────────
+   日期分頁視圖,支援左右滑動切換日期
+
+   特點:
+   - 動態生成日期範圍(-3~+3天)
+   - 滑動到邊界時自動重新生成
+   - pageIndex 追蹤當前頁面
+
+   包含子視圖:
+   - DayContent: 顯示單日的任務列表
+
+3. TodoItemView
+   ────────────
+   單個任務卡片視圖
+
+   結構:
+   - 左側彩色標識 (9px 寬)
+   - 中間內容區域
+     - 任務標題 (22pt, 可劃線)
+     - 備註文字 (15pt, 不劃線)
+     - 時間顯示 (14pt)
+   - 右側完成按鈕 (30x30)
+
+   特點:
+   - 支援任務和任務實例兩種模式
+   - 完成狀態即時更新
+   - 點擊卡片進入編輯
+   - 點擊完成按鈕切換狀態
+
+【生命週期管理】
+
+onAppear:
+- 更新 cachedUserGoal
+- 首次初始化時載入任務
+
+.task:
+- 監聽 .userProfileDidChange 通知
+- 監聽 .todoDataDidChange 通知
+- 檢查是否需要重新載入(5分鐘間隔)
+
+onChange(selectedDate):
+- 日期變更時重新載入任務
+
+onChange(scenePhase):
+- 從背景回到前景時重新載入
+
+onDisappear:
+- 移除通知監聽器
+
+.refreshable:
+- 支援下拉刷新
+
+【私有方法】
+
+func loadTasks(showLoadingIndicator: Bool) async
+- 載入任務資料
+- 可選擇是否顯示載入指示器
+- 更新 lastLoadTime
+
+func loadUserProfile(force: Bool)
+- 載入用戶資料
+- 5分鐘快取機制
+- 更新 cachedUserGoal
+
+【倒數天數計算】
+
+var daysRemaining: Int
+- 從當前日期到 targetDate 的天數
+- 使用 Calendar.dateComponents 計算
+- 負數表示已過期
+
+【UI 常數】
+
+- backgroundColor: #F3D4B7
+- bottomBarColor: #FEECD8
+- tabBarHeight: 83px
+
+===========================================
+五、新增任務視圖 (TodoAddView.swift)
+===========================================
+
+【視圖結構】
+struct TodoAddView: View
+
+依賴注入:
+- @ObservedObject var viewModel: TodoViewModel
+- @EnvironmentObject var staticViewModel: StaticViewModel
+- @Binding var isPresented: Bool
+
+【初始化】
+
+init(viewModel:isPresented:selectedDate:tabBarHeight:)
+- 傳入選中的日期
+- 傳入 TabBar 高度(用於定位)
+- 初始化 repeatOption 為 .none
+
+【狀態管理】
+
+- selectedCategory: String
+- repeatOption: RepeatType
+- offset: CGFloat - 動畫偏移量
+- isDismissing: Bool - 關閉動畫標記
+- selectedDate: Date - 選中的日期
+
+【視圖佈局】
+
+mainContentView
+├─ 拖動指示器 (40x5 圓角矩形)
+├─ headerView (取消/標題/儲存按鈕)
+├─ 錯誤訊息顯示
+└─ ScrollView
+   ├─ titleAndNoteFields (標題和備註)
+   ├─ allDayToggle (整天開關)
+   ├─ dateSelectionView (開始/結束時間)
+   ├─ colorPickerView (顏色選擇)
+   ├─ categoryPickerView (類別輸入)
+   └─ repeatOptionView (重複選項)
+
+【表單欄位】
+
+1. 標題和備註
+   - TextField 綁定 viewModel.newTaskTitle
+   - TextField 綁定 viewModel.newTaskNote
+   - 分隔線分隔
+
+2. 整天開關
+   - Toggle 綁定 viewModel.newTaskIsAllDay
+   - 影響日期選擇器顯示的組件
+
+3. 日期選擇
+   - DatePicker 綁定 newTaskStartDate/newTaskEndDate
+   - 根據 isAllDay 切換顯示模式
+   - .date 或 [.date, .hourAndMinute]
+
+4. 顏色選擇
+   - 4 個預設顏色選項
+   - Circle 圓形色塊
+   - 選中時顯示黑色邊框
+
+5. 類別
+   - TextField 綁定 viewModel.newTaskCategory
+   - 右對齊輸入
+
+6. 重複選項
+   - Menu 下拉選單
+   - 選項: 不重複/每天/每週/每月
+   - 選擇重複時顯示 "重複結束" 日期選擇器
+
+【動畫與手勢】
+
+.offset(y: offset)
+- 初始: UIScreen.main.bounds.height (完全在下方)
+- 展示: tabBarHeight (對齊 TabBar)
+- 關閉: UIScreen.main.bounds.height
+
+DragGesture:
+- onChanged: 跟隨手指拖動,關閉鍵盤
+- onEnded:
+  - 向下超過100 → 關閉視圖
+  - 否則 → 恢復到 tabBarHeight
+
+.transition(.move(edge: .bottom))
+
+【保存邏輯】
+
+func saveTask()
+1. 檢查是否已在保存中
+2. 呼叫 validateForm() 驗證
+3. 開始關閉動畫
+4. 延遲 0.2 秒執行保存:
+   a. 設定 isLoading = true
+   b. 建立 TodoTask 物件
+   c. 呼叫 viewModel.addTask()
+   d. 呼叫 checkAndCreateStatisticsForCategory()
+   e. 延遲 0.1 秒關閉視圖
+5. 失敗時恢復視圖
+
+func validateForm() -> Bool
+- 標題不能為空
+- 結束時間必須晚於開始時間(非重複任務)
+- 必須已登入
+
+func checkAndCreateStatisticsForCategory(_ category: String)
+- 檢查類別是否已有統計記錄
+- 不存在則建立新的 LearningStatistic
+
+【UI 常數】
+
+- backgroundColor: #FEECD8
+- dividerColor: #BCAFA0
+- mainBackgroundColor: #F3D4B7
+
+【高度計算】
+
+scrollViewMaxHeight:
+- 螢幕高度的 75%
+- 或 可用空間(螢幕 - 頭部 - TabBar - 邊距)
+- 取較小值,最小 300
+
+===========================================
+六、編輯任務視圖 (TodoEditView.swift)
+===========================================
+
+【視圖結構】
+struct TodoEditView: View
+
+與 TodoAddView 類似,但用於編輯現有任務。
+
+【關鍵差異】
+
+1. 初始化
+   - 傳入 task: TodoTask
+   - 預填充任務資料到 @State 變數
+
+2. 標題
+   - "編輯任務" 而非 "新增任務"
+
+3. 按鈕
+   - 左側: "刪除" 按鈕(紅色)
+   - 右側: "儲存" 按鈕(藍色)
+
+4. 刪除功能
+   - showDeleteConfirmation: Bool
+   - isDeletingTask: Bool
+   - .alert 確認對話框
+   - func deleteTask()
+
+【保存邏輯】
+
+func saveTask()
+1. 驗證表單
+2. 建立 updatedTask
+3. 複製所有欄位(包含新的修改)
+4. 呼叫 viewModel.updateTask()
+5. 成功後關閉視圖
+6. 失敗顯示錯誤訊息
+
+【刪除邏輯】
+
+func deleteTask()
+1. 避免重複刪除
+2. 設定 isDeletingTask = true
+3. 呼叫 viewModel.deleteTask(task)
+4. 成功後關閉視圖
+5. 失敗顯示錯誤訊息
+
+【狀態禁用】
+
+- 刪除中時禁用儲存按鈕
+- 保存中時禁用刪除按鈕
+- 標題為空時禁用儲存按鈕
+
+===========================================
+七、任務詳情視圖 (TodoDetailView.swift)
+===========================================
+
+【視圖結構】
+struct TodoDetailView: View
+
+用於顯示某日期的所有任務詳情。
+
+【依賴注入】
+- @ObservedObject var viewModel: TodoViewModel
+- let date: Date
+- @Binding var isPresented: Bool
+
+【視圖佈局】
+
+ZStack {
+    Color.clear
+
+    VStack {
+        HStack {
+            Text(dateFormatted) // "MMM d, EEE"
+            Spacer()
+            關閉按鈕 (X)
+        }
+
+        Divider()
+
+        if filteredTasks.isEmpty {
+            "沒有待辦事項"
+        } else {
+            ScrollView {
+                LazyVStack {
+                    ForEach(filteredTasks) { task in
+                        顯示任務或任務實例卡片
+                    }
+                }
+            }
+        }
+    }
+    .frame(maxWidth: 95%, maxHeight: 70%)
+    .background(#FEECD8)
+    .cornerRadius(16)
+}
+
+【任務顯示邏輯】
+
+filteredTasks:
+- 呼叫 viewModel.tasksForDate(date)
+- 按 startDate 排序
+
+對每個任務:
+1. 獲取該日期的實例: getInstancesForDate()
+2. 如果有實例:
+   - 顯示每個實例的卡片 (todoInstanceCard)
+3. 如果沒有實例:
+   - 顯示任務本身的卡片 (todoCard)
+
+【卡片視圖】
+
+func todoCard(task: TodoTask)
+- 左側彩色標識
+- 任務標題 + 時間
+- 備註(如果有)
+
+func todoInstanceCard(task: TodoTask, instance: TaskInstance)
+- 與 todoCard 類似
+- 標題根據完成狀態變灰/劃線
+- 右下角顯示 "已完成"/"未完成" 標籤
+
+【尺寸限制】
+
+- 最大寬度: min(螢幕寬度 * 95%, 400)
+- 最大高度: min(螢幕高度 * 70%, 500)
+
+【關閉方式】
+
+- 點擊 X 按鈕
+- withAnimation(.easeInOut(duration: 0.15))
+- isPresented = false
+
+===========================================
+八、資料流程圖
+===========================================
+
+【新增任務流程】
+
+用戶操作 TodoView
+  ↓
+點擊 + 按鈕
+  ↓
+showingAddTask = true
+  ↓
+TodoAddView 彈出
+  ↓
+用戶填寫表單
+  ↓
+點擊 "儲存"
+  ↓
+TodoAddView.saveTask()
+  ↓
+viewModel.addTask(task)
+  ↓
+FirebaseService.saveTodoTask()
+  ↓
+Cloud Functions: createTask
+  ↓
+Firestore 儲存
+  ↓
+生成任務實例(如果是重複任務)
+  ↓
+返回成功
+  ↓
+viewModel.forceReloadTasks()
+  ↓
+更新 UI
+
+【編輯任務流程】
+
+用戶點擊任務卡片
+  ↓
+TodoView.onTaskSelected
+  ↓
+taskToEdit = task
+showingEditTask = true
+  ↓
+TodoEditView 彈出(預填資料)
+  ↓
+用戶修改表單
+  ↓
+點擊 "儲存"
+  ↓
+TodoEditView.saveTask()
+  ↓
+viewModel.updateTask(updatedTask)
+  ↓
+FirebaseService.saveTodoTask()
+  ↓
+Cloud Functions: updateTask
+  ↓
+Firestore 更新
+  ↓
+重新生成任務實例
+  ↓
+返回成功
+  ↓
+更新本地任務列表
+  ↓
+發送通知
+  ↓
+更新 UI
+
+【切換完成狀態流程】
+
+用戶點擊完成按鈕
+  ↓
+TodoItemView.onUpdate
+  ↓
+立即更新 localIsCompleted (樂觀更新)
+  ↓
+判斷是任務還是實例?
+  ├─ 任務: viewModel.toggleTaskCompletion()
+  │   ↓
+  │   立即更新本地 tasks 陣列
+  │   ↓
+  │   加入 completionUpdateQueue
+  │   ↓
+  │   processCompletionQueue() 處理佇列
+  │   ↓
+  │   FirebaseService.saveTodoTask()
+  │   ↓
+  │   成功: 發送局部更新通知
+  │   失敗: 重試或回滾
+  │
+  └─ 實例: viewModel.toggleInstanceCompletion()
+      ↓
+      立即更新本地實例狀態
+      ↓
+      FirebaseService.updateTaskInstanceCompletion()
+      ↓
+      Cloud Functions: updateTaskInstance
+      ↓
+      失敗時回滾本地狀態
+
+【刪除任務流程】
+
+用戶點擊 "刪除"
+  ↓
+顯示確認對話框
+  ↓
+確認刪除
+  ↓
+TodoEditView.deleteTask()
+  ↓
+viewModel.deleteTask(task)
+  ↓
+FirebaseService.deleteTodoTask()
+  ↓
+Cloud Functions: deleteTask
+  ↓
+刪除 Firestore 文件
+  ↓
+刪除所有任務實例
+  ↓
+返回成功
+  ↓
+從本地陣列移除
+  ↓
+發送 .taskDeleted 通知(包含類別)
+  ↓
+StaticViewModel 接收通知
+  ↓
+更新類別統計(taskcount - 1)
+  ↓
+關閉編輯視圖
+
+【載入任務流程】
+
+TodoView.onAppear
+  ↓
+viewModel.loadTasks()
+  ↓
+檢查快取(60秒內不重複載入)
+  ↓
+防止併發載入
+  ↓
+FirebaseService.fetchTodoTasks()
+  ↓
+Cloud Functions: fetchTasks
+  ↓
+查詢 Firestore
+  ↓
+查詢所有任務實例
+  ↓
+組合資料返回
+  ↓
+解析 JSON 為 TodoTask 陣列
+  ↓
+更新 tasks 屬性
+  ↓
+UI 自動更新
+
+===========================================
+九、重複任務機制詳解
+===========================================
+
+【伺服器端處理】
+
+Cloud Functions 在建立/更新重複任務時:
+
+1. 檢查 repeatType
+2. 如果不是 .none,生成任務實例:
+   - 從 startDate 開始
+   - 到 repeatEndDate 結束(或預設結束日期)
+   - 根據 repeatType 計算間隔
+     - daily: 每天一個實例
+     - weekly: 每週相同星期幾一個實例
+     - monthly: 每月相同日期一個實例
+
+3. 在 Firestore 中建立 instances 子集合:
+   tasks/{userId}/userTasks/{taskId}/instances/{instanceId}
+
+【客戶端顯示】
+
+TodoTask.shouldDisplay(on date: Date):
+
+1. 檢查是否有該日期的已完成實例
+   - 有 → 顯示(即使超出原始日期範圍)
+
+2. 檢查日期是否在 startDate 之後
+
+3. 檢查是否超過 repeatEndDate
+
+4. 根據 repeatType 判斷:
+
+   daily:
+   - 直接返回 true
+
+   weekly:
+   - 計算起始日是星期幾: startW
+   - 計算跨度: span = endDate - startDate + 1 天
+   - 計算目標日期是星期幾: weekday
+   - 計算週內偏移: shiftInWeek = (weekday - startW) % 7
+   - 判斷: shiftInWeek < span
+
+   monthly:
+   - 計算目標日期是幾號: dayOfMonth
+   - 計算跨度: span
+   - 計算起始日是幾號: startDay
+   - 計算月內偏移: shift = (dayOfMonth - startDay) % 31
+   - 判斷: shift < span
+
+   none:
+   - 只在 startDate ~ endDate 範圍內顯示
+
+【實例管理】
+
+每個實例獨立追蹤完成狀態:
+
+1. 顯示時:
+   - getInstancesForDate() 獲取該日期的所有實例
+   - 使用 TodoItemView(task:instance:) 顯示
+
+2. 切換完成:
+   - toggleInstanceCompletion()
+   - 只更新該實例的 isCompleted
+   - 不影響主任務或其他實例
+
+3. 統計計算:
+   - 統計類別完成數時,計算所有實例的完成數
+   - getCompletedInstances() / getIncompleteInstances()
+
+【範例】
+
+任務:
+- startDate: 2025-11-03 (週日)
+- endDate: 2025-11-05 (週二)
+- repeatType: .weekly
+- repeatEndDate: 2025-12-31
+
+顯示邏輯:
+- span = 3 天(日,一,二)
+- startW = 0 (週日)
+
+判斷 2025-11-10 (週日):
+- weekday = 0
+- shiftInWeek = (0 - 0) % 7 = 0
+- 0 < 3 → 顯示
+
+判斷 2025-11-12 (週二):
+- weekday = 2
+- shiftInWeek = (2 - 0) % 7 = 2
+- 2 < 3 → 顯示
+
+判斷 2025-11-13 (週三):
+- weekday = 3
+- shiftInWeek = (3 - 0) % 7 = 3
+- 3 < 3 → 不顯示
+
+===========================================
+十、UI/UX 設計細節
+===========================================
+
+【顏色系統】
+
+主背景: #F3D4B7 (淺棕色)
+卡片背景: #FEECD8 (淺米色)
+分隔線: #BCAFA0 (灰棕色)
+強調色: #E28A5F (橘棕色) - 用於按鈕
+
+任務顏色選項(40% 不透明度):
+1. 紅色: rgb(178, 41, 34)
+2. 黃色: rgb(178, 143, 0)
+3. 綠色: rgb(46, 178, 79)
+4. 藍色: rgb(74, 71, 178)
+
+【字體大小】
+
+- 倒數天數: 30pt, bold
+- 日期標題: 24pt, bold
+- "To Do List": 24pt, bold
+- 任務標題: 22pt, semibold
+- 表單欄位: 24pt (標題), 18pt (其他)
+- 備註文字: 15pt
+- 時間顯示: 14pt
+
+【圓角與陰影】
+
+- 主卡片: 16px 圓角
+- 表單元素: 10px 圓角
+- 完成按鈕: 5px 圓角
+- 週曆背景: 20px 圓角
+- 陰影: color.opacity(0.03), radius: 6, y: 2
+
+【間距系統】
+
+- 卡片內邊距: 14px
+- 卡片間距: 10px (LazyVStack spacing)
+- 水平邊距: 16px
+- 表單元素間距: 15px
+
+【動畫】
+
+- 彈出視圖: spring(response: 0.3, dampingFraction: 0.8)
+- 編輯視圖: easeInOut(duration: 0.15)
+- 拖動關閉: 跟隨手指,超過 100 觸發關閉
+- 震動反饋: UIImpactFeedbackGenerator(style: .medium)
+
+【尺寸】
+
+- 任務卡片高度: 96px
+- 週曆高度: 90px
+- 完成按鈕: 30x30
+- 新增按鈕: 30x30
+- 拖動指示器: 40x5
+
+【狀態視覺化】
+
+已完成任務:
+- 標題: 灰色 + 劃線
+- 備註: 灰色(不劃線)
+- 時間: 淺灰色
+- 完成按鈕: 顯示 checkmark
+
+未完成任務:
+- 標題: 黑色
+- 備註: 黑色 60% 不透明度
+- 時間: 黑色 70% 不透明度
+- 完成按鈕: 空白
+
+===========================================
+十一、性能優化
+===========================================
+
+【1. 快取機制】
+- 60秒內不重複載入任務
+- 5分鐘內不重複載入用戶資料
+- lastTasksLoadTime / lastUserProfileLoadTime
+
+【2. 樂觀更新】
+- 切換完成狀態時立即更新 UI
+- 背景同步到伺服器
+- 失敗時回滾
+
+【3. 更新佇列】
+- completionUpdateQueue 批次處理更新
+- 避免頻繁網路請求
+- 支援重試機制(最多3次)
+
+【4. 懶加載】
+- LazyVStack 只渲染可見任務
+- 大量任務時性能更好
+
+【5. 防止重複載入】
+- isLoadingTasks 標記
+- 併發控制
+
+【6. 局部更新通知】
+- .todoTaskDidUpdate 只通知變更的任務
+- 避免全局重新載入
+
+【7. 動態日期範圍】
+- DayPagerView 只保持 7 天資料
+- 滑動到邊界時重新生成
+
+【8. 週曆預生成】
+- WeekPagerView 預先生成 101 週
+- 避免動態計算
+
+===========================================
+十二、已知問題與限制
+===========================================
+
+【1. 跨週跨日任務顯示】
+- 週曆中跨週任務的分頁邏輯有時不準確
+- 需要改進週邊界的任務顯示
+
+【2. 動畫時序】
+- 某些動畫時機不夠流暢
+- 需要微調 duration 和 delay
+
+【3. 鍵盤處理】
+- 某些情況下鍵盤遮擋輸入框
+- 需要改進 ScrollView 自動滾動
+
+【4. 錯誤提示】
+- 網路錯誤時提示不夠友好
+- 需要更詳細的錯誤分類
+
+【5. 離線支援】
+- 目前只有簡單的快取
+- 沒有完整的離線編輯支援
+
+===========================================
+十三、未來改進方向
+===========================================
+
+【1. 功能增強】
+- 任務優先級
+- 任務標籤系統
+- 子任務支援
+- 任務搜尋
+- 批次操作
+
+【2. UI/UX】
+- 拖拽排序
+- 更多顏色選項
+- 自訂類別顏色
+- 任務範本
+
+【3. 性能】
+- 完整離線支援
+- 增量同步
+- 更智能的快取策略
+
+【4. 統計】
+- 任務完成趨勢圖
+- 類別時間分佈
+- 完成率分析
+
+===========================================
+檔案結束
+===========================================

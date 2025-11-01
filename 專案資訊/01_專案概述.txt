@@ -1,0 +1,424 @@
+===========================================
+專案概述 (Project Overview)
+===========================================
+
+【專案名稱】
+studyAssistant - 學習助手
+
+【專案標語】
+你的個人學習夥伴
+
+===========================================
+一、專案目標
+===========================================
+
+【主要目標】
+打造一款智能化的學習管理應用，幫助學生有效規劃學習時間、追蹤學習進度，
+並透過 AI 助手提供個性化的學習建議，提升學習效率和成就感。
+
+【次要目標】
+1. 提供簡潔直觀的使用者介面
+2. 實現跨設備的資料同步
+3. 利用 AI 技術提供智能學習建議
+4. 幫助使用者養成良好的學習習慣
+5. 提供詳細的學習統計與分析
+
+【目標用戶】
+- 國中生、高中生
+- 大學生、研究生
+- 語言學習者
+- 自學者
+- 任何需要管理學習進度的人
+
+===========================================
+二、核心功能簡介
+===========================================
+
+【1. 任務管理 (Todo Management)】
+功能描述:
+- 創建、編輯、刪除學習任務
+- 支援重複任務（每天、每週、每月）
+- 任務分類管理（科目分類）
+- 任務優先級設定
+- 子任務支援
+- 任務完成追蹤
+
+技術特點:
+- 樂觀更新機制（即時 UI 反饋）
+- Firestore 即時同步
+- 服務端任務實例生成
+- 衝突解決機制
+
+【2. 專注計時器 (Focus Timer)】
+功能描述:
+- 正數計時器（從0開始）
+- 倒數計時器（設定目標時間）
+- 暫停/繼續功能
+- 計時記錄保存
+- 背景計時支援
+
+技術特點:
+- 時間差計算法（避免累積誤差）
+- 生命週期管理（前景/背景切換）
+- UserDefaults 本地持久化
+- 通知提醒
+
+【3. AI 聊天助手 (AI Chat Assistant)】
+功能描述:
+- 與 GPT 對話獲取學習建議
+- 自動解析任務相關操作
+- Function Calling 整合
+- 串流回應顯示
+- 對話歷史記錄
+
+技術特點:
+- OpenAI GPT-4 整合
+- Function Calling 機制（6種函數）
+- Token 使用追蹤
+- 自動捲動到最新訊息
+- 重試機制（指數退避算法）
+
+【4. 統計分析 (Statistics & Analytics)】
+功能描述:
+- 按科目分類的學習統計
+- 任務完成率追蹤
+- 專注時長統計
+- 每日/總體統計視圖
+- 進度條視覺化
+
+技術特點:
+- 實時統計計算
+- Firestore 聚合查詢
+- 自動同步機制
+- Token 使用統計
+
+【5. 日曆助手 (Calendar Assistant)】
+功能描述:
+- AI 自動安排每日任務
+- 每日學習計劃生成
+- 批次任務操作
+- 撤銷/重做功能
+- 自動更新機制
+
+技術特點:
+- GPT Function Calling
+- 16 條規則系統提示
+- 每日自動更新檢查
+- 樂觀更新與回滾
+- Singleton 模式
+
+【6. 用戶設定 (User Settings & Profile)】
+功能描述:
+- Google OAuth 登入
+- 個人資料管理
+- 學習偏好設定
+- 應用設定（通知等）
+- 目標日期追蹤
+
+技術特點:
+- Google OAuth 2.0
+- Firebase Authentication
+- Firestore 即時監聽
+- 多層網路檢查
+- 版本控制（樂觀並發）
+
+===========================================
+三、技術棧總覽
+===========================================
+
+【前端技術】
+語言與框架:
+- Swift 5.9+
+- SwiftUI (iOS 16.0+)
+- Combine Framework
+
+開發工具:
+- Xcode 15+
+- iOS Simulator
+- SF Symbols
+
+【後端技術】
+雲端服務:
+- Firebase
+  ├─ Authentication (使用者認證)
+  ├─ Firestore (NoSQL 資料庫)
+  └─ Cloud Functions (伺服器端邏輯)
+
+Cloud Functions:
+- 語言: TypeScript
+- 運行環境: Node.js 20
+- 部署: Firebase CLI
+
+【第三方服務】
+AI 服務:
+- OpenAI API
+  ├─ GPT-4o-mini
+  ├─ GPT-4o
+  └─ Function Calling
+
+認證服務:
+- Google Sign-In SDK
+
+【資料庫】
+主要資料庫:
+- Firestore (雲端 NoSQL)
+
+本地儲存:
+- UserDefaults (偏好設定、計時記錄)
+
+【架構模式】
+- MVVM (Model-View-ViewModel)
+- Singleton Pattern
+- Repository Pattern
+- Observer Pattern
+- Protocol-Oriented Programming
+
+===========================================
+四、專案狀態
+===========================================
+
+【開發狀態】
+當前版本: 1.0.0
+開發階段: Beta / 準備上線
+
+【已完成功能】✅
+✓ 任務管理系統（CRUD、重複任務、分類）
+✓ 專注計時器（正數/倒數、背景計時）
+✓ AI 聊天助手（GPT 整合、Function Calling）
+✓ 統計分析（按科目、每日/總體視圖）
+✓ 日曆助手（每日自動規劃、撤銷功能）
+✓ 用戶認證（Google OAuth）
+✓ 個人資料管理
+✓ Firestore 即時同步
+✓ Cloud Functions 遷移（24+ functions）
+✓ 錯誤處理與重試機制
+✓ 樂觀更新與回滾
+
+【進行中功能】🚧
+🔨 UI/UX 優化
+🔨 性能調優
+🔨 測試覆蓋率提升
+🔨 文檔完善
+
+【待開發功能】📋
+□ 深色模式
+□ 多語言支援
+□ Apple Sign In
+□ iCloud 同步
+□ Apple Watch 支援
+□ Widgets 小工具
+□ 離線模式
+□ 資料匯出功能
+□ 家庭共享
+□ 通知細化設定
+□ 頭像上傳
+
+【已知問題】⚠️
+- 模擬器登入可能需要 Safari 輔助
+- 網路檢查偶爾誤報（已有備用方案）
+- Firestore 讀寫成本需優化
+- 統計計算在大量資料時可能較慢
+
+===========================================
+五、專案規模
+===========================================
+
+【代碼統計】
+iOS App:
+- Swift 檔案: 40+ files
+- 總代碼行數: ~15,000+ lines
+- Models: 10+ files
+- ViewModels: 8+ files
+- Views: 20+ files
+- Services: 3+ files
+
+Cloud Functions:
+- TypeScript 檔案: 25+ files
+- 總代碼行數: ~8,000+ lines
+- Functions: 24+ functions
+- Types: 完整型別定義
+- Validators: Zod 驗證結構
+- Error Handling: 集中式錯誤處理
+
+【資料庫】
+Firestore Collections:
+- users: 用戶資訊
+- profiles: 用戶個人檔案
+- settings: 應用設定
+- studySettings: 學習偏好設定
+- tasks: 任務資料
+- statistics: 統計資料
+- timerRecords: 計時記錄
+- chatHistories: 聊天記錄
+
+【API 端點】
+Cloud Functions: 24+ endpoints
+- User Management: 4 functions
+- Task Management: 8 functions
+- Statistics: 4 functions
+- Chat: 2 functions
+- Calendar: 3 functions
+- Settings: 3 functions
+
+===========================================
+六、專案特色
+===========================================
+
+【1. 智能化】
+- GPT-4 驅動的 AI 助手
+- 自動任務規劃
+- 智能學習建議
+- Function Calling 整合
+
+【2. 即時性】
+- Firestore 即時同步
+- 樂觀更新機制
+- 即時統計更新
+- 跨設備同步
+
+【3. 可靠性】
+- 錯誤處理機制
+- 重試算法（指數退避）
+- 資料衝突解決
+- 版本控制
+
+【4. 用戶體驗】
+- 簡潔直觀的 UI
+- 流暢的動畫效果
+- 即時反饋
+- 友好的錯誤提示
+
+【5. 安全性】
+- Google OAuth 2.0
+- Firebase Security Rules
+- 資料隔離
+- HTTPS 加密
+
+【6. 擴展性】
+- MVVM 架構
+- Protocol-Oriented Design
+- Cloud Functions 無伺服器架構
+- 模組化設計
+
+===========================================
+七、開發團隊與時程
+===========================================
+
+【開發者】
+- iOS 開發: Eason
+- 後端開發: Eason
+- UI/UX 設計: Eason
+- 測試: Eason
+
+【開發時程】
+專案啟動: 2025 年 3 月
+主要開發: 2025 年 3-5 月
+Cloud Functions 遷移: 2025 年 4 月底
+Beta 測試: 2025 年 5 月
+預計上線: 2025 年 6 月
+
+【重要里程碑】
+✓ 2025/03/05 - 專案初始化
+✓ 2025/03/15 - 完成任務管理基礎功能
+✓ 2025/03/25 - 完成計時器功能
+✓ 2025/04/10 - 完成 AI 聊天助手
+✓ 2025/04/20 - 完成統計分析
+✓ 2025/04/26 - 遷移至 Cloud Functions
+✓ 2025/04/30 - 完成 Google OAuth
+✓ 2025/05/10 - 完成日曆助手
+✓ 2025/05/15 - 完成所有核心功能
+○ 2025/06/01 - Beta 測試
+○ 2025/06/15 - 正式上線
+
+===========================================
+八、專案願景
+===========================================
+
+【短期目標（6個月內）】
+- 完成 iOS App 開發
+- 上架 App Store
+- 獲得初始用戶（100+）
+- 收集用戶反饋
+- 修復主要 Bug
+
+【中期目標（1年內）】
+- 增加離線模式
+- 支援 Apple Watch
+- 開發 Widgets
+- 實現 iCloud 同步
+- 用戶數達到 1,000+
+
+【長期目標（2年內）】
+- 開發 Android 版本
+- Web 版本
+- 付費訂閱功能
+- 社群功能（學習小組）
+- 家庭共享
+- 用戶數達到 10,000+
+
+【最終願景】
+成為學生最信賴的學習管理工具，幫助數百萬學生提升學習效率，
+實現他們的學習目標，養成終身學習的好習慣。
+
+===========================================
+九、聯絡資訊
+===========================================
+
+【專案資訊】
+專案名稱: studyAssistant
+Bundle ID: eason.studyAssistant
+版本: 1.0.0
+
+【技術支援】
+GitHub: (待補充)
+Email: (待補充)
+文檔: /專案資訊/
+
+【法律資訊】
+隱私政策: (待補充)
+使用條款: (待補充)
+授權方式: (待補充)
+
+===========================================
+十、使用的技術與服務
+===========================================
+
+【Apple 技術】
+- Swift 5.9+
+- SwiftUI
+- Combine
+- Foundation
+- UIKit (部分)
+- UserNotifications
+- Network Framework
+- FirebaseAuth
+- FirebaseFirestore
+
+【Google 技術】
+- Firebase Authentication
+- Cloud Firestore
+- Cloud Functions for Firebase
+- Google Sign-In SDK
+
+【OpenAI 技術】
+- GPT-4o-mini
+- GPT-4o
+- Function Calling API
+- Chat Completions API
+
+【開發工具】
+- Xcode 15+
+- Firebase Console
+- Firebase CLI
+- Node.js & npm
+- TypeScript
+- Git
+
+【第三方庫】
+- GoogleSignIn
+- Firebase iOS SDK
+- OpenAI Swift (自行整合)
+
+===========================================
+檔案結束
+===========================================

@@ -1,0 +1,1160 @@
+===========================================
+聊天助手功能 (AI Chat Assistant)
+===========================================
+
+【功能概述】
+聊天助手是專案中最複雜的功能模組,整合 OpenAI GPT API,透過 Function Calling 機制實現智能任務管理。支援串流回應、語音輸入、多聊天室管理、以及與任務系統的深度整合。
+
+===========================================
+一、相關檔案列表
+===========================================
+
+【ViewModels】
+- studyAssistant/ViewModels/ChatViewModel.swift (3500+ 行)
+  └─ 聊天邏輯、GPT 整合、Function Calling、語音識別
+
+【Views】
+- studyAssistant/Views/Chatview.swift (1500+ 行)
+  └─ 聊天介面 UI、訊息顯示、輸入控制
+
+【Views (設定)】
+- studyAssistant/Views/ChatSettingView.swift
+  └─ 聊天設定介面
+
+【Models (間接相關)】
+- studyAssistant/Models/AppSettings.swift - StudySettings 結構
+- studyAssistant/Models/TodoTask.swift - 任務資料結構
+
+【總代碼量】約 5,000+ 行
+
+===========================================
+二、資料模型 (ChatViewModel.swift)
+===========================================
+
+【1. OpenAI API 資料結構】
+
+A. OpenAIMessage
+   ────────────
+   struct OpenAIMessage: Codable {
+       let role: String              // "user", "assistant", "system", "function"
+       let content: String           // 訊息內容
+       let name: String?             // 函數名稱 (function role)
+       let tool_calls: [ToolCall]?   // 工具呼叫
+       let tool_call_id: String?     // 工具呼叫ID
+   }
+
+B. Tool / ToolFunction
+   ────────────────
+   struct Tool: Codable {
+       let type: String              // "function"
+       let function: ToolFunction
+   }
+
+   struct ToolFunction: Codable {
+       let name: String
+       let description: String
+       let parameters: Parameters
+   }
+
+C. ToolCall / ToolCallFunction
+   ────────────────────────
+   struct ToolCall: Codable {
+       let id: String
+       let type: String
+       let function: ToolCallFunction
+   }
+
+   struct ToolCallFunction: Codable {
+       let name: String
+       let arguments: String  // JSON 字串
+   }
+
+D. OpenAIRequest
+   ────────────
+   struct OpenAIRequest: Codable {
+       let model: String              // "gpt-4.1"
+       let messages: [OpenAIMessage]
+       let temperature: Float
+       let stream: Bool               // 串流模式
+       let tools: [Tool]?             // 可用工具
+       let tool_choice: String?       // "auto", "none", "required"
+       let stream_options: [String: Bool]?  // 串流選項
+       let reasoning_effort: String?  // GPT-5 推理程度
+   }
+
+E. 串流回應結構
+   ────────────
+   struct OpenAIStreamChunk: Decodable {
+       let id: String
+       let choices: [OpenAIStreamChoice]
+       let usage: OpenAIUsage?
+   }
+
+   struct OpenAIStreamChoice: Decodable {
+       let index: Int
+       let delta: OpenAIStreamDelta
+       let finishReason: String?
+   }
+
+   struct OpenAIStreamDelta: Decodable {
+       let role: String?
+       let content: String?
+       let tool_calls: [ToolCallDelta]?
+   }
+
+F. Token 使用量
+   ────────────
+   struct OpenAIUsage: Decodable {
+       let prompt_tokens: Int
+       let completion_tokens: Int
+       let total_tokens: Int
+   }
+
+【2. 聊天資料結構】
+
+A. ChatMessage
+   ────────────
+   struct ChatMessage: Identifiable, Codable {
+       let id: UUID
+       var text: String
+       let isMe: Bool                 // 是否為用戶訊息
+
+       // 待確認的任務
+       var pendingTasks: [PendingTask]?
+       var pendingDeleteTasks: [TodoTask]?
+       var pendingUpdateTasksOriginal: [TodoTask]?
+       var pendingUpdateTasksUpdated: [PendingTask]?
+
+       // 函數執行狀態
+       var isWaitingFunction: Bool
+       var currentExecutingFunction: String?
+       var executingFunctions: [String]?
+   }
+
+   計算屬性:
+   - pendingUpdateTasks: [(original: TodoTask, updated: PendingTask)]?
+     └─ 將 Original 和 Updated 陣列配對
+
+B. ChatRoom
+   ────────────
+   struct ChatRoom: Identifiable, Codable {
+       let id: UUID
+       var name: String
+       var messages: [ChatMessage]
+   }
+
+C. PendingTask
+   ────────────
+   待確認的任務結構:
+
+   struct PendingTask: Identifiable, Codable {
+       let id: UUID
+       let title: String
+       let note: String
+       let category: String
+       let startDate: Date
+       let endDate: Date
+       let isAllDay: Bool
+       let isCompleted: Bool
+       let color: Color
+   }
+
+   特點:
+   - 與 TodoTask 結構相似
+   - 用於 GPT 建立任務後,等待用戶確認
+   - 確認後轉換為 TodoTask 儲存
+
+===========================================
+三、業務邏輯層 (ChatViewModel.swift)
+===========================================
+
+【類別定義】
+@MainActor
+final class ChatViewModel: ObservableObject
+
+【核心屬性】
+
+A. API 與服務
+   ────────────
+   - proxyURL: URL - GPT API 代理地址
+   - functions: Functions - Firebase Cloud Functions 實例
+   - db: Firestore - Firestore 資料庫實例
+   - encoder/decoder: JSON 編解碼器
+
+B. 依賴注入
+   ────────────
+   - @Published staticViewModel: StaticViewModel?
+   - @Published todoViewModel: TodoViewModel
+
+C. 聊天室管理
+   ────────────
+   - @Published chatRooms: [ChatRoom] = [...]
+   - @Published selectedRoomIndex: Int = 0
+   - chatRoomsKey = "local_chat_rooms"
+
+   didSet 邏輯:
+   - 限制最多 15 個聊天室,超過刪除最舊的
+   - 限制每個聊天室最多 300 則訊息
+   - 自動保存到 UserDefaults
+
+D. 讀書設定
+   ────────────
+   - @Published studySettings: StudySettings?
+   - @Published isLoadingSettings: Bool
+   - @Published settingsError: String?
+
+E. 狀態管理
+   ────────────
+   - @Published currentFunction: String?
+   - @Published isLoading: Bool
+   - @Published conversationEndedSignal: UUID
+   - currentTask: Task<String?, Never>? - 當前 GPT 任務
+
+F. Token 追蹤
+   ────────────
+   - @Published totalTokensUsed: Int = 0
+   - lastRequestTokens: (prompt: Int, completion: Int, total: Int)
+
+G. 語音識別
+   ────────────
+   - @Published isRecording: Bool
+   - @Published transcribedText: String
+   - audioEngine: AVAudioEngine?
+   - speechRecognizer: SFSpeechRecognizer?
+   - recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+   - recognitionTask: SFSpeechRecognitionTask?
+   - silenceTimer: Timer?
+
+H. UI 相關
+   ────────────
+   - @Published keyboardHeight: CGFloat
+
+【定義的 Function Tools】
+
+1. getTask
+   ────────────
+   名稱: "getTask"
+   描述: "Get all tasks from the system"
+   參數: 無
+   功能: 獲取所有任務資料
+
+2. getTime
+   ────────────
+   名稱: "getTime"
+   描述: "Get current time from the system"
+   參數: 無
+   功能: 獲取當前時間
+
+3. saveTask
+   ────────────
+   名稱: "saveTask"
+   描述: "Save one or multiple tasks to the system"
+   參數:
+   - tasks: [TaskObject] - 任務陣列
+     - title: String (必填)
+     - note: String (必填)
+     - category: String (必填)
+     - startDate: String (ISO 8601, 必填)
+     - endDate: String (ISO 8601, 必填)
+     - isAllDay: String ("true"/"false", 必填)
+     - isCompleted: String ("true"/"false", 必填)
+     - color: String (RGBA, 必填)
+   功能: 批次建立任務
+
+4. deleteTask
+   ────────────
+   名稱: "deleteTask"
+   描述: "Delete one or multiple tasks by their IDs"
+   參數:
+   - taskIds: [String] - 任務 ID 陣列
+   功能: 批次刪除任務
+
+5. updateTask
+   ────────────
+   名稱: "updateTask"
+   描述: "Update one or multiple existing tasks"
+   參數:
+   - tasks: [UpdateTaskObject]
+     - taskId: String (必填)
+     - title: String (可選)
+     - note: String (可選)
+     - category: String (可選)
+     - startDate: String (可選)
+     - endDate: String (可選)
+     - isAllDay: String (可選)
+     - isCompleted: String (可選)
+     - color: String (可選)
+   功能: 批次更新任務
+
+6. end_conversation
+   ────────────
+   名稱: "end_conversation"
+   描述: "End the current conversation"
+   參數: 無
+   功能: 結束對話
+
+【核心方法】
+
+1. 聊天室管理
+   ────────────
+
+   init()
+   - 從 UserDefaults 載入聊天室
+   - 設定 selectedRoomIndex 為最新聊天室
+
+   createNewChatRoom()
+   - 檢查 canCreateNewChatRoom
+   - 新增聊天室到 chatRooms
+   - 切換到新聊天室
+
+   deleteChatRoom(at index: Int)
+   - 刪除指定索引的聊天室
+   - 調整 selectedRoomIndex
+
+   canCreateNewChatRoom -> Bool
+   - 檢查當前聊天室是否為空
+
+2. GPT 串流通訊
+   ────────────
+
+   sendMessageToGPT(messages: [ChatMessage], onToken: ((String) -> Void)?) async -> String?
+
+   主流程:
+   1. 取消之前的任務
+   2. 轉換 ChatMessage 為 OpenAIMessage
+   3. 添加 system message (包含讀書設定和指令)
+   4. 決定 tool_choice:
+      - sendToGPTCount == 0: "none" (首次不使用工具)
+      - sendToGPTCount == 1: "required" (第二次強制使用工具)
+      - sendToGPTCount >= 2: "auto" (自動決定)
+
+   5. 建立 OpenAIRequest
+   6. 發送請求到 proxyURL
+   7. 處理串流回應:
+      - 收集 content chunks
+      - 收集 tool_calls
+      - 呼叫 onToken 回調
+      - 解析 usage 資訊
+
+   8. 處理 [DONE]:
+      - 如果有 tool_calls,執行函數
+      - 將函數結果添加到 allMessages
+      - 遞迴呼叫 sendMessageToGPT
+      - 返回完整回應
+
+   tool_choice 策略:
+   - 首次詢問: none (讓 GPT 先詢問)
+   - 第二次: required (強制使用工具)
+   - 之後: auto (根據上次回應類型調整)
+
+3. 函數執行
+   ────────────
+
+   executeGetTime() -> String
+   - 格式化當前時間
+   - 返回 "現在時間是：yyyy/MM/dd HH:mm:ss"
+
+   executeGetTask() async -> String
+   - 優先使用 todoViewModel.tasks (快取)
+   - 如果為空,呼叫 FirebaseService.fetchTodoTasks()
+   - 轉換為 JSON 格式:
+     {
+       "currentTime": "...",
+       "existingTasks": [...]
+     }
+   - 返回 JSON 字串
+
+   executeSaveTask(arguments: String) async -> String
+   - 解析 JSON arguments
+   - 解碼 tasks 陣列
+   - 對每個任務:
+     - 解析日期
+     - 建立 PendingTask
+     - 檢查並建立類別統計
+     - 呼叫 Cloud Functions createTask
+     - 累計成功/失敗數量
+
+   - 將 pendingTasks 添加到訊息
+   - 重新整理任務清單
+   - 返回結果字串
+
+   executeDeleteTask(arguments: String) async -> String
+   - 解析 taskIds 陣列
+   - 對每個 taskId:
+     - 呼叫 todoViewModel.deleteTask()
+     - 累計成功/失敗數量
+
+   - 返回結果字串
+
+   executeUpdateTask(arguments: String) async -> String
+   - 解析 tasks 陣列
+   - 對每個任務:
+     - 根據 taskId 獲取原始任務
+     - 建立 PendingTask (更新後)
+     - 添加到 pending 列表
+
+   - 將 pendingUpdateTasks 添加到訊息
+   - 等待用戶確認
+   - 返回結果字串
+
+   executeEndConversation() -> String
+   - 設置 currentFunction = "end_conversation"
+   - 觸發 conversationEndedSignal
+   - 返回告別訊息
+
+4. 讀書設定整合
+   ────────────
+
+   formatStudySettings() -> String
+   - 根據 studySettings 格式化字串
+   - 包含:
+     - 讀書日期與時間偏好
+     - 科目與優先順序
+     - 預設任務時長
+   - 用於 system message
+
+5. 語音識別
+   ────────────
+
+   requestSpeechRecognitionPermission() async -> Bool
+   - 請求語音識別權限
+
+   startRecording()
+   - 初始化 audioEngine 和 speechRecognizer
+   - 建立 recognitionRequest
+   - 開始錄音並識別
+   - 設置靜音計時器 (1.5秒)
+
+   stopRecording()
+   - 停止錄音
+   - 停止識別任務
+   - 清理資源
+
+   handleSilence()
+   - 檢查是否超過1.5秒無語音
+   - 自動停止錄音
+
+6. 統計整合
+   ────────────
+
+   checkAndCreateStatisticsForCategory(_ category: String) async
+   - 檢查類別是否存在於統計中
+   - 不存在則建立新的 LearningStatistic
+   - 呼叫 staticViewModel.saveStatistic()
+
+7. 輔助方法
+   ────────────
+
+   parseDate(_ dateString: String) -> Date?
+   - 支援多種日期格式
+   - ISO 8601
+   - yyyy/MM/dd HH:mm
+   - yyyy-MM-dd HH:mm
+
+   formatDate(_ date: Date) -> String
+   - 格式化為 yyyy/MM/dd HH:mm
+
+   retryOnError<T>(_ operation: () async throws -> T) async throws -> T
+   - 重試機制 (最多3次)
+   - 指數退避 (1秒, 2秒)
+
+【System Message 指令】
+
+GPT 接收的指令:
+1. 目標: 用最少提問排出具體時間表
+2. 語氣: 根據 studySettings.tone
+3. 讀書設定: 包含日期、時間、科目
+4. 特別注意:
+   - 結束對話時務必呼叫 end_conversation
+   - 主動結束對話的情況
+   - 講話講重點
+   - 不要重複呼叫同一個 function
+   - 不要在文字裡提到 function 名稱
+   - 詢問後不要使用 function (除了 end_conversation)
+   - 只在使用者設定的時間內安排任務
+   - 每個任務持續時間為設定的讀書時間
+   - 不要與原有任務重疊
+   - 新增/刪除/修改前要確認現在時間和已有任務
+   - 操作後要解釋做了什麼改變
+   - 如需安排大量任務(一兩百個),一次安排完
+   - 使用者提到要幹嘛,直接依照現在時間安排
+   - 沒有指定時間就是現在
+   - 不要叫使用者等待
+   - 直接安排任務,不要只用文字說明
+
+===========================================
+四、視圖層 (Chatview.swift)
+===========================================
+
+【視圖結構】
+struct ChatDemoDynamicView: View
+
+支援 iOS 25 和 iOS 26+ 不同樣式。
+
+【依賴注入】
+- @EnvironmentObject viewModel: ChatViewModel
+- @EnvironmentObject staticViewModel: StaticViewModel
+- @EnvironmentObject calendarAssistantViewModel: CalendarAssistantViewModel
+
+【狀態管理】
+
+A. 輸入與顯示
+   - inputText: String - 輸入文字
+   - textEditorHeight: CGFloat = 36 - 輸入框高度
+   - @FocusState isInputFocused: Bool
+
+B. UI 控制
+   - showSidebar: Bool - 顯示側邊欄 (iOS 25-)
+   - showSettings: Bool - 顯示設定頁面
+   - showManageSheet: Bool - 管理聊天室頁面
+   - selectedRoomIDs: Set<UUID> - 選取的聊天室
+
+C. 標題編輯
+   - isEditingTitle: Bool
+   - editingTitleText: String
+   - @FocusState isTitleFocused: Bool
+
+D. 訊息狀態
+   - latestMessageId: UUID?
+   - expandedTaskMessages: Set<UUID>
+   - isGenerating: Bool - GPT 是否生成中
+   - isUserScrolling: Bool
+   - isConversationEnded: Bool
+   - isAtBottom: Bool
+
+E. 佈局資訊
+   - bottomInset: CGFloat
+   - topInset: CGFloat
+   - tabBarHeight: CGFloat
+
+F. 日曆狀態提示
+   - calendarStatusMessage: String?
+   - calendarStatusIsLoading: Bool
+   - isCalendarSending: Bool
+
+【顏色系統】
+
+- backgroundColor: #F3D4B7 (主背景)
+- darkBubbleColor: #E28A5F (深橘按鈕)
+- midBubbleColor: #FEECD8 (輸入框底色)
+- lightBubbleColor: #FEECD8 (對話框底色)
+- textColor: Black 80%
+- sidebarColor: #F3D4B8
+- titleColor: #E27945
+
+【字體大小】
+
+- taskTitleSize: 16pt
+- taskContentSize: 14pt
+- taskHeaderSize: 17pt
+- taskCountSize: 15pt
+
+【視圖佈局】
+
+body:
+  ├─ iOS 26+: ios26PlusView
+  │   ├─ header (標題欄)
+  │   ├─ messageList (訊息列表)
+  │   └─ inputBar (輸入欄)
+  │
+  └─ iOS 25-: ios25MinusView
+      ├─ ios25Header
+      ├─ messageList
+      ├─ ios25InputBar
+      └─ ios25Sidebar (側邊欄)
+
+【子視圖】
+
+1. header / ios25Header
+   ────────────────────
+   iOS 26+:
+   - NavigationBar 樣式
+   - toolbar 項目
+
+   iOS 25-:
+   ZStack {
+       HStack {
+           選單按鈕
+           Spacer
+           設定按鈕
+           新增聊天室按鈕
+       }
+
+       標題文字 (可點擊編輯)
+
+       TextField (編輯模式)
+   }
+
+2. messageList
+   ────────────
+   ScrollViewReader {
+       ScrollView {
+           LazyVStack {
+               ForEach(messages) { message in
+                   messageRow(message)
+               }
+           }
+       }
+   }
+
+   messageRow 包含:
+   - 用戶訊息泡泡 (isMe: true)
+   - 助手訊息泡泡 (isMe: false)
+   - 待確認任務卡片 (pendingTasks)
+   - 刪除任務卡片 (pendingDeleteTasks)
+   - 更新任務卡片 (pendingUpdateTasks)
+   - 函數執行指示器
+
+3. inputBar / ios25InputBar
+   ────────────────────────
+   iOS 26+:
+   HStack {
+       語音按鈕
+       TextEditor (自適應高度)
+       發送按鈕
+   }
+   .glassEffect()
+
+   iOS 25-:
+   HStack {
+       語音按鈕
+       TextEditor
+       發送按鈕
+   }
+   .background()
+
+   特點:
+   - TextEditor 高度自適應 (36~120)
+   - 發送按鈕根據輸入狀態變化
+   - 語音按鈕長按錄音
+
+4. ios25Sidebar
+   ────────────
+   VStack {
+       "聊天室列表" 標題
+       ScrollView {
+           ForEach(chatRooms.reversed()) { room in
+               聊天室按鈕
+               .contextMenu {
+                   刪除選項
+               }
+           }
+       }
+   }
+
+   側邊欄寬度: 250
+   顯示時 offset: 250
+   隱藏時 offset: 0
+
+5. manageSheet
+   ────────────
+   NavigationView {
+       List(selection: $selectedRoomIDs) {
+           ForEach(chatRooms) { room in
+               聊天室選項
+           }
+       }
+       .environment(\.editMode, .constant(.active))
+       .toolbar {
+           關閉按鈕
+           刪除按鈕 (顯示選取數量)
+       }
+   }
+
+6. 任務卡片
+   ────────────
+
+   A. pendingTaskCard
+      新增任務確認卡片:
+      VStack {
+          "建議新增任務 (X/Y)"
+          ForEach(visibleTasks) { task in
+              任務詳情
+          }
+          展開/收起按鈕 (超過3個)
+          確認按鈕
+      }
+
+   B. deleteTaskCard
+      刪除任務確認卡片:
+      VStack {
+          "建議刪除任務"
+          ForEach(tasks) { task in
+              任務標題與時間
+          }
+          確認刪除按鈕
+      }
+
+   C. updateTaskCard
+      更新任務確認卡片:
+      VStack {
+          "建議更新任務 (X/Y)"
+          ForEach(updatePairs) { pair in
+              "原始資料" - 原任務
+              "更新後資料" - 新任務
+              分隔線
+          }
+          展開/收起按鈕
+          確認更新按鈕
+      }
+
+【互動邏輯】
+
+1. 發送訊息
+   ────────────
+   sendMessage()
+   - 檢查輸入不為空
+   - 添加用戶訊息到 chatRooms
+   - 清空輸入
+   - 添加助手佔位訊息 (等待回應)
+   - 呼叫 viewModel.sendMessageToGPT()
+   - 串流更新助手訊息
+
+2. 確認任務
+   ────────────
+   confirmPendingTasks(for message:)
+   - 遍歷 pendingTasks
+   - 將 PendingTask 轉換為 TodoTask
+   - 呼叫 todoViewModel.addTask()
+   - 清空訊息的 pendingTasks
+
+   confirmDeleteTasks(for message:)
+   - 遍歷 pendingDeleteTasks
+   - 呼叫 todoViewModel.deleteTask()
+   - 清空訊息的 pendingDeleteTasks
+
+   confirmUpdateTasks(for message:)
+   - 遍歷 pendingUpdateTasks
+   - 更新原始任務的屬性
+   - 呼叫 todoViewModel.updateTask()
+   - 清空訊息的 pendingUpdateTasks
+
+3. 語音輸入
+   ────────────
+   長按語音按鈕:
+   - 開始: viewModel.startRecording()
+   - 結束: viewModel.stopRecording()
+   - 自動更新 inputText = viewModel.transcribedText
+   - 靜音1.5秒自動停止
+
+4. 編輯標題
+   ────────────
+   點擊標題:
+   - isEditingTitle = true
+   - 顯示 TextField
+   - 自動聚焦
+
+   提交:
+   - 更新 chatRooms[selectedRoomIndex].name
+   - isEditingTitle = false
+
+5. 管理聊天室
+   ────────────
+   iOS 26+: Toolbar 按鈕
+   iOS 25-: 側邊欄長按
+
+   批次刪除:
+   - 選取多個聊天室
+   - 點擊刪除按鈕
+   - 調整 selectedRoomIndex
+
+6. 取消生成
+   ────────────
+   cancelGeneration()
+   - 呼叫 viewModel.currentTask?.cancel()
+   - 更新最後一則訊息為 "已取消"
+
+【生命週期】
+
+onAppear:
+- 獲取安全區域 insets
+- 獲取 TabBar 高度
+- 添加鍵盤通知監聽
+- 設置 viewModel.staticViewModel
+- 自動選擇最新聊天室
+
+onDisappear:
+- 取消生成
+- 移除鍵盤通知監聽
+
+onChange(selectedRoomIndex):
+- 重設編輯狀態
+- 取消生成
+
+【動畫】
+
+- 側邊欄: .move(edge: .leading)
+- 訊息列表: .spring(response: 0.5, dampingFraction: 0.9)
+- 鍵盤: .easeOut(duration: 0.16)
+- 日曆狀態橫幅: .opacity + .scale
+
+===========================================
+五、資料流程圖
+===========================================
+
+【發送訊息流程】
+
+用戶輸入文字
+  ↓
+點擊發送按鈕
+  ↓
+sendMessage()
+  ↓
+添加用戶訊息到 chatRooms
+  ↓
+清空輸入框
+  ↓
+添加助手佔位訊息 (等待回應)
+  ↓
+viewModel.sendMessageToGPT(onToken:)
+  ↓
+轉換 ChatMessage 為 OpenAIMessage
+  ↓
+添加 system message (讀書設定+指令)
+  ↓
+決定 tool_choice ("none"/"required"/"auto")
+  ↓
+建立 OpenAIRequest (model: "gpt-4.1", stream: true)
+  ↓
+發送 POST 請求到 proxyURL
+  ↓
+處理串流回應:
+  ├─ 收集 content chunks
+  ├─ 呼叫 onToken 回調
+  ├─ 更新助手訊息文字
+  ├─ 收集 tool_calls
+  └─ 解析 usage (token 統計)
+  ↓
+收到 [DONE]
+  ↓
+有 tool_calls?
+  ├─ 是: 執行函數
+  │      ├─ getTime → executeGetTime()
+  │      ├─ getTask → executeGetTask()
+  │      ├─ saveTask → executeSaveTask()
+  │      ├─ deleteTask → executeDeleteTask()
+  │      ├─ updateTask → executeUpdateTask()
+  │      └─ end_conversation → executeEndConversation()
+  │      ↓
+  │      將函數結果添加到 allMessages
+  │      ↓
+  │      遞迴呼叫 sendMessageToGPT()
+  │      (tool_choice 調整為 "auto")
+  │
+  └─ 否: 返回完整回應
+         ↓
+         更新最後一則助手訊息
+         ↓
+         完成
+
+【新增任務流程】
+
+GPT 決定新增任務
+  ↓
+tool_call: saveTask
+  ↓
+arguments: { tasks: [...] }
+  ↓
+executeSaveTask(arguments)
+  ↓
+解析 JSON arguments
+  ↓
+ForEach(task in args.tasks):
+  ├─ 解析日期 (parseDate)
+  ├─ 建立 PendingTask
+  ├─ checkAndCreateStatisticsForCategory()
+  │    └─ 檢查類別是否存在
+  │        └─ 不存在: 建立 LearningStatistic
+  ├─ 轉換為 TodoTask
+  ├─ 呼叫 Cloud Functions createTask
+  ├─ 成功: successCount++, 添加到 pendingTasks
+  └─ 失敗: failureCount++
+  ↓
+將 pendingTasks 添加到訊息
+  ↓
+返回函數結果
+  ↓
+GPT 收到結果
+  ↓
+GPT 生成回應 (解釋操作)
+  ↓
+用戶看到待確認任務卡片
+  ↓
+點擊 "確認新增"
+  ↓
+confirmPendingTasks()
+  ├─ todoViewModel.addTask() (已在雲端)
+  └─ 清空 pendingTasks
+  ↓
+todoViewModel.forceReloadTasks()
+  ↓
+UI 更新
+
+【刪除任務流程】
+
+GPT 決定刪除任務
+  ↓
+tool_call: deleteTask
+  ↓
+arguments: { taskIds: [...] }
+  ↓
+executeDeleteTask(arguments)
+  ↓
+解析 JSON arguments
+  ↓
+ForEach(taskId in taskIds):
+  ├─ todoViewModel.getTaskById(taskId)
+  ├─ 添加到 pendingDeleteTasks
+  ├─ todoViewModel.deleteTask(task)
+  ├─ 成功: successCount++
+  └─ 失敗: failureCount++
+  ↓
+將 pendingDeleteTasks 添加到訊息
+  ↓
+返回函數結果
+  ↓
+GPT 生成回應
+  ↓
+用戶看到刪除任務卡片
+  ↓
+點擊 "確認刪除"
+  ↓
+confirmDeleteTasks()
+  ├─ 已在雲端刪除
+  └─ 清空 pendingDeleteTasks
+  ↓
+UI 更新
+
+【更新任務流程】
+
+GPT 決定更新任務
+  ↓
+tool_call: updateTask
+  ↓
+arguments: { tasks: [{taskId, ...}] }
+  ↓
+executeUpdateTask(arguments)
+  ↓
+解析 JSON arguments
+  ↓
+ForEach(taskUpdate in args.tasks):
+  ├─ todoViewModel.getTaskById(taskId)
+  ├─ 建立 updated PendingTask
+  ├─ 添加到 pendingUpdateTasks: (original, updated)
+  └─ (不立即更新雲端)
+  ↓
+將 pendingUpdateTasks 添加到訊息
+  ↓
+返回函數結果
+  ↓
+GPT 生成回應
+  ↓
+用戶看到更新任務卡片 (對比)
+  ↓
+點擊 "確認更新"
+  ↓
+confirmUpdateTasks()
+  ├─ 更新 original task 屬性
+  ├─ todoViewModel.updateTask(updatedTask)
+  └─ 清空 pendingUpdateTasks
+  ↓
+UI 更新
+
+【語音輸入流程】
+
+用戶長按語音按鈕
+  ↓
+requestSpeechRecognitionPermission()
+  ↓
+權限通過?
+  ├─ 是: startRecording()
+  │      ├─ 初始化 audioEngine
+  │      ├─ 初始化 speechRecognizer
+  │      ├─ 建立 recognitionRequest
+  │      ├─ 開始錄音
+  │      ├─ 識別結果回調:
+  │      │    ├─ 更新 transcribedText
+  │      │    ├─ 設置 lastSpeechTime
+  │      │    └─ 重設靜音計時器
+  │      └─ 設置 silenceTimer (1.5秒)
+  │
+  └─ 否: 提示錯誤
+  ↓
+用戶釋放按鈕 / 靜音1.5秒
+  ↓
+stopRecording()
+  ├─ 停止 audioEngine
+  ├─ 停止 recognitionTask
+  └─ 清理資源
+  ↓
+transcribedText 更新到 inputText
+  ↓
+用戶點擊發送
+  ↓
+發送訊息流程
+
+===========================================
+六、Function Calling 機制詳解
+===========================================
+
+【OpenAI Function Calling 原理】
+
+1. 定義工具:
+   - 每個工具有名稱、描述、參數結構
+   - 參數使用 JSON Schema 定義
+
+2. 發送請求:
+   - 包含 tools 陣列
+   - 設置 tool_choice:
+     - "none": 不使用工具
+     - "auto": GPT 自動決定
+     - "required": 強制使用工具
+
+3. GPT 回應:
+   - 文字回應: delta.content
+   - 工具呼叫: delta.tool_calls
+
+4. 處理工具呼叫:
+   - 解析 tool_calls
+   - 執行本地函數
+   - 將結果添加為 function role 訊息
+
+5. 遞迴呼叫:
+   - 再次呼叫 GPT API
+   - GPT 根據函數結果生成最終回應
+
+【本專案的策略】
+
+1. 首次發送 (sendToGPTCount == 0):
+   tool_choice = "none"
+   - 讓 GPT 先詢問使用者需求
+   - 收集資訊
+
+2. 第二次發送 (sendToGPTCount == 1):
+   tool_choice = "required"
+   - 強制 GPT 使用工具
+   - 確保獲取必要資訊 (getTask, getTime)
+
+3. 後續發送 (sendToGPTCount >= 2):
+   tool_choice = "auto"
+   - 根據上次回應類型調整:
+     - 上次是文字 → 下次 "required"
+     - 上次是函數 → 下次 "auto"
+
+4. 結束對話:
+   - GPT 呼叫 end_conversation
+   - 觸發 conversationEndedSignal
+   - UI 顯示告別訊息
+
+【批次操作支援】
+
+所有操作函數支援批次:
+- saveTask: tasks: [...]
+- deleteTask: taskIds: [...]
+- updateTask: tasks: [...]
+
+優點:
+- 減少 API 呼叫次數
+- 提升效率
+- 一次處理大量任務
+
+【確認機制】
+
+用戶確認流程:
+1. GPT 執行函數 (已在雲端操作)
+2. 將結果存為 pending 狀態
+3. 顯示確認卡片
+4. 用戶確認後清空 pending
+5. 刷新 UI
+
+好處:
+- 用戶可審查操作
+- 防止誤操作
+- 提供透明度
+
+【Token 追蹤】
+
+stream_options: ["include_usage": true]
+- 啟用 token 計數
+- 解析 usage 欄位:
+  - prompt_tokens
+  - completion_tokens
+  - total_tokens
+- 累計到 totalTokensUsed
+- 可用於成本追蹤
+
+===========================================
+七、已知問題與限制
+===========================================
+
+【1. GPT 指令遵從問題】
+- GPT 有時不遵守 "不要重複呼叫 function"
+- GPT 可能在文字中提到函數名稱
+- 需要更多 prompt 工程優化
+
+【2. 大量任務處理】
+- 一次新增一兩百個任務可能超時
+- 需要改進批次處理邏輯
+
+【3. 日期解析】
+- 支援的日期格式有限
+- 某些格式可能解析失敗
+
+【4. 語音識別準確度】
+- 依賴 iOS 原生語音識別
+- 準確度受口音和環境影響
+- 靜音檢測時間固定 (1.5秒)
+
+【5. Token 成本】
+- 長對話 token 消耗大
+- 沒有 token 限制機制
+- 需要成本控制
+
+【6. 聊天室數量限制】
+- 最多 15 個聊天室
+- 超過自動刪除最舊的
+- 可能導致資料遺失
+
+【7. 訊息數量限制】
+- 每個聊天室最多 300 則訊息
+- 超過自動刪除最舊的
+- 長對話可能遺失上下文
+
+===========================================
+八、未來改進方向
+===========================================
+
+【1. 功能增強】
+- 支援圖片輸入 (OCR 辨識任務)
+- 支援語音輸出 (TTS)
+- 支援多輪對話記憶
+- 支援任務優先級建議
+
+【2. Prompt 優化】
+- 更精確的指令
+- 減少重複呼叫
+- 改進任務安排邏輯
+
+【3. 性能優化】
+- 實作 token 限制
+- 壓縮對話歷史
+- 改進批次處理
+
+【4. UI/UX】
+- 更豐富的任務卡片樣式
+- 支援任務預覽編輯
+- 改進語音輸入 UI
+
+【5. 資料管理】
+- 聊天室雲端同步
+- 匯出對話記錄
+- 搜尋歷史訊息
+
+【6. 整合深化】
+- 與日曆更深入整合
+- 智能時間建議
+- 學習用戶偏好
+
+===========================================
+檔案結束
+===========================================

@@ -1,0 +1,759 @@
+===========================================
+數據庫設計 (Database Design)
+===========================================
+
+【數據庫類型】
+主要數據庫: Firebase Firestore (NoSQL 雲端數據庫)
+本地儲存: UserDefaults (輕量級鍵值儲存)
+
+【設計原則】
+- 數據按用戶隔離 (userId)
+- 使用 Timestamp 統一時間格式
+- 軟刪除機制 (isDeleted)
+- 版本控制 (version) 處理衝突
+- 最小化數據冗餘
+
+===========================================
+一、Firestore 集合結構
+===========================================
+
+【集合層次結構】
+
+Root
+├── users/{userId}                    // 用戶基本資訊
+├── profiles/{userId}                 // 用戶個人檔案
+├── settings/{userId}                 // 應用設定
+├── studySettings/{userId}            // 學習偏好設定
+├── tasks/{taskId}                    // 任務資料
+├── statistics/{statisticId}          // 學習統計
+├── timerRecords/{recordId}           // 計時記錄（摘要）
+└── chatHistories/{userId}            // 聊天歷史
+
+【集合詳細說明】
+
+1. users/{userId}
+   用途: 儲存用戶基本資訊
+   文檔ID: Firebase Auth UID
+   索引: email
+
+2. profiles/{userId}
+   用途: 儲存用戶個人資料
+   文檔ID: Firebase Auth UID
+   索引: 無
+
+3. settings/{userId}
+   用途: 應用偏好設定
+   文檔ID: Firebase Auth UID
+   索引: 無
+
+4. studySettings/{userId}
+   用途: 學習計劃設定
+   文檔ID: Firebase Auth UID
+   索引: 無
+
+5. tasks/{taskId}
+   用途: 待辦任務
+   文檔ID: 自動生成
+   索引:
+   - userId + createdAt (降序)
+   - userId + isCompleted
+   - userId + category + createdAt
+   - userId + dueDate
+
+6. statistics/{statisticId}
+   用途: 學習統計數據
+   文檔ID: 自動生成
+   索引:
+   - userId + date (降序)
+   - userId + category + date
+
+7. timerRecords/{recordId}
+   用途: 計時記錄摘要
+   文檔ID: 自動生成
+   索引:
+   - userId + startTime (降序)
+   - userId + subject + startTime
+
+8. chatHistories/{userId}
+   用途: AI 聊天歷史
+   文檔ID: Firebase Auth UID
+   子集合: messages/{messageId}
+
+===========================================
+二、數據模型定義
+===========================================
+
+【1. UserProfile - 用戶個人檔案】
+集合: profiles/{userId}
+
+{
+  "id": "string",                    // Firebase Auth UID
+  "email": "string",                 // 電子郵件
+  "username": "string",              // 使用者名稱
+  "motivationalQuote": "string",     // 座右銘
+  "targetDate": Timestamp,           // 目標日期
+  "userGoal": "string",              // 學習目標
+  "learningStage": "string",         // 學習階段（國中/高中/大學等）
+  "isVIP": boolean,                  // VIP 狀態
+  "lastLoginAt": Timestamp,          // 最後登入時間
+  "version": number,                 // 版本號
+  "lastSyncedAt": Timestamp?,        // 最後同步時間
+  "isDeleted": boolean               // 軟刪除標記
+}
+
+用途:
+- 個人資料顯示
+- 目標追蹤
+- 版本控制
+
+【2. AppSettings - 應用設定】
+集合: settings/{userId}
+
+{
+  "id": "string",                    // 與 userId 相同
+  "notificationsEnabled": boolean,   // 通知開關
+  "lastModified": Timestamp          // 最後修改時間
+}
+
+用途:
+- 應用偏好設定
+- 通知控制
+
+【3. StudySettings - 學習偏好設定】
+集合: studySettings/{userId}
+
+{
+  "id": "string",                    // 與 userId 相同
+  "userId": "string",
+  "studyDuration": number,           // 預設讀書時長（分鐘）
+  "selectedDays": [number],          // 偏好讀書日 [1,2,3,4,5] (週一至週五)
+  "dailyStartHours": {               // 每天開始時間（小時）
+    "1": 9,
+    "2": 9,
+    ...
+  },
+  "dailyStartMinutes": {             // 每天開始時間（分鐘）
+    "1": 0,
+    "2": 0,
+    ...
+  },
+  "dailyEndHours": {                 // 每天結束時間（小時）
+    "1": 17,
+    "2": 17,
+    ...
+  },
+  "dailyEndMinutes": {               // 每天結束時間（分鐘）
+    "1": 0,
+    "2": 0,
+    ...
+  },
+  "tone": "string",                  // GPT 語氣（"沉著穩重的專家"）
+  "isStudyDatePreferenceEnabled": boolean,   // 讀書日期偏好開關
+  "isStudyTimePreferenceEnabled": boolean,   // 讀書時長偏好開關
+  "updatedAt": Timestamp
+}
+
+用途:
+- GPT 日曆助手參考
+- 任務規劃建議
+
+【4. TodoTask - 待辦任務】
+集合: tasks/{taskId}
+
+{
+  "id": "string",                    // 自動生成
+  "userId": "string",                // 用戶 ID
+  "title": "string",                 // 任務標題
+  "description": "string",           // 任務描述
+  "category": "string",              // 分類（科目）
+  "isCompleted": boolean,            // 是否完成
+  "isAllDay": boolean,               // 是否全天任務
+  "dueDate": Timestamp?,             // 到期日期
+  "startDate": Timestamp?,           // 開始日期
+  "endDate": Timestamp?,             // 結束日期
+  "color": "string",                 // 顏色代碼 (hex)
+  "focusTime": number,               // 預估專注時間（分鐘）
+  "repeatType": "string",            // 重複類型
+  "repeatDays": [number]?,           // 重複日期（weekly 使用）
+  "repeatDates": [number]?,          // 重複日期（monthly 使用）
+  "parentId": "string"?,             // 父任務 ID（重複任務）
+  "instanceDate": Timestamp?,        // 實例日期（重複任務實例）
+  "createdAt": Timestamp,            // 創建時間
+  "updatedAt": Timestamp,            // 更新時間
+  "version": number,                 // 版本號
+  "isDeleted": boolean               // 軟刪除標記
+}
+
+RepeatType 枚舉:
+- "none" - 不重複
+- "daily" - 每天
+- "weekly" - 每週（配合 repeatDays）
+- "monthly" - 每月（配合 repeatDates）
+
+用途:
+- 任務管理
+- 學習計劃
+- 進度追蹤
+
+【5. LearningStatistic - 學習統計】
+集合: statistics/{statisticId}
+
+{
+  "id": "string",                    // 自動生成
+  "userId": "string",                // 用戶 ID
+  "category": "string",              // 科目分類
+  "progress": number,                // 進度 (0.0-1.0)
+  "taskcount": number,               // 任務總數
+  "taskcompletecount": number,       // 已完成任務數
+  "totalFocusTime": number,          // 總專注時間（分鐘）
+  "date": Timestamp,                 // 統計日期
+  "updatedAt": Timestamp,            // 更新時間
+  "version": number                  // 版本號
+}
+
+用途:
+- 學習進度追蹤
+- 統計圖表顯示
+- 成就追蹤
+
+【6. TimerRecord - 計時記錄】
+集合: timerRecords/{recordId}
+
+{
+  "id": "string",                    // 自動生成
+  "userId": "string",                // 用戶 ID
+  "subject": "string",               // 科目
+  "startTime": Timestamp,            // 開始時間
+  "endTime": Timestamp,              // 結束時間
+  "duration": number,                // 持續時間（秒）
+  "isCompleted": boolean,            // 是否完成
+  "createdAt": Timestamp,            // 創建時間
+  "lastModifiedAt": Timestamp,       // 最後修改時間
+  "isDeleted": boolean               // 軟刪除標記
+}
+
+註: 目前主要使用 UserDefaults 本地儲存，僅選擇性同步到 Firestore
+
+用途:
+- 計時歷史
+- 時間統計
+- 學習分析
+
+【7. ChatHistory - 聊天歷史】
+集合: chatHistories/{userId}
+
+主文檔:
+{
+  "userId": "string",                // 用戶 ID
+  "totalMessages": number,           // 總訊息數
+  "totalTokens": number,             // 總 Token 使用量
+  "lastMessageAt": Timestamp,        // 最後訊息時間
+  "createdAt": Timestamp,            // 創建時間
+  "updatedAt": Timestamp             // 更新時間
+}
+
+子集合: messages/{messageId}
+{
+  "id": "string",                    // 自動生成
+  "role": "string",                  // "user" / "assistant" / "system"
+  "content": "string",               // 訊息內容
+  "timestamp": Timestamp,            // 發送時間
+  "tokenCount": number,              // Token 數量
+  "functionCall": object?            // Function Call 資訊（如有）
+}
+
+用途:
+- 對話歷史
+- Token 追蹤
+- 上下文管理
+
+===========================================
+三、關聯關係說明
+===========================================
+
+【一對一關係】
+
+User ←→ Profile
+- 一個用戶對應一個個人檔案
+- userId 作為主鍵
+
+User ←→ AppSettings
+- 一個用戶對應一組應用設定
+- userId 作為主鍵
+
+User ←→ StudySettings
+- 一個用戶對應一組學習設定
+- userId 作為主鍵
+
+User ←→ ChatHistory
+- 一個用戶對應一個聊天歷史容器
+- userId 作為主鍵
+
+【一對多關係】
+
+User ←→ Tasks
+- 一個用戶可以有多個任務
+- 透過 userId 關聯
+- 查詢: whereField("userId", isEqualTo: userId)
+
+User ←→ Statistics
+- 一個用戶可以有多個統計記錄
+- 透過 userId 關聯
+- 按日期和分類分組
+
+User ←→ TimerRecords
+- 一個用戶可以有多個計時記錄
+- 透過 userId 關聯
+- 按開始時間排序
+
+ChatHistory ←→ Messages
+- 一個聊天歷史包含多條訊息
+- 子集合關係
+- 按時間順序排列
+
+【多對多關係】
+
+目前無多對多關係設計
+
+【父子關係】
+
+Task (Parent) ←→ Task (Instance)
+- 重複任務的父任務和實例
+- 透過 parentId 關聯
+- instanceDate 標識特定日期實例
+
+===========================================
+四、資料同步策略
+===========================================
+
+【同步機制】
+
+1. 樂觀更新 (Optimistic Update)
+   流程:
+   - 立即更新本地 UI
+   - 異步保存到 Firestore
+   - 失敗時回滾本地狀態
+
+   優勢:
+   - 即時反饋
+   - 良好的用戶體驗
+
+2. 即時監聽 (Real-time Listener)
+   實現:
+   - Firestore Snapshot Listener
+   - 自動同步遠端變化
+   - 更新本地狀態
+
+   範例:
+   db.collection("profiles").document(userId)
+       .addSnapshotListener { snapshot, error in
+           // 處理變化
+       }
+
+3. 版本控制 (Version Control)
+   機制:
+   - 每次更新 version++
+   - 服務端檢查版本號
+   - 衝突時拒絕舊版本
+
+   範例:
+   if (newData.version <= currentData.version) {
+       throw new Error("資料已過期");
+   }
+
+【同步觸發點】
+
+1. App 啟動
+   - 載入所有用戶資料
+   - 設定監聽器
+
+2. 數據變更
+   - 立即同步到 Firestore
+   - 樂觀更新機制
+
+3. 網路恢復
+   - 重新同步待處理更新
+   - 刷新本地資料
+
+4. App 進入背景
+   - 完成待處理同步
+   - 保存本地狀態
+
+【衝突解決】
+
+策略 1: 最後寫入優先 (Last Write Wins)
+- 使用 Timestamp 比較
+- 較新的資料覆蓋舊資料
+- 適用: AppSettings, UserProfile
+
+策略 2: 版本號檢查
+- 版本號遞增
+- 服務端驗證
+- 衝突時拒絕
+- 適用: TodoTask, Statistics
+
+策略 3: 合併策略
+- 合併不衝突的欄位
+- 保留兩邊的新增項目
+- 適用: 未來的多設備編輯場景
+
+【同步狀態追蹤】
+
+SyncStatus 枚舉:
+- notSynced - 未同步
+- syncing - 同步中
+- synced - 已同步
+- error - 錯誤
+
+使用:
+@Published var syncStatus: SyncStatus = .notSynced
+
+===========================================
+五、查詢優化
+===========================================
+
+【索引設計】
+
+1. Tasks 集合
+   複合索引:
+   - (userId, createdAt DESC)
+   - (userId, isCompleted, createdAt DESC)
+   - (userId, category, createdAt DESC)
+   - (userId, dueDate ASC)
+
+2. Statistics 集合
+   複合索引:
+   - (userId, date DESC)
+   - (userId, category, date DESC)
+
+3. TimerRecords 集合
+   複合索引:
+   - (userId, startTime DESC)
+   - (userId, subject, startTime DESC)
+
+【查詢範例】
+
+1. 獲取用戶未完成任務（按日期排序）:
+db.collection("tasks")
+    .whereField("userId", isEqualTo: userId)
+    .whereField("isCompleted", isEqualTo: false)
+    .order(by: "createdAt", descending: true)
+    .limit(50)
+
+2. 獲取特定科目的統計（最近 30 天）:
+let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 3600)
+
+db.collection("statistics")
+    .whereField("userId", isEqualTo: userId)
+    .whereField("category", isEqualTo: category)
+    .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: thirtyDaysAgo))
+    .order(by: "date", descending: true)
+
+3. 獲取今日計時記錄:
+let startOfDay = Calendar.current.startOfDay(for: Date())
+
+db.collection("timerRecords")
+    .whereField("userId", isEqualTo: userId)
+    .whereField("startTime", isGreaterThanOrEqualTo: Timestamp(date: startOfDay))
+    .order(by: "startTime", descending: true)
+
+【分頁載入】
+
+使用 limit() 和 startAfter():
+
+// 第一頁
+let query = db.collection("tasks")
+    .whereField("userId", isEqualTo: userId)
+    .order(by: "createdAt", descending: true)
+    .limit(20)
+
+// 下一頁
+let nextQuery = query.start(afterDocument: lastDocument)
+
+【查詢限制】
+
+Firestore 限制:
+- 單次查詢最多 30 個複合索引欄位
+- IN 查詢最多 10 個值
+- array-contains 每次只能用於一個欄位
+
+解決方案:
+- 拆分複雜查詢
+- 使用多次查詢後合併
+- 客戶端過濾
+
+===========================================
+六、資料遷移與版本管理
+===========================================
+
+【版本歷史】
+
+Version 1.0:
+- 初始數據模型
+- 基本集合結構
+
+Version 1.1:
+- 新增 StudySettings 集合
+- TodoTask 新增 color, focusTime 欄位
+
+Version 1.2:
+- 統計數據重構
+- 新增 LearningStatistic 模型
+
+Version 1.3:
+- 遷移至 Cloud Functions
+- 數據驗證加強
+
+【資料遷移腳本】
+
+範例: 遷移 TodoTask 新增欄位
+
+// Cloud Function
+export const migrateTasksV1toV2 = functions
+    .https.onRequest(async (req, res) => {
+        const batch = admin.firestore().batch();
+
+        const snapshot = await admin.firestore()
+            .collection('tasks')
+            .get();
+
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (!data.color) {
+                batch.update(doc.ref, {
+                    color: "#FF6B6B",
+                    focusTime: 0,
+                    version: data.version + 1
+                });
+            }
+        });
+
+        await batch.commit();
+        res.send('Migration completed');
+    });
+
+【向後兼容】
+
+策略:
+- 保留舊欄位（標記為 deprecated）
+- 新增預設值
+- 逐步淘汰
+
+範例:
+{
+  "oldField": "value",        // @deprecated
+  "newField": "value",        // 使用這個
+  "version": 2
+}
+
+===========================================
+七、安全規則
+===========================================
+
+【Firestore Security Rules】
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Profiles
+    match /profiles/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Settings
+    match /settings/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Study Settings
+    match /studySettings/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Tasks
+    match /tasks/{taskId} {
+      allow read: if isSignedIn() &&
+                     resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+                       request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+                               resource.data.userId == request.auth.uid;
+    }
+
+    // Statistics
+    match /statistics/{statisticId} {
+      allow read: if isSignedIn() &&
+                     resource.data.userId == request.auth.uid;
+      allow write: if isSignedIn() &&
+                      request.resource.data.userId == request.auth.uid;
+    }
+
+    // Timer Records
+    match /timerRecords/{recordId} {
+      allow read, write: if isSignedIn() &&
+                            request.resource.data.userId == request.auth.uid;
+    }
+
+    // Chat Histories
+    match /chatHistories/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
+
+      // Messages 子集合
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn() && isOwner(userId);
+      }
+    }
+  }
+}
+
+【驗證規則】
+
+範例: Task 驗證
+
+function isValidTask() {
+  let task = request.resource.data;
+  return task.title is string &&
+         task.title.size() > 0 &&
+         task.title.size() <= 200 &&
+         task.userId is string &&
+         task.isCompleted is bool &&
+         task.version is number;
+}
+
+match /tasks/{taskId} {
+  allow create: if isSignedIn() &&
+                   isValidTask() &&
+                   request.resource.data.userId == request.auth.uid;
+}
+
+===========================================
+八、備份與還原
+===========================================
+
+【備份策略】
+
+1. Firestore 自動備份
+   - 每日自動備份
+   - 保留 30 天
+   - Firebase Console 設定
+
+2. 資料匯出功能
+   計劃實現:
+   - 匯出為 JSON
+   - 包含所有用戶資料
+   - 本地保存
+
+3. iCloud 備份
+   未來計劃:
+   - UserDefaults 同步
+   - 本地資料備份
+
+【還原機制】
+
+1. 從 Firestore 還原
+   - 重新登入自動同步
+   - 下拉刷新
+
+2. 從匯出檔案還原
+   計劃實現:
+   - 選擇 JSON 檔案
+   - 解析並上傳到 Firestore
+
+【災難恢復】
+
+步驟:
+1. 檢測資料損壞
+2. 通知用戶
+3. 從最近備份還原
+4. 驗證資料完整性
+5. 恢復正常服務
+
+===========================================
+九、性能監控
+===========================================
+
+【監控指標】
+
+1. 讀取次數
+   - 每日讀取量
+   - 成本追蹤
+
+2. 寫入次數
+   - 每日寫入量
+   - 批次寫入比例
+
+3. 監聽器數量
+   - 活躍監聽器
+   - 記憶體使用
+
+4. 查詢性能
+   - 查詢耗時
+   - 索引使用率
+
+【優化建議】
+
+1. 減少讀取
+   - 使用本地快取
+   - 批次查詢
+   - 限制查詢數量
+
+2. 優化寫入
+   - 批次寫入
+   - 減少更新頻率
+   - 合併更新
+
+3. 索引優化
+   - 只創建必要索引
+   - 定期審查
+
+===========================================
+十、資料庫成本估算
+===========================================
+
+【Firestore 定價】
+
+文檔讀取: $0.06 / 100,000 reads
+文檔寫入: $0.18 / 100,000 writes
+文檔刪除: $0.02 / 100,000 deletes
+儲存: $0.18 / GB / month
+
+【估算範例】
+
+假設 100 活躍用戶，每人每天:
+- 讀取: 50 次 (任務、統計等)
+- 寫入: 20 次 (新增、更新任務)
+- 儲存: 10 MB
+
+每月成本:
+- 讀取: 100 * 50 * 30 / 100,000 * $0.06 = $0.90
+- 寫入: 100 * 20 * 30 / 100,000 * $0.18 = $1.08
+- 儲存: 100 * 10 / 1024 * $0.18 = $0.18
+- 總計: ~$2.16 / month
+
+【成本優化】
+
+1. 快取策略
+   - 減少重複讀取
+   - 使用本地快取
+
+2. 批次操作
+   - 合併寫入
+   - 減少請求次數
+
+3. 資料歸檔
+   - 舊資料遷移到 Storage
+   - 減少 Firestore 儲存
+
+===========================================
+檔案結束
+===========================================

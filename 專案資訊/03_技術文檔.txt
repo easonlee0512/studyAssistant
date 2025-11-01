@@ -1,0 +1,796 @@
+===========================================
+技術文檔 (Technical Documentation)
+===========================================
+
+【文檔目的】
+詳細記錄 studyAssistant 專案使用的技術細節、整合方式、
+配置方法和最佳實踐。
+
+===========================================
+一、Swift / SwiftUI 技術細節
+===========================================
+
+【開發環境】
+- Xcode 版本: 15.0+
+- Swift 版本: 5.9+
+- iOS 最低支援: 16.0
+- 目標平台: iOS
+
+【SwiftUI 核心技術】
+
+1. 聲明式 UI
+   - 使用 SwiftUI 構建所有界面
+   - 自動 UI 更新（狀態驅動）
+   - 預覽支援（#Preview）
+
+2. 狀態管理
+   @State - 本地狀態
+   @StateObject - ViewModel 擁有權
+   @ObservedObject - ViewModel 觀察
+   @EnvironmentObject - 環境注入
+   @Published - 發布屬性變化
+
+3. 生命週期
+   .onAppear { }
+   .onDisappear { }
+   .task { }
+   .onChange(of:) { }
+
+4. 導航
+   NavigationStack
+   NavigationLink
+   .sheet()
+   .fullScreenCover()
+
+5. 列表與集合
+   List
+   ForEach
+   ScrollView
+   LazyVStack / LazyHStack
+
+【Combine Framework】
+
+1. Publishers
+   - NotificationCenter.Publisher
+   - @Published
+   - PassthroughSubject
+
+2. Operators
+   - .map()
+   - .filter()
+   - .sink()
+   - .receive(on:)
+
+3. Subscribers
+   - .sink { }
+   - .assign(to:)
+   - .store(in:)
+
+4. 使用場景
+   - 異步事件處理
+   - 通知訂閱
+   - 資料流轉換
+
+範例:
+NotificationCenter.default.publisher(for: .userProfileDidChange)
+    .receive(on: RunLoop.main)
+    .sink { [weak self] _ in
+        Task { await self?.loadProfile() }
+    }
+    .store(in: &cancellables)
+
+【Swift Concurrency】
+
+1. async/await
+   - 異步函數標記
+   - 同步式寫法
+   - 結構化並發
+
+2. Task
+   - Task { await ... }
+   - Task.detached { }
+   - Task.sleep()
+
+3. @MainActor
+   - 主線程執行
+   - UI 更新保證
+
+4. async let
+   - 並行執行
+   - 提升性能
+
+範例:
+func loadData() async {
+    async let profile = fetchProfile()
+    async let settings = fetchSettings()
+
+    let (p, s) = await (try profile, try settings)
+}
+
+【Swift 語言特性】
+
+1. Protocol-Oriented Programming
+   protocol DataServiceProtocol { }
+   extension DataServiceProtocol { }
+
+2. Generics
+   func fetch<T: Codable>() async throws -> T
+
+3. Result Type
+   Result<Success, Failure>
+
+4. Optional Chaining
+   user?.profile?.username
+
+5. Guard Statements
+   guard let userId = Auth.auth().currentUser?.uid else { return }
+
+6. Property Wrappers
+   @Published
+   @StateObject
+   @EnvironmentObject
+
+===========================================
+二、Firebase 整合說明
+===========================================
+
+【Firebase SDK 配置】
+
+1. 安裝方式: Swift Package Manager
+
+dependencies: [
+    .package(url: "https://github.com/firebase/firebase-ios-sdk",
+             from: "10.0.0")
+]
+
+2. 導入的模組:
+   - FirebaseCore
+   - FirebaseAuth
+   - FirebaseFirestore
+   - FirebaseFunctions
+
+3. 初始化:
+// studyAssistantApp.swift
+init() {
+    FirebaseApp.configure()
+}
+
+【Firebase Authentication】
+
+1. 支援的登入方式:
+   - Google OAuth 2.0
+
+2. 配置步驟:
+   a. Firebase Console 啟用 Google 登入
+   b. 下載 GoogleService-Info.plist
+   c. 配置 URL Schemes
+   d. 整合 GoogleSignIn SDK
+
+3. 使用範例:
+// 登入
+let credential = GoogleAuthProvider.credential(
+    withIDToken: idToken,
+    accessToken: accessToken
+)
+try await Auth.auth().signIn(with: credential)
+
+// 登出
+try Auth.auth().signOut()
+GIDSignIn.sharedInstance.signOut()
+
+// 監聽狀態
+Auth.auth().addStateDidChangeListener { auth, user in
+    // 處理狀態變化
+}
+
+【Firebase Firestore】
+
+1. 資料庫類型: NoSQL 文檔資料庫
+
+2. 集合結構:
+   /users/{userId}
+   /profiles/{userId}
+   /tasks/{taskId}
+   /statistics/{statisticId}
+   /settings/{userId}
+   /studySettings/{userId}
+   /chatHistories/{userId}
+   /timerRecords/{recordId}
+
+3. 查詢範例:
+// 獲取單一文檔
+let doc = try await db.collection("tasks").document(taskId).getDocument()
+
+// 查詢集合
+let snapshot = try await db.collection("tasks")
+    .whereField("userId", isEqualTo: userId)
+    .whereField("isCompleted", isEqualTo: false)
+    .order(by: "createdAt", descending: true)
+    .getDocuments()
+
+// 即時監聽
+db.collection("profiles").document(userId)
+    .addSnapshotListener { snapshot, error in
+        // 處理變化
+    }
+
+4. 安全規則:
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null &&
+                            resource.data.userId == request.auth.uid;
+    }
+  }
+}
+
+【Firebase Cloud Functions】
+
+1. 運行環境: Node.js 20
+
+2. 調用方式:
+let functions = Functions.functions()
+let result = try await functions
+    .httpsCallable("saveTask")
+    .call(["title": "新任務", "userId": userId])
+
+3. 錯誤處理:
+catch let error as NSError {
+    if error.domain == FunctionsErrorDomain {
+        let code = FunctionsErrorCode(rawValue: error.code)
+        let message = error.localizedDescription
+    }
+}
+
+===========================================
+三、Cloud Functions 架構
+===========================================
+
+【技術棧】
+- 語言: TypeScript
+- 運行時: Node.js 20
+- 框架: Firebase Functions v2
+- 部署: Firebase CLI
+
+【專案結構】
+functions/
+├── src/
+│   ├── index.ts              (入口點)
+│   ├── types/                (型別定義)
+│   │   ├── todo.types.ts
+│   │   ├── user.types.ts
+│   │   └── statistic.types.ts
+│   ├── validators/           (資料驗證)
+│   │   └── validators.ts
+│   ├── utils/                (工具函數)
+│   │   ├── errorHandler.ts
+│   │   └── logger.ts
+│   └── functions/            (業務函數)
+│       ├── userFunctions.ts
+│       ├── taskFunctions.ts
+│       ├── statisticFunctions.ts
+│       └── chatFunctions.ts
+├── package.json
+├── tsconfig.json
+└── .env
+
+【核心 Functions 列表】
+
+User Management (4):
+- createUserProfile
+- getUserProfile
+- updateUserProfile
+- deleteUserProfile
+
+Task Management (8):
+- saveTask
+- deleteTask
+- updateTask
+- getTask
+- getTasks
+- generateTaskInstances
+- completeTask
+- updateTaskInstances
+
+Statistics (4):
+- getStatistics
+- updateStatistic
+- syncStatistics
+- getStatisticsByCategory
+
+Chat (2):
+- saveChatHistory
+- getChatHistory
+
+Settings (3):
+- getAppSettings
+- updateAppSettings
+- getStudySettings
+
+Calendar (3):
+- getDailyTasks
+- updateDailyTasks
+- resetDailyTasks
+
+【型別定義範例】
+
+// types/todo.types.ts
+export interface TodoTask {
+  id?: string;
+  userId: string;
+  title: string;
+  description?: string;
+  category: string;
+  isCompleted: boolean;
+  dueDate?: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  version: number;
+  isDeleted: boolean;
+}
+
+【驗證機制】
+
+使用 Zod 進行資料驗證:
+
+import { z } from 'zod';
+
+const taskSchema = z.object({
+  title: z.string().min(1).max(200),
+  userId: z.string(),
+  category: z.string(),
+  isCompleted: z.boolean(),
+});
+
+function validateTask(data: unknown) {
+  return taskSchema.parse(data);
+}
+
+【錯誤處理】
+
+// utils/errorHandler.ts
+export class APIError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public statusCode: number = 400
+  ) {
+    super(message);
+  }
+}
+
+export const ErrorCodes = {
+  UNAUTHENTICATED: 'unauthenticated',
+  PERMISSION_DENIED: 'permission-denied',
+  INVALID_ARGUMENT: 'invalid-argument',
+  NOT_FOUND: 'not-found',
+  ALREADY_EXISTS: 'already-exists',
+};
+
+【日誌系統】
+
+import { logger } from 'firebase-functions/v2';
+
+logger.info('Task created', { taskId, userId });
+logger.error('Failed to save task', { error, userId });
+
+【部署配置】
+
+// firebase.json
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs20",
+      "region": "asia-east1"
+    }
+  ]
+}
+
+===========================================
+四、第三方庫列表
+===========================================
+
+【iOS 端】
+
+1. Firebase iOS SDK (10.0+)
+   用途: 後端服務整合
+   模組:
+   - FirebaseCore
+   - FirebaseAuth
+   - FirebaseFirestore
+   - FirebaseFunctions
+
+2. GoogleSignIn (~7.0)
+   用途: Google OAuth 登入
+   功能:
+   - OAuth 2.0 流程
+   - Token 管理
+   - 用戶資訊獲取
+
+3. 系統框架
+   - SwiftUI (UI 框架)
+   - Combine (響應式編程)
+   - Foundation (基礎工具)
+   - UIKit (部分 UI 元件)
+   - Network (網路檢查)
+
+【Cloud Functions 端】
+
+1. firebase-functions (v2)
+   用途: Cloud Functions 框架
+
+2. firebase-admin (~12.0)
+   用途: Firebase Admin SDK
+   功能:
+   - Firestore 操作
+   - Auth 驗證
+   - 服務端 API
+
+3. zod (~3.22)
+   用途: 資料驗證
+   功能:
+   - Schema 定義
+   - 型別推導
+   - 驗證錯誤
+
+4. axios (~1.6)
+   用途: HTTP 請求（OpenAI API）
+   功能:
+   - Promise 基礎
+   - 攔截器
+   - 錯誤處理
+
+5. TypeScript (~5.3)
+   用途: 型別安全
+   功能:
+   - 靜態型別檢查
+   - 編譯時錯誤檢測
+   - 代碼提示
+
+【開發工具】
+
+1. Xcode 15+
+   - Swift 開發
+   - Interface Builder
+   - Simulator
+   - Debugging
+
+2. Firebase CLI
+   - Functions 部署
+   - Emulator
+   - 日誌查看
+
+3. Git
+   - 版本控制
+   - 協作開發
+
+===========================================
+五、OpenAI API 整合
+===========================================
+
+【API 配置】
+
+端點: https://api.openai.com/v1/chat/completions
+
+認證: Bearer Token (API Key)
+
+請求頭:
+{
+  "Authorization": "Bearer YOUR_API_KEY",
+  "Content-Type": "application/json"
+}
+
+【使用的模型】
+
+1. gpt-4o-mini
+   用途: 聊天助手、日曆助手
+   特點: 快速、經濟、支援 Function Calling
+   Token 限制: 128k context
+
+2. gpt-4o
+   用途: 複雜任務（備用）
+   特點: 更強大、更準確
+   Token 限制: 128k context
+
+【Function Calling 實現】
+
+1. 定義函數列表:
+let functions = [
+    {
+        "name": "getTask",
+        "description": "獲取任務資訊",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "taskId": { "type": "string" }
+            },
+            "required": ["taskId"]
+        }
+    },
+    // ... 更多函數
+]
+
+2. 發送請求:
+let body = [
+    "model": "gpt-4o-mini",
+    "messages": messages,
+    "functions": functions,
+    "function_call": "auto"
+]
+
+3. 處理響應:
+if let functionCall = message.function_call {
+    let functionName = functionCall.name
+    let arguments = parseJSON(functionCall.arguments)
+
+    // 執行對應函數
+    let result = await executeFunction(functionName, arguments)
+
+    // 將結果返回給 GPT
+    messages.append(["role": "function",
+                     "name": functionName,
+                     "content": result])
+}
+
+【串流響應處理】
+
+使用 Server-Sent Events (SSE):
+
+let request = URLRequest(url: url)
+request.httpMethod = "POST"
+request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+for try await line in bytes.lines {
+    if line.hasPrefix("data: ") {
+        let data = line.dropFirst(6)
+        if data == "[DONE]" { break }
+
+        let chunk = try JSONDecoder().decode(chunk)
+        let content = chunk.choices[0].delta.content
+
+        // 更新 UI
+        await MainActor.run {
+            currentMessage += content
+        }
+    }
+}
+
+【Token 使用追蹤】
+
+記錄每次 API 調用:
+- prompt_tokens
+- completion_tokens
+- total_tokens
+
+更新統計:
+await updateTokenUsage(userId, totalTokens)
+
+【錯誤處理】
+
+1. Rate Limit (429)
+   - 實施指數退避
+   - 重試機制
+
+2. Context Length Exceeded
+   - 截斷對話歷史
+   - 保留最近訊息
+
+3. API Error (500+)
+   - 重試
+   - 降級處理
+
+【最佳實踐】
+
+1. Token 優化
+   - 限制對話歷史長度
+   - 精簡 system prompt
+   - 使用較小模型
+
+2. 成本控制
+   - 設定 max_tokens
+   - 快取常見回應
+   - 監控使用量
+
+3. 用戶體驗
+   - 串流顯示
+   - 載入指示器
+   - 錯誤提示
+
+===========================================
+六、網路通信
+===========================================
+
+【URLSession 配置】
+
+let config = URLSessionConfiguration.default
+config.timeoutIntervalForRequest = 30
+config.timeoutIntervalForResource = 60
+
+let session = URLSession(configuration: config)
+
+【HTTPS 要求】
+
+- 所有 API 請求使用 HTTPS
+- Firebase 自動強制 HTTPS
+- OpenAI API 使用 HTTPS
+
+【網路檢查】
+
+使用 Network Framework:
+
+import Network
+
+let monitor = NWPathMonitor()
+monitor.pathUpdateHandler = { path in
+    if path.status == .satisfied {
+        print("網路連接正常")
+    } else {
+        print("無網路連接")
+    }
+}
+monitor.start(queue: DispatchQueue.global())
+
+【離線處理】
+
+當前策略:
+- 檢測網路狀態
+- 提示用戶
+- 防止無效請求
+
+未來計劃:
+- 本地緩存
+- 離線隊列
+- 自動重試
+
+===========================================
+七、資料持久化
+===========================================
+
+【UserDefaults】
+
+用途: 輕量級本地儲存
+
+儲存內容:
+- Timer 記錄
+- 最後更新狀態
+- 應用偏好設定
+
+範例:
+// 保存
+UserDefaults.standard.set(records, forKey: "timerRecords")
+
+// 讀取
+let records = UserDefaults.standard.object(forKey: "timerRecords")
+
+【Firestore】
+
+用途: 雲端資料儲存
+
+特點:
+- 即時同步
+- 離線支援
+- 自動衝突解決
+
+【快取策略】
+
+1. 內存快取
+   - ViewModel 持有資料
+   - 避免重複請求
+
+2. Firestore 快取
+   - 自動本地快取
+   - 離線可用
+
+3. 快取失效
+   - 用戶登出時清除
+   - App 回到前景時重新整理
+
+===========================================
+八、性能優化
+===========================================
+
+【UI 性能】
+
+1. LazyVStack / LazyHStack
+   - 延遲載入
+   - 減少初始渲染
+
+2. 圖片優化
+   - 異步載入
+   - 壓縮
+   - 快取
+
+3. 動畫優化
+   - 使用硬體加速
+   - 避免複雜動畫
+
+【網路優化】
+
+1. 請求合併
+   - async let 並行請求
+   - 批次操作
+
+2. 壓縮
+   - gzip 壓縮
+   - JSON 最小化
+
+3. CDN
+   - 靜態資源
+   - 全球分發
+
+【記憶體優化】
+
+1. 弱引用
+   - [weak self] 避免循環引用
+   - 監聽器管理
+
+2. 資源釋放
+   - deinit 清理
+   - 監聽器移除
+
+3. 大資料處理
+   - 分頁載入
+   - 流式處理
+
+【Firestore 優化】
+
+1. 索引優化
+   - 複合索引
+   - 查詢優化
+
+2. 讀寫優化
+   - 批次寫入
+   - 減少監聽器
+
+3. 成本優化
+   - 限制查詢數量
+   - 使用快取
+
+===========================================
+九、安全性實踐
+===========================================
+
+【認證安全】
+
+1. OAuth 2.0
+   - 官方 SDK
+   - Token 安全儲存
+   - 自動刷新
+
+2. Firebase Auth
+   - ID Token 驗證
+   - Session 管理
+
+【資料安全】
+
+1. HTTPS
+   - 傳輸加密
+   - TLS 1.2+
+
+2. Security Rules
+   - 用戶資料隔離
+   - 細粒度權限
+
+3. 輸入驗證
+   - 客戶端驗證
+   - 服務端驗證
+
+【密鑰管理】
+
+1. API Keys
+   - 環境變數
+   - 不提交到 Git
+   - Cloud Functions 使用 Secret Manager
+
+2. Bundle ID 驗證
+   - 防止濫用
+   - 環境檢查
+
+===========================================
+檔案結束
+===========================================

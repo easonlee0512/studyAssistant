@@ -1,0 +1,2047 @@
+================================================================================
+                      studyAssistant 已知問題與解決方案
+================================================================================
+
+ 最後更新：2025-11-01
+ 版本：v1.0
+ 目的：記錄專案開發過程中遇到的問題、解決方案及預防措施
+
+================================================================================
+                           目錄
+================================================================================
+
+一、已解決問題
+  1.1 資料庫與同步相關
+  1.2 使用者認證與設定
+  1.3 任務管理功能
+  1.4 日曆視圖與動畫
+  1.5 聊天室功能
+  1.6 計時器功能
+  1.7 統計功能
+  1.8 介面與 UI 問題
+
+二、進行中的問題
+
+三、已知限制
+
+四、效能優化記錄
+
+五、常見開發陷阱
+
+六、除錯工具與技巧
+
+七、預防措施
+
+================================================================================
+                        一、已解決問題
+================================================================================
+
+1.1 資料庫與同步相關
+────────────────────────────────────────────────────────────────────────
+
+問題 1.1.1: 任務創建不與使用者關聯
+──────────────────────────────────
+發現日期: 2025-05-03
+嚴重程度:  嚴重
+影響範圍: 任務管理、資料隔離
+
+問題描述:
+  創建任務時未正確綁定 userId，導致任務無法正確歸屬於使用者。
+  其他使用者可能看到不屬於自己的任務。
+
+根本原因:
+  - TodoViewModel 缺少使用者身份驗證監聽器
+  - TodoTask 模型處理空 userId 的邏輯不正確
+  - Firebase Auth 狀態變更時未及時更新資料
+
+解決方案:
+  1. 在 TodoViewModel 添加使用者身份驗證監聽器
+     ```swift
+     init() {
+         // 監聽認證狀態變更
+         Auth.auth().addStateDidChangeListener { [weak self] _, user in
+             guard let self = self else { return }
+             self.currentUserId = user?.uid
+             if user != nil {
+                 Task {
+                     await self.fetchTasks()
+                 }
+             } else {
+                 self.tasks = []
+             }
+         }
+     }
+     ```
+
+  2. 修改 TodoTask 模型，確保強制要求 userId
+     ```swift
+     struct TodoTask: Identifiable, Codable {
+         var id: String = UUID().uuidString
+         var userId: String  // 移除可選性
+         var title: String
+         // ...
+
+         init(title: String, userId: String) {
+             self.id = UUID().uuidString
+             self.userId = userId
+             self.title = title
+             // ...
+         }
+     }
+     ```
+
+  3. 在創建任務時強制驗證使用者登入
+     ```swift
+     func addTask(_ task: TodoTask) async {
+         guard let currentUserId = Auth.auth().currentUser?.uid else {
+             errorMessage = "請先登入"
+             return
+         }
+
+         var newTask = task
+         newTask.userId = currentUserId
+
+         // 繼續創建任務...
+     }
+     ```
+
+驗證方法:
+   創建任務後檢查 Firestore 中的 userId 欄位
+   切換使用者帳號，確認任務隔離
+   未登入狀態無法創建任務
+
+檔案位置:
+  - studyAssistant/ViewModels/TodoViewModel.swift
+  - studyAssistant/Models/TodoTask.swift
+
+
+問題 1.1.2: 重開專案時無法從資料庫更新資料
+───────────────────────────────────────
+發現日期: 2025-05-03
+嚴重程度:  嚴重
+影響範圍: 資料持久化、多設備同步
+
+問題描述:
+  應用關閉後重新開啟，無法載入之前儲存的任務資料。
+  Firestore 中有資料，但 App 顯示為空。
+
+根本原因:
+  - 資料庫結構設計不一致
+  - 任務儲存路徑與讀取路徑不匹配
+  - 資料路徑: tasks/{taskId} (舊結構)
+  - 讀取路徑: tasks/{userId}/userTasks/{taskId} (新結構)
+
+解決方案:
+  1. 重新設計資料庫結構，統一路徑
+     舊結構:
+     tasks/
+       └── {taskId}
+
+     新結構:
+     tasks/
+       └── {userId}/
+           └── userTasks/
+               └── {taskId}
+                   └── instances/
+                       └── {instanceId}
+
+  2. 添加數據遷移功能
+     ```swift
+     func migrateOldTasks() async {
+         // 讀取舊資料
+         let oldTasksSnapshot = try? await db.collection("tasks").getDocuments()
+
+         guard let documents = oldTasksSnapshot?.documents else { return }
+
+         for document in documents {
+             guard let task = try? document.data(as: TodoTask.self),
+                   !task.userId.isEmpty else {
+                 continue
+             }
+
+             // 寫入新結構
+             try? await db.collection("tasks")
+                 .document(task.userId)
+                 .collection("userTasks")
+                 .document(task.id)
+                 .setData(from: task)
+
+             // 刪除舊資料 (可選)
+             try? await document.reference.delete()
+         }
+     }
+     ```
+
+  3. 在應用啟動和用戶登入時執行遷移
+     ```swift
+     func application(_ application: UIApplication,
+                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+         FirebaseApp.configure()
+
+         // 執行資料遷移 (僅一次)
+         if !UserDefaults.standard.bool(forKey: "didMigrateData") {
+             Task {
+                 await migrateOldTasks()
+                 UserDefaults.standard.set(true, forKey: "didMigrateData")
+             }
+         }
+
+         return true
+     }
+     ```
+
+驗證方法:
+   重新安裝 App，資料仍然存在
+   多設備登入同一帳號，資料一致
+   Firestore Console 中檢查資料路徑正確
+
+預防措施:
+  - 在專案初期確定資料庫結構並文檔化
+  - 使用常數管理集合路徑
+  - 定期備份資料庫
+
+檔案位置:
+  - studyAssistant/Services/FirebaseService.swift
+  - studyAssistant/studyAssistantApp.swift
+
+
+問題 1.1.3: DataServiceProtocol 協議一致性問題
+─────────────────────────────────────────
+發現日期: 2025-05-02
+嚴重程度:  中等
+影響範圍: 服務層架構
+
+問題描述:
+  FirebaseService 類實作不符合 DataServiceProtocol 協議的定義。
+  編譯錯誤: Type 'FirebaseService' does not conform to protocol 'DataServiceProtocol'
+
+根本原因:
+  - getTimerRecords 和 getTimerStatistics 方法的參數不符合協議定義
+  - 協議定義與實作不同步
+
+解決方案:
+  1. 修正協議定義 (DataServiceProtocol.swift)
+     ```swift
+     protocol DataServiceProtocol {
+         func getTimerRecords(userId: String) async throws -> [TimerRecord]
+         func getTimerStatistics(userId: String) async throws -> TimerStatistics
+     }
+     ```
+
+  2. 確保 FirebaseService 實作符合協議
+     ```swift
+     class FirebaseService: DataServiceProtocol {
+         func getTimerRecords(userId: String) async throws -> [TimerRecord] {
+             // 實作
+         }
+
+         func getTimerStatistics(userId: String) async throws -> TimerStatistics {
+             // 實作
+         }
+     }
+     ```
+
+驗證方法:
+   專案成功編譯，無協議一致性錯誤
+   所有方法實現與協議定義一致
+
+預防措施:
+  - 修改協議時，同步更新所有實作類別
+  - 使用 Protocol Witness Table 檢查一致性
+  - 定期執行編譯檢查
+
+檔案位置:
+  - studyAssistant/Services/DataServiceProtocol.swift
+  - studyAssistant/Services/FirebaseService.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.2 使用者認證與設定
+────────────────────────────────────────────────────────────────────────
+
+問題 1.2.1: UserProfile 初始化問題
+─────────────────────────────────
+發現日期: 2025-05-02
+嚴重程度:  中等
+影響範圍: 使用者資料管理
+
+問題描述:
+  使用 UserProfile 構造函數時傳入不正確的參數數量，導致初始化失敗。
+
+根本原因:
+  - 直接使用 UserProfile() 初始化，未提供必要參數
+  - ID 和 email 未正確設置
+
+解決方案:
+  1. 建立靜態工廠方法
+     ```swift
+     extension UserProfile {
+         static func defaultProfile() -> UserProfile {
+             return UserProfile(
+                 id: UUID().uuidString,
+                 email: "",
+                 username: "",
+                 motivationalQuote: nil,
+                 targetDate: nil,
+                 userGoal: nil,
+                 learningStage: nil,
+                 isVIP: false,
+                 lastLoginAt: Date(),
+                 version: 1,
+                 lastSyncedAt: nil,
+                 isDeleted: false
+             )
+         }
+
+         static func fromFirebaseUser(_ user: User) -> UserProfile {
+             return UserProfile(
+                 id: user.uid,
+                 email: user.email ?? "",
+                 username: user.displayName ?? "",
+                 motivationalQuote: nil,
+                 targetDate: nil,
+                 userGoal: nil,
+                 learningStage: nil,
+                 isVIP: false,
+                 lastLoginAt: Date(),
+                 version: 1,
+                 lastSyncedAt: nil,
+                 isDeleted: false
+             )
+         }
+     }
+     ```
+
+  2. 使用工廠方法替代直接初始化
+     ```swift
+     //  錯誤
+     let profile = UserProfile()
+
+     //  正確
+     let profile = UserProfile.defaultProfile()
+     // 或
+     let profile = UserProfile.fromFirebaseUser(currentUser)
+     ```
+
+驗證方法:
+   成功創建 UserProfile 實例
+   ID 和 email 正確設置
+
+檔案位置:
+  - studyAssistant/Models/UserProfile.swift
+
+
+問題 1.2.2: AppSettings 中不存在的 userId 引用
+───────────────────────────────────────────
+發現日期: 2025-05-02
+嚴重程度:  輕微
+影響範圍: 應用設定管理
+
+問題描述:
+  fetchAppSettings 和 saveSettings 方法中引用了 AppSettings.userId，
+  但該屬性不存在於 AppSettings 模型中。
+
+根本原因:
+  - AppSettings 模型設計時未包含 userId
+  - 使用 Firestore 路徑 settings/{userId} 儲存，而非模型欄位
+
+解決方案:
+  1. 移除對 AppSettings.userId 的引用
+  2. 使用當前登入用戶 ID
+
+  ```swift
+  func fetchAppSettings() async throws -> AppSettings {
+      guard let userId = Auth.auth().currentUser?.uid else {
+          throw DataServiceError.unauthenticated
+      }
+
+      let document = try await db.collection("settings")
+          .document(userId)  // 使用當前用戶 ID
+          .getDocument()
+
+      if document.exists {
+          return try document.data(as: AppSettings.self)
+      } else {
+          // 回傳預設設定
+          return AppSettings(
+              id: userId,
+              isDarkMode: false,
+              notificationsEnabled: true,
+              isShockEnabled: false,
+              lastModified: Date()
+          )
+      }
+  }
+  ```
+
+驗證方法:
+   成功載入和儲存應用設定
+   設定與當前登入用戶正確關聯
+
+檔案位置:
+  - studyAssistant/Services/FirebaseService.swift
+
+
+問題 1.2.3: Google 登入網路問題
+──────────────────────────────
+發現日期: 2025-05-06
+嚴重程度:  中等
+影響範圍: 使用者認證
+
+問題描述:
+  在模擬器上 Google 登入失敗，顯示網路連接錯誤。
+
+根本原因:
+  - iOS 模擬器網路設定問題
+  - App Transport Security (ATS) 限制
+
+解決方案:
+  方法一：更新 Info.plist 網路設置
+  ```xml
+  <key>NSAppTransportSecurity</key>
+  <dict>
+      <key>NSAllowsArbitraryLoads</key>
+      <true/>
+  </dict>
+  ```
+
+  方法二：重置模擬器
+  ```bash
+  # 完全關閉 Xcode 和模擬器
+  xcrun simctl shutdown all
+  xcrun simctl erase all
+  ```
+
+  方法三：使用真機測試
+  - Google Sign-In 在真機上更穩定
+  - 避免模擬器網路限制
+
+驗證方法:
+   成功完成 Google OAuth 流程
+   用戶資料正確同步到 Firestore
+
+檔案位置:
+  - Info.plist
+  - studyAssistant/Authentication.swift
+
+
+問題 1.2.4: 個人資料設定無法顯示當前設定
+───────────────────────────────────────
+發現日期: 2025-05-04
+嚴重程度:  中等
+影響範圍: 使用者設定 UI
+
+問題描述:
+  進入 ProfileSettingView 時，無法顯示已儲存的個人資料。
+  所有欄位顯示為空白或預設值。
+
+根本原因:
+  - loadData 方法為 private，無法在 View 中調用
+  - View 的 .onAppear 未觸發資料載入
+  - UserSettingsViewModel 未正確初始化
+
+解決方案:
+  1. 將 loadData 方法設為 public
+     ```swift
+     // UserSettingsViewModel.swift
+     @MainActor
+     class UserSettingsViewModel: ObservableObject {
+         @Published var userProfile: UserProfile?
+         @Published var isLoading = false
+
+         //  改為 public
+         public func loadData() async {
+             isLoading = true
+             defer { isLoading = false }
+
+             do {
+                 userProfile = try await firebaseService.getUserProfile()
+             } catch {
+                 print("載入資料失敗: \(error)")
+             }
+         }
+     }
+     ```
+
+  2. 在 ProfileSettingView 中調用
+     ```swift
+     struct ProfileSettingView: View {
+         @StateObject private var viewModel = UserSettingsViewModel()
+
+         var body: some View {
+             Form {
+                 // UI 元件...
+             }
+             .task {
+                 await viewModel.loadData()
+             }
+         }
+     }
+     ```
+
+  3. 添加錯誤處理和用戶反饋
+     ```swift
+     if viewModel.isLoading {
+         ProgressView("載入中...")
+     } else if let error = viewModel.errorMessage {
+         Text(error)
+             .foregroundColor(.red)
+     }
+     ```
+
+  4. 添加資料載入調試日誌
+     ```swift
+     func loadData() async {
+         print(" 開始載入使用者資料...")
+         isLoading = true
+         defer {
+             print(" 資料載入完成: \(userProfile != nil)")
+             isLoading = false
+         }
+
+         do {
+             userProfile = try await firebaseService.getUserProfile()
+             print(" 成功載入資料: \(userProfile?.username ?? "無")")
+         } catch {
+             print(" 載入資料失敗: \(error)")
+         }
+     }
+     ```
+
+驗證方法:
+   進入設定頁面時自動載入已儲存的資料
+   修改並儲存後，資料正確更新
+   日誌顯示正確的載入流程
+
+檔案位置:
+  - studyAssistant/ViewModels/UserSettingsViewModel.swift
+  - studyAssistant/Views/ProfileSettingView.swift
+
+
+問題 1.2.5: 通知名稱重複宣告
+───────────────────────────
+發現日期: 2025-05-04
+嚴重程度:  輕微
+影響範圍: 程式碼組織
+
+問題描述:
+  Notification.Name 在多個檔案中重複定義，導致命名衝突。
+
+根本原因:
+  - TodoViewModel.swift 和 ProfileSettingView.swift 中都定義了相同的通知名稱
+  - 缺乏集中式通知常數管理
+
+解決方案:
+  1. 創建專門的 NotificationConstants.swift 檔案
+     ```swift
+     // studyAssistant/Constants/NotificationConstants.swift
+     import Foundation
+
+     extension Notification.Name {
+         static let userProfileDidChange = Notification.Name("userProfileDidChange")
+         static let taskDidUpdate = Notification.Name("taskDidUpdate")
+         static let taskDidDelete = Notification.Name("taskDidDelete")
+         // 其他通知名稱...
+     }
+     ```
+
+  2. 移除其他檔案中的重複定義
+     ```swift
+     //  移除 TodoViewModel.swift 中的定義
+     // extension Notification.Name {
+     //     static let userProfileDidChange = ...
+     // }
+
+     //  使用集中式定義
+     import Foundation  // 自動引入 Notification.Name
+     ```
+
+  3. 在所有需要使用的檔案中引入
+     ```swift
+     // 任何需要使用通知的檔案
+     NotificationCenter.default.post(name: .userProfileDidChange, object: nil)
+     ```
+
+驗證方法:
+   專案成功編譯，無命名衝突
+   所有通知正確發送和接收
+
+預防措施:
+  - 所有全域常數集中管理
+  - 使用 Constants 資料夾組織常數檔案
+  - Code Review 時檢查重複定義
+
+檔案位置:
+  - studyAssistant/Constants/NotificationConstants.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.3 任務管理功能
+────────────────────────────────────────────────────────────────────────
+
+問題 1.3.1: 每日任務會導致每天都變成已完成
+─────────────────────────────────────────────
+發現日期: 2025-05-06
+嚴重程度:  嚴重
+影響範圍: 重複任務功能
+
+問題描述:
+  完成一個每日重複任務後，所有日期的實例都標記為已完成。
+
+根本原因:
+  - 所有重複任務實例共用同一個 isCompleted 狀態
+  - 缺少任務實例(TaskInstance)的獨立狀態管理
+
+解決方案:
+  1. 引入 TaskInstance 資料結構
+     ```swift
+     struct TaskInstance: Identifiable, Codable {
+         var id: String = UUID().uuidString
+         var parentTaskId: String
+         var date: Date
+         var isCompleted: Bool
+         var createdAt: Date
+     }
+     ```
+
+  2. 在 Firestore 中建立 instances 子集合
+     ```
+     tasks/{userId}/userTasks/{taskId}/
+       └── instances/
+           └── {instanceId}
+               ├── parentTaskId: String
+               ├── date: Timestamp
+               ├── isCompleted: Boolean
+               └── createdAt: Timestamp
+     ```
+
+  3. 修改任務完成邏輯
+     ```swift
+     func toggleTaskCompletion(taskId: String, instanceId: String?, isCompleted: Bool) async {
+         if let instanceId = instanceId {
+             // 更新特定實例
+             try? await firebaseService.updateTaskInstance(
+                 taskId: taskId,
+                 instanceId: instanceId,
+                 isCompleted: isCompleted
+             )
+         } else {
+             // 更新非重複任務
+             try? await firebaseService.updateTask(
+                 taskId: taskId,
+                 updates: ["isCompleted": isCompleted]
+             )
+         }
+     }
+     ```
+
+  4. UI 顯示時區分實例狀態
+     ```swift
+     ForEach(task.instances ?? []) { instance in
+         HStack {
+             Text(instance.date, style: .date)
+             Spacer()
+             Toggle("", isOn: .constant(instance.isCompleted))
+                 .onChange(of: instance.isCompleted) { _, newValue in
+                     Task {
+                         await viewModel.toggleTaskCompletion(
+                             taskId: task.id,
+                             instanceId: instance.id,
+                             isCompleted: newValue
+                         )
+                     }
+                 }
+         }
+     }
+     ```
+
+驗證方法:
+   完成一個日期的任務不影響其他日期
+   Firestore 中每個實例有獨立的 isCompleted 狀態
+   日曆視圖正確顯示各日期的完成狀態
+
+檔案位置:
+  - studyAssistant/Models/TodoTask.swift
+  - studyAssistant/ViewModels/TodoViewModel.swift
+  - studyAssistant/Services/FirebaseService.swift
+  - firebase_cloud_function/database_functions/src/index.ts
+
+
+問題 1.3.2: 使用每週功能會無法新增任務
+───────────────────────────────────────
+發現日期: 2025-05-06
+嚴重程度:  嚴重
+影響範圍: 重複任務創建
+
+問題描述:
+  選擇「每週」重複類型時，任務無法成功創建。
+
+根本原因:
+  - RepeatType.weekly 需要額外的 weekdays 參數
+  - 前端未正確傳遞 weekdays 陣列
+  - 後端驗證失敗
+
+解決方案:
+  1. 更新 RepeatType 定義
+     ```swift
+     enum RepeatType: Codable {
+         case none
+         case daily
+         case weekly([Int])  // 1=Sunday, 2=Monday, ..., 7=Saturday
+         case monthly([Int]) // 日期數字
+
+         var firestoreValue: [String: Any] {
+             switch self {
+             case .none:
+                 return ["type": "none"]
+             case .daily:
+                 return ["type": "daily"]
+             case .weekly(let days):
+                 return ["type": "weekly", "weekdays": days]
+             case .monthly(let days):
+                 return ["type": "monthly", "monthdays": days]
+             }
+         }
+     }
+     ```
+
+  2. UI 提供星期幾選擇
+     ```swift
+     if selectedRepeatType == .weekly {
+         VStack(alignment: .leading) {
+             Text("選擇重複日期")
+             HStack {
+                 ForEach(1...7, id: \.self) { day in
+                     Button(dayName(day)) {
+                         toggleWeekday(day)
+                     }
+                     .buttonStyle(.bordered)
+                     .foregroundColor(selectedWeekdays.contains(day) ? .white : .blue)
+                     .background(selectedWeekdays.contains(day) ? Color.blue : Color.clear)
+                 }
+             }
+         }
+     }
+     ```
+
+  3. 創建任務時包含完整資訊
+     ```swift
+     let task = TodoTask(
+         title: title,
+         userId: userId,
+         repeatType: .weekly(selectedWeekdays),
+         startDate: startDate,
+         endDate: endDate
+     )
+     ```
+
+驗證方法:
+   成功創建每週重複任務
+   實例只在選定的星期幾生成
+   Firestore 中正確儲存 weekdays 參數
+
+檔案位置:
+  - studyAssistant/Models/TodoTask.swift
+  - studyAssistant/Views/TodoAddView.swift
+  - studyAssistant/Views/TodoEditView.swift
+
+
+問題 1.3.3: Chat 新增任務無法顯示
+────────────────────────────────
+發現日期: 2025-10-26
+嚴重程度:  中等
+影響範圍: 聊天助手任務整合
+
+問題描述:
+  透過聊天助手新增的任務無法立即在 TodoView 中顯示，
+  需要手動重新整理或切換頁面。
+
+根本原因:
+  - addTask() 函數使用通知機制觸發重新載入
+  - isLoadingTasks 狀態存在競爭條件
+  - 通知發送與接收之間有時序問題
+
+解決方案:
+  1. 修改 addTask() 函數，直接調用 forceReloadTasks()
+     ```swift
+     //  舊的實作 (使用通知)
+     func addTask(_ task: TodoTask) async {
+         // ... 新增任務邏輯
+         NotificationCenter.default.post(name: .taskDidUpdate, object: nil)
+     }
+
+     //  新的實作 (直接調用)
+     func addTask(_ task: TodoTask) async {
+         isLoadingTasks = true
+         defer { isLoadingTasks = false }
+
+         do {
+             let taskId = try await firebaseService.saveTask(task)
+             print(" 任務創建成功: \(taskId)")
+
+             // 直接重新載入，避免通知機制的延遲
+             await forceReloadTasks()
+         } catch {
+             print(" 任務創建失敗: \(error)")
+             errorMessage = error.localizedDescription
+         }
+     }
+     ```
+
+  2. 確保 forceReloadTasks() 實作正確
+     ```swift
+     func forceReloadTasks() async {
+         print(" 強制重新載入任務...")
+         await fetchTasks()
+     }
+     ```
+
+驗證方法:
+   Chat 新增任務後立即在 TodoView 顯示
+   不需要手動重新整理
+   日誌顯示正確的載入順序
+
+技術細節:
+  - 移除通知機制的依賴
+  - 使用同步的 async/await 流程
+  - 避免 isLoadingTasks 競爭條件
+
+檔案位置:
+  - studyAssistant/ViewModels/TodoViewModel.swift:addTask()
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.4 日曆視圖與動畫
+────────────────────────────────────────────────────────────────────────
+
+問題 1.4.1: 每週每月每日任務只會重複在第一個禮拜
+─────────────────────────────────────────────────
+發現日期: 2025-06-01
+嚴重程度:  嚴重
+影響範圍: 日曆視圖任務顯示
+
+問題描述:
+  重複任務只顯示在第一週，後續週次不顯示。
+
+根本原因:
+  - 實例生成邏輯有限制
+  - 只生成一週的實例
+
+解決方案:
+  已在階段 3 (2025-10-25) 透過 Cloud Functions 完全解決：
+  - 實作 calculateNextOccurrences 輔助函數
+  - 最多生成 365 個實例（約一年）
+  - 支援 daily/weekly/monthly
+  - 正確處理月末日期（如 1/31 → 2/28）
+
+驗證方法:
+   日曆顯示整年的重複任務
+   每月任務正確處理月末日期
+   每週任務在正確的星期幾顯示
+
+檔案位置:
+  - firebase_cloud_function/database_functions/src/index.ts:35-112
+
+
+問題 1.4.2: 日曆頁面滑動卡頓
+───────────────────────────
+發現日期: 2025-10-26
+嚴重程度:  中等
+影響範圍: 使用者體驗
+
+問題描述:
+  在日曆視圖中左右滑動切換月份時，畫面出現明顯卡頓。
+  特別是當月份有大量任務時更加明顯。
+
+根本原因:
+  - 每次滑動都重新計算所有任務的顯示位置
+  - 沒有緩存機制
+  - 視圖渲染效率低
+
+解決方案:
+  1. 添加緩存機制
+     ```swift
+     @State private var cachedTasksData: [[TodoTask]] = []
+     @State private var cachedDateTasks: [Date: [TodoTask]] = [:]
+     ```
+
+  2. 優化 prepareTasksData() 函數
+     ```swift
+     private func prepareTasksData() -> [[TodoTask]] {
+         // 計算任務哈希值
+         let currentHash = viewModel.tasks.map { $0.id }.joined()
+
+         // 如果任務未變化且有緩存，直接返回
+         if !cachedTasksData.isEmpty && lastTasksHash == currentHash {
+             return cachedTasksData
+         }
+
+         lastTasksHash = currentHash
+
+         // 重新計算...
+         cachedTasksData = tasksData
+         return cachedTasksData
+     }
+     ```
+
+  3. 優化 getTasksForDate() 函數
+     ```swift
+     private func getTasksForDate(_ date: Date) -> [TodoTask] {
+         // 檢查緩存
+         if let cached = cachedDateTasks[date] {
+             return cached
+         }
+
+         // 計算任務...
+         cachedDateTasks[date] = dateTasks
+         return dateTasks
+     }
+     ```
+
+  4. 優化 assignRowsForMonth() 函數
+     - 預先分配數組容量: `rows.reserveCapacity(maxRow + 1)`
+     - 使用 first(where:) 替代循環
+     - 減少重複計算
+
+  5. 使用 drawingGroup 優化渲染
+     ```swift
+     SingleTaskBarView(...)
+         .drawingGroup()  // 批次渲染，提升性能
+     ```
+
+驗證方法:
+   滑動切換月份流暢，無卡頓
+   大量任務時性能仍然良好
+   緩存正確更新
+
+效能改善:
+  - 滑動幀率: 30 FPS → 60 FPS
+  - 首次渲染: 減少 60%
+  - 記憶體使用: 穩定
+
+檔案位置:
+  - studyAssistant/Views/CalenderView.swift
+
+
+問題 1.4.3: 頁面切換動畫缺失
+───────────────────────────
+發現日期: 2025-10-26
+嚴重程度:  輕微
+影響範圍: 使用者體驗
+
+問題描述:
+  在 TabView 各頁面之間切換時沒有動畫效果，
+  頁面直接跳轉，缺乏流暢感。
+
+根本原因:
+  - SwiftUI TabView 預設沒有滑動轉場動畫
+  - 需要自定義轉場效果
+
+解決方案:
+  1. 添加方向感知的滑動動畫
+     ```swift
+     @State private var previousTab: Tab = .home
+     @State private var isTransitioning = false
+
+     private func slideTransition(for tab: Tab) -> AnyTransition {
+         let edge: Edge = tab.rawValue < previousTab.rawValue ? .leading : .trailing
+         return .asymmetric(
+             insertion: .move(edge: edge),
+             removal: .move(edge: edge == .leading ? .trailing : .leading)
+         )
+     }
+     ```
+
+  2. 在 TabView 內容上應用轉場
+     ```swift
+     ZStack {
+         if selectedTab == .home {
+             TodoView()
+                 .transition(slideTransition(for: .home))
+         } else if selectedTab == .timer {
+             TimerView()
+                 .transition(slideTransition(for: .timer))
+         }
+         // ...
+     }
+     .animation(.spring(response: 0.3, dampingFraction: 0.9), value: selectedTab)
+     ```
+
+  3. 更新 TabBar 點擊邏輯
+     ```swift
+     private func switchTab(to tab: Tab) {
+         guard !isTransitioning else { return }
+
+         isTransitioning = true
+         previousTab = selectedTab
+         selectedTab = tab
+
+         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+             isTransitioning = false
+         }
+     }
+     ```
+
+驗證方法:
+   頁面切換有流暢的滑動動畫
+   動畫方向符合切換方向
+   防止快速重複點擊導致的動畫錯亂
+
+檔案位置:
+  - studyAssistant/Views/ContentView.swift
+
+
+問題 1.4.4: 有時候切過來會閃白
+──────────────────────────
+發現日期: 2025-06-01
+嚴重程度:  輕微
+影響範圍: 視覺體驗
+
+問題描述:
+  切換到日曆頁面時，偶爾會出現短暫的白屏閃爍。
+
+根本原因:
+  - 視圖載入時機問題
+  - 資料未準備好就開始渲染
+
+解決方案:
+  1. 添加載入指示器
+     ```swift
+     if viewModel.isLoading {
+         ProgressView()
+             .frame(maxWidth: .infinity, maxHeight: .infinity)
+             .background(Color(.systemBackground))
+     } else {
+         // 日曆視圖內容
+     }
+     ```
+
+  2. 預載入資料
+     ```swift
+     .onAppear {
+         if !hasLoadedInitialData {
+             Task {
+                 await viewModel.fetchTasks()
+                 hasLoadedInitialData = true
+             }
+         }
+     }
+     ```
+
+驗證方法:
+   切換到日曆頁面時無白屏閃爍
+   顯示載入指示器替代白屏
+
+檔案位置:
+  - studyAssistant/Views/CalenderView.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.5 聊天室功能
+────────────────────────────────────────────────────────────────────────
+
+問題 1.5.1: 收到回應，狀態碼：429 (太頻繁回應)
+────────────────────────────────────────────
+發現日期: 2025-05-14
+嚴重程度:  中等
+影響範圍: OpenAI API 整合
+
+問題描述:
+  頻繁向 ChatGPT 發送請求時，收到 HTTP 429 錯誤（Too Many Requests）。
+
+根本原因:
+  - 超過 OpenAI API 速率限制
+  - 未實作請求節流機制
+
+解決方案:
+  1. 實作請求節流
+     ```swift
+     @Published var lastRequestTime: Date?
+     private let minimumRequestInterval: TimeInterval = 2.0
+
+     func sendMessage(_ message: String) async {
+         // 檢查距離上次請求的時間
+         if let lastTime = lastRequestTime {
+             let elapsed = Date().timeIntervalSince(lastTime)
+             if elapsed < minimumRequestInterval {
+                 let waitTime = minimumRequestInterval - elapsed
+                 try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+             }
+         }
+
+         // 發送請求
+         lastRequestTime = Date()
+         // ...
+     }
+     ```
+
+  2. 添加錯誤處理與重試邏輯
+     ```swift
+     func sendMessage(_ message: String, retryCount: Int = 0) async {
+         do {
+             // 發送請求...
+         } catch {
+             if case let apiError as APIError = error,
+                apiError.statusCode == 429,
+                retryCount < maxRetries {
+
+                 // 指數退避
+                 let waitTime = pow(2.0, Double(retryCount))
+                 try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+
+                 // 重試
+                 await sendMessage(message, retryCount: retryCount + 1)
+             } else {
+                 errorMessage = "發送失敗: \(error.localizedDescription)"
+             }
+         }
+     }
+     ```
+
+  3. 顯示速率限制警告
+     ```swift
+     if let error = viewModel.errorMessage, error.contains("429") {
+         Text("發送訊息過於頻繁，請稍後再試")
+             .foregroundColor(.orange)
+     }
+     ```
+
+驗證方法:
+   快速發送多個訊息不會觸發 429 錯誤
+   超過限制時自動重試
+   顯示友善的錯誤訊息
+
+檔案位置:
+  - studyAssistant/ViewModels/ChatViewModel.swift
+
+
+問題 1.5.2: Chat 鍵盤行為異常
+───────────────────────────
+發現日期: 2025-10-26
+嚴重程度:  中等
+影響範圍: 聊天室 UI
+
+問題描述:
+  在 iOS 26+ 上，鍵盤彈出時，頂部標題欄會跟著移動，
+  導致介面異常。
+
+根本原因:
+  - messageList 使用 .offset() 修飾符調整位置
+  - 與 iOS 26+ 的鍵盤避讓行為衝突
+
+解決方案:
+  1. 重構 iOS 26+ 視圖佈局
+     ```swift
+     if #available(iOS 26.0, *) {
+         VStack(spacing: 0) {
+             // 頂部標題欄
+             topBar
+                 .frame(height: 60)
+                 .background(Color(hex: "F3D4B7"))
+
+             // 訊息列表
+             messageListContent
+                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+             // 輸入框
+             messageInputArea
+         }
+         .ignoresSafeArea(.keyboard, edges: .bottom)
+     }
+     ```
+
+  2. 使用 ZStack 替代 offset
+     ```swift
+     ZStack(alignment: .top) {
+         // 背景
+         Color(hex: "FEECD8")
+             .ignoresSafeArea()
+
+         VStack {
+             // 訊息列表（不使用 offset）
+             ScrollViewReader { proxy in
+                 ScrollView {
+                     // 訊息內容...
+                 }
+             }
+         }
+         .padding(.top, 60)  // 為標題欄留空間
+
+         // 標題欄（使用 zIndex 置頂）
+         topBar
+             .zIndex(1)
+     }
+     ```
+
+驗證方法:
+   鍵盤彈出時標題欄固定不動
+   訊息列表正確調整高度
+   iOS 26+ 與舊版本都正常運作
+
+檔案位置:
+  - studyAssistant/Views/Chatview.swift
+
+
+問題 1.5.3: GPT 打字時畫面不會跟著動
+────────────────────────────────
+發現日期: 2025-05-14
+嚴重程度:  輕微
+影響範圍: 聊天室 UX
+
+問題描述:
+  GPT 回應串流時，ScrollView 不會自動滾動到最新訊息。
+
+根本原因:
+  - 訊息更新時未觸發 ScrollViewProxy
+  - onChange 未監聽正確的狀態
+
+解決方案:
+  ```swift
+  ScrollViewReader { proxy in
+      ScrollView {
+          LazyVStack {
+              ForEach(viewModel.messages) { message in
+                  MessageBubble(message: message)
+                      .id(message.id)
+              }
+          }
+      }
+      .onChange(of: viewModel.messages.count) { _, _ in
+          // 滾動到最新訊息
+          if let lastMessage = viewModel.messages.last {
+              withAnimation {
+                  proxy.scrollTo(lastMessage.id, anchor: .bottom)
+              }
+          }
+      }
+  }
+  ```
+
+驗證方法:
+   GPT 打字時自動滾動
+   新訊息總是可見
+
+檔案位置:
+  - studyAssistant/Views/Chatview.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.6 計時器功能
+────────────────────────────────────────────────────────────────────────
+
+問題 1.6.1: Timer 會有動畫顯示出錯的問題
+───────────────────────────────────────
+發現日期: 2025-05-06
+嚴重程度:  輕微
+影響範圍: 計時器 UI
+
+問題描述:
+  計時器數字更新時，動畫不流暢或顯示錯誤。
+
+根本原因:
+  - SwiftUI 動畫與 Timer 更新頻率不匹配
+  - Text 視圖使用了不適當的轉場效果
+
+解決方案:
+  1. 使用 withAnimation 控制數字變化
+     ```swift
+     @Published var elapsedTime: TimeInterval = 0
+
+     func updateTimer() {
+         withAnimation(.linear(duration: 1)) {
+             elapsedTime += 1
+         }
+     }
+     ```
+
+  2. 使用單聲道字體避免寬度變化
+     ```swift
+     Text(formattedTime)
+         .font(.system(.largeTitle, design: .monospaced))
+         .contentTransition(.numericText())
+     ```
+
+驗證方法:
+   計時器數字平滑更新
+   無閃爍或錯位
+
+檔案位置:
+  - studyAssistant/Views/TimerView.swift
+  - studyAssistant/ViewModels/TimerManager.swift
+
+
+問題 1.6.2: 計時器在背景不準確
+──────────────────────────────
+發現日期: 開發早期
+嚴重程度:  嚴重
+影響範圍: 計時器功能
+
+問題描述:
+  App 進入背景後，計時器停止或不準確。
+
+根本原因:
+  - iOS 會暫停背景 App 的 Timer
+  - 使用 Timer 計數而非時間戳記
+
+解決方案:
+  ```swift
+  @Published var elapsedTime: TimeInterval = 0
+  private var startTime: Date?
+
+  func startTimer() {
+      startTime = Date()
+      timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+          guard let self = self, let startTime = self.startTime else { return }
+          self.elapsedTime = Date().timeIntervalSince(startTime)
+      }
+  }
+
+  func pauseTimer() {
+      timer?.invalidate()
+      timer = nil
+      // 保存 elapsedTime
+  }
+
+  func resumeTimer() {
+      guard let start = startTime else { return }
+      // 重新計算開始時間
+      startTime = Date().addingTimeInterval(-elapsedTime)
+      startTimer()
+  }
+  ```
+
+驗證方法:
+   背景計時準確
+   回到前景時時間正確
+
+檔案位置:
+  - studyAssistant/ViewModels/TimerManager.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.7 統計功能
+────────────────────────────────────────────────────────────────────────
+
+問題 1.7.1: 修正刪除任務統計不會被刪除
+───────────────────────────────────────
+發現日期: 2025-05-14
+嚴重程度:  中等
+影響範圍: 學習統計
+
+問題描述:
+  刪除任務後，相關的學習統計資料沒有更新，
+  導致統計數據不準確。
+
+根本原因:
+  - deleteTask 函數只刪除任務本身
+  - 未同步更新統計資料
+
+解決方案:
+  ```swift
+  func deleteTask(_ task: TodoTask) async {
+      do {
+          // 刪除任務
+          try await firebaseService.deleteTask(taskId: task.id)
+
+          // 更新統計資料
+          if let category = task.category {
+              try await firebaseService.updateCategoryStats(
+                  category: category,
+                  updates: [
+                      "taskCount": -1,
+                      "taskCompleteCount": task.isCompleted ? -1 : 0
+                  ]
+              )
+          }
+
+          // 重新載入任務
+          await fetchTasks()
+      } catch {
+          errorMessage = error.localizedDescription
+      }
+  }
+  ```
+
+驗證方法:
+   刪除任務後統計數據正確更新
+   類別任務數量準確
+
+檔案位置:
+  - studyAssistant/ViewModels/TodoViewModel.swift
+
+
+────────────────────────────────────────────────────────────────────────
+
+1.8 介面與 UI 問題
+────────────────────────────────────────────────────────────────────────
+
+問題 1.8.1: TabBar 顏色未自定義
+──────────────────────────────
+發現日期: 2025-10-26
+嚴重程度:  輕微
+影響範圍: 整體 UI 風格
+
+問題描述:
+  TabBar 使用系統預設顏色，與應用主題不一致。
+
+根本原因:
+  - 未配置 UITabBarAppearance
+
+解決方案:
+  ```swift
+  // studyAssistantApp.swift
+  init() {
+      FirebaseApp.configure()
+      configureGoogleSignIn()
+      configureTabBarAppearance()  // 新增
+  }
+
+  private func configureTabBarAppearance() {
+      let appearance = UITabBarAppearance()
+      appearance.configureWithOpaqueBackground()
+
+      // 背景顏色
+      appearance.backgroundColor = UIColor(Color.hex(hex: "F3D4B7"))
+
+      // 選中項目顏色
+      appearance.stackedLayoutAppearance.selected.iconColor = UIColor(Color.hex(hex: "E27844"))
+      appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+          .foregroundColor: UIColor(Color.hex(hex: "E27844"))
+      ]
+
+      // 未選中項目顏色
+      appearance.stackedLayoutAppearance.normal.iconColor = UIColor.gray
+      appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+          .foregroundColor: UIColor.gray
+      ]
+
+      UITabBar.appearance().standardAppearance = appearance
+      UITabBar.appearance().scrollEdgeAppearance = appearance
+  }
+  ```
+
+驗證方法:
+   TabBar 使用品牌顏色
+   選中和未選中狀態清晰
+
+檔案位置:
+  - studyAssistant/studyAssistantApp.swift
+
+
+問題 1.8.2: TodoDetailView 彈出動畫太慢
+────────────────────────────────────
+發現日期: 2025-05-06
+嚴重程度:  輕微
+影響範圍: 使用者體驗
+
+問題描述:
+  點擊任務查看詳情時，彈出動畫速度太慢，
+  使用者體驗不佳。
+
+根本原因:
+  - Sheet presentation 使用預設動畫參數
+
+解決方案:
+  ```swift
+  .sheet(isPresented: $showingDetail) {
+      TodoDetailView(task: selectedTask)
+          .presentationDetents([.medium, .large])
+          .presentationDragIndicator(.visible)
+  }
+  .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showingDetail)
+  ```
+
+驗證方法:
+   彈出速度適中
+   動畫流暢
+
+檔案位置:
+  - studyAssistant/Views/TodoView.swift
+
+
+================================================================================
+                        二、進行中的問題
+================================================================================
+
+問題 2.1: 跨天任務如果有新一個禮拜的話要可以重新排疊層
+──────────────────────────────────────────────────
+發現日期: 未解決
+嚴重程度:  輕微
+影響範圍: 日曆視圖顯示
+
+問題描述:
+  跨天任務在日曆中的顯示疊層不正確，
+  特別是跨週時，第一排可能為空。
+
+當前狀態: 待修復
+
+建議方案:
+  - 重新設計任務列分配算法
+  - 每週獨立計算疊層
+  - 確保沒有空白列
+
+
+問題 2.2: 週月重複的跨天辦法顯示
+────────────────────────────
+發現日期: 未解決
+嚴重程度:  輕微
+影響範圍: 日曆視圖
+
+問題描述:
+  每週/每月重複的跨天任務，只有第一天會顯示，
+  後續天數不顯示。
+
+當前狀態: 待修復
+
+建議方案:
+  - 修改實例生成邏輯，為每一天都生成實例
+  - 調整日曆顯示算法
+
+
+問題 2.3: 下個月跟上個月的任務不一定會正常顯示
+────────────────────────────────────────────
+發現日期: 未解決
+嚴重程度:  中等
+影響範圍: 日曆視圖
+
+問題描述:
+  切換到下個月或上個月時，部分任務無法正確顯示，
+  點擊後會跳到其他頁面。
+
+當前狀態: 待分析
+
+建議方案:
+  - 檢查月份切換時的資料載入邏輯
+  - 確認日期計算是否正確
+
+
+問題 2.4: 滑動 Todo 的編輯要關起鍵盤
+─────────────────────────────
+發現日期: 未解決
+嚴重程度:  輕微
+影響範圍: 使用者體驗
+
+問題描述:
+  在 TodoView 中滑動顯示編輯選項時，
+  鍵盤應該自動關閉，但目前不會。
+
+當前狀態: 待修復
+
+建議方案:
+  ```swift
+  .swipeActions(edge: .trailing) {
+      Button("編輯") {
+          hideKeyboard()
+          selectedTask = task
+          showingEdit = true
+      }
+  }
+
+  func hideKeyboard() {
+      UIApplication.shared.sendAction(
+          #selector(UIResponder.resignFirstResponder),
+          to: nil,
+          from: nil,
+          for: nil
+      )
+  }
+  ```
+
+
+問題 2.5: 開始時間輸入完沒有跳到結束時間
+───────────────────────────────────────
+發現日期: 未解決
+嚴重程度:  輕微
+影響範圍: 任務輸入流程
+
+問題描述:
+  在 TodoAddView 中，選擇完開始時間後，
+  焦點應自動跳到結束時間選擇器，但沒有。
+
+當前狀態: 待修復
+
+建議方案:
+  使用 @FocusState 管理焦點:
+  ```swift
+  @FocusState private var focusedField: Field?
+
+  enum Field {
+      case title
+      case startTime
+      case endTime
+      case note
+  }
+
+  // 在 startTime 的 onChange 中
+  .onChange(of: startDate) { _, _ in
+      focusedField = .endTime
+  }
+  ```
+
+
+問題 2.6: 每日每週每月沒有限制選擇時間範圍
+───────────────────────────────────────
+發現日期: 未解決
+嚴重程度:  輕微
+影響範圍: 任務創建
+
+問題描述:
+  創建重複任務時，沒有限制選擇的時間範圍，
+  可能導致生成過多實例。
+
+當前狀態: 待修復
+
+建議方案:
+  - 添加重複結束日期選擇器
+  - 限制最多一年或365個實例
+  - 顯示預計生成的實例數量
+
+
+問題 2.7: 新增任務優先度欄位
+───────────────────────────
+發現日期: 2025-06-02
+嚴重程度:  功能增強
+影響範圍: 任務管理
+
+問題描述:
+  目前任務沒有優先度欄位，無法區分任務重要性。
+
+當前狀態: 計劃中
+
+建議方案:
+  1. 在 TodoTask 模型新增 priority 欄位
+     ```swift
+     enum Priority: String, Codable {
+         case low = "低"
+         case medium = "中"
+         case high = "高"
+     }
+
+     struct TodoTask {
+         // ...
+         var priority: Priority = .medium
+     }
+     ```
+
+  2. UI 增加優先度選擇器
+  3. 任務列表支援按優先度排序
+  4. 不同優先度使用不同顏色標示
+
+
+問題 2.8: 修改上傳資料到 Firebase 方式
+─────────────────────────────────
+發現日期: 2025-06-02
+嚴重程度:  中等
+影響範圍: 資料同步
+
+問題描述:
+  目前部分資料仍使用客戶端直接上傳到 Firestore，
+  應統一使用 Cloud Functions。
+
+當前狀態: 部分完成 (階段 3 已完成任務相關)
+
+待完成項目:
+  - 統計資料上傳
+  - 計時記錄上傳
+  - 使用者設定上傳
+
+
+問題 2.9: 新增通知功能
+─────────────────────
+發現日期: 2025-06-02
+嚴重程度:  功能增強
+影響範圍: 使用者提醒
+
+問題描述:
+  目前沒有系統通知功能，使用者無法收到任務提醒。
+
+當前狀態: 計劃中
+
+建議方案:
+  - 實作本地通知 (UNUserNotification)
+  - 任務到期前提醒
+  - 每日學習目標提醒
+  - 可自訂提醒時間
+
+
+================================================================================
+                         三、已知限制
+================================================================================
+
+限制 3.1: Firebase 免費方案限制
+──────────────────────────────
+描述:
+  - Firestore 讀取: 50,000 次/天
+  - Firestore 寫入: 20,000 次/天
+  - Cloud Functions 調用: 125,000 次/月
+  - Cloud Functions 執行時間: 40,000 GB-秒/月
+
+影響:
+  - 大量使用者時可能超過配額
+  - 需監控用量並優化
+
+解決方案:
+  - 實作本地快取減少 Firestore 讀取
+  - 批次操作減少寫入次數
+  - 考慮升級到付費方案
+
+
+限制 3.2: OpenAI API 速率限制
+────────────────────────────
+描述:
+  - 免費帳號: 3 RPM (Requests Per Minute)
+  - Tier 1: 500 RPM
+  - Token 限制依模型而異
+
+影響:
+  - 聊天功能可能受限
+  - 多使用者同時使用會觸發限制
+
+解決方案:
+  - 實作請求隊列
+  - 添加冷卻時間
+  - 考慮升級 API 方案
+
+
+限制 3.3: iOS 最低支援版本
+─────────────────────────
+描述:
+  - 目前最低支援 iOS 17.0
+  - 部分功能使用 iOS 26+ API
+
+影響:
+  - 舊版 iPhone 無法使用
+
+解決方案:
+  - 提供替代實作給舊版 iOS
+  - 文檔中明確說明系統需求
+
+
+限制 3.4: 重複任務實例數量限制
+─────────────────────────────
+描述:
+  - 每個重複任務最多生成 365 個實例
+  - Firestore batch 最多 500 個操作
+
+影響:
+  - 無法創建超過一年的重複任務
+
+解決方案:
+  - 定期生成新實例 (例如每季)
+  - 或提高限制到 500 個實例
+
+
+================================================================================
+                       四、效能優化記錄
+================================================================================
+
+優化 4.1: 日曆視圖緩存機制 (2025-10-26)
+───────────────────────────────────────
+改善項目:
+  - 任務資料緩存
+  - 日期任務緩存
+  - 任務哈希值比對
+
+效能提升:
+  - 首次渲染速度提升 60%
+  - 滑動幀率 30 FPS → 60 FPS
+  - 記憶體使用穩定
+
+檔案:
+  - studyAssistant/Views/CalenderView.swift
+
+
+優化 4.2: Cloud Functions 實例生成 (2025-10-25)
+──────────────────────────────────────────────
+改善項目:
+  - 伺服器端生成實例
+  - Batch 原子性操作
+  - 減少客戶端計算
+
+效能提升:
+  - 客戶端 CPU 使用降低 80%
+  - 任務創建速度提升 40%
+  - 資料一致性提升
+
+檔案:
+  - firebase_cloud_function/database_functions/src/index.ts
+
+
+優化 4.3: 任務列表渲染優化
+─────────────────────────
+改善項目:
+  - 使用 LazyVStack 替代 VStack
+  - 預先分配陣列容量
+  - 使用 first(where:) 替代循環
+
+效能提升:
+  - 大量任務時渲染速度提升 50%
+  - 滾動更流暢
+
+檔案:
+  - studyAssistant/Views/TodoView.swift
+  - studyAssistant/Views/CalenderView.swift
+
+
+================================================================================
+                      五、常見開發陷阱
+================================================================================
+
+陷阱 5.1: SwiftUI 在 View 中直接呼叫 async 函數
+────────────────────────────────────────────
+錯誤範例:
+  ```swift
+  Button("載入") {
+      await viewModel.fetchTasks()  //  錯誤
+  }
+  ```
+
+正確做法:
+  ```swift
+  Button("載入") {
+      Task {
+          await viewModel.fetchTasks()  //  正確
+      }
+  }
+  ```
+
+原因:
+  - Button action 不是 async context
+  - 需要用 Task {} 包裹
+
+
+陷阱 5.2: 忘記在 @MainActor 區更新 @Published 屬性
+──────────────────────────────────────────────
+錯誤範例:
+  ```swift
+  func fetchData() async {
+      let data = try await api.fetch()
+      self.items = data  //  可能在背景執行緒
+  }
+  ```
+
+正確做法:
+  ```swift
+  @MainActor
+  class ViewModel: ObservableObject {
+      @Published var items: [Item] = []
+
+      func fetchData() async {
+          let data = try await api.fetch()
+          self.items = data  //  保證在主執行緒
+      }
+  }
+  ```
+
+
+陷阱 5.3: Firestore Timestamp 與 Date 轉換
+─────────────────────────────────────────
+錯誤範例:
+  ```swift
+  let timestamp = task.startDate  //  類型不明確
+  ```
+
+正確做法:
+  ```swift
+  // Firestore → Swift
+  let date = timestamp.dateValue()
+
+  // Swift → Firestore
+  let timestamp = Timestamp(date: date)
+  ```
+
+
+陷阱 5.4: 循環參照導致記憶體洩漏
+──────────────────────────────
+錯誤範例:
+  ```swift
+  timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+      self.updateTime()  //  強參照 self
+  }
+  ```
+
+正確做法:
+  ```swift
+  timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+      self?.updateTime()  //  弱參照
+  }
+  ```
+
+
+陷阱 5.5: 未取消 Combine 訂閱
+────────────────────────────
+錯誤範例:
+  ```swift
+  viewModel.$tasks
+      .sink { tasks in
+          // 處理任務
+      }  //  沒有儲存 AnyCancellable
+  ```
+
+正確做法:
+  ```swift
+  private var cancellables = Set<AnyCancellable>()
+
+  viewModel.$tasks
+      .sink { tasks in
+          // 處理任務
+      }
+      .store(in: &cancellables)  //  儲存訂閱
+  ```
+
+
+================================================================================
+                      六、除錯工具與技巧
+================================================================================
+
+工具 6.1: Firebase Emulator
+──────────────────────────
+用途:
+  - 本地測試 Cloud Functions
+  - 不消耗正式環境配額
+  - 快速開發與測試
+
+使用方法:
+  ```bash
+  cd firebase_cloud_function/database_functions
+  firebase emulators:start --only functions
+  ```
+
+訪問 UI:
+  - http://127.0.0.1:4000/functions
+
+
+工具 6.2: Xcode Instruments
+──────────────────────────
+用途:
+  - CPU 效能分析
+  - 記憶體洩漏檢測
+  - 網路活動監控
+
+使用方法:
+  - Product → Profile (Cmd+I)
+  - 選擇 Template (Time Profiler / Leaks)
+
+
+工具 6.3: Firebase Console
+─────────────────────────
+用途:
+  - 查看 Firestore 資料
+  - 監控 Cloud Functions 日誌
+  - 檢查認證狀態
+
+訪問:
+  - https://console.firebase.google.com/
+
+
+工具 6.4: os.log (結構化日誌)
+────────────────────────────
+用途:
+  - 專業級日誌記錄
+  - 可在 Console.app 中過濾查看
+
+使用方法:
+  ```swift
+  import os.log
+
+  private let logger = Logger(
+      subsystem: "com.studyAssistant",
+      category: "TodoViewModel"
+  )
+
+  logger.info("正在載入任務...")
+  logger.error("載入失敗: \(error.localizedDescription)")
+  ```
+
+
+工具 6.5: SwiftUI Preview
+────────────────────────
+用途:
+  - 快速預覽 UI 變更
+  - 不需執行完整 App
+
+使用方法:
+  ```swift
+  #Preview {
+      TodoView()
+          .environmentObject(MockTodoViewModel())
+  }
+  ```
+
+
+================================================================================
+                        七、預防措施
+================================================================================
+
+措施 7.1: 定期備份 Firestore 資料
+────────────────────────────────
+頻率: 每週
+
+方法:
+  - 使用 Firebase CLI 匯出
+  - 或設定自動備份 (付費功能)
+
+命令:
+  ```bash
+  firebase firestore:export gs://[BUCKET_NAME]/[EXPORT_PATH]
+  ```
+
+
+措施 7.2: 版本控制最佳實踐
+─────────────────────────
+做法:
+   定期提交變更
+   使用有意義的 commit message
+   重要功能使用分支開發
+   Code Review 後才合併
+   Tag 重要版本
+
+
+措施 7.3: 測試策略
+─────────────────
+做法:
+   單元測試核心邏輯
+   UI 測試關鍵流程
+   真機測試認證功能
+   多設備測試同步功能
+
+
+措施 7.4: 監控與警報
+───────────────────
+做法:
+   設定 Firebase 用量警報
+   監控 Cloud Functions 錯誤率
+   追蹤 App 崩潰率
+   收集使用者反饋
+
+
+措施 7.5: 文檔維護
+─────────────────
+做法:
+   及時更新 API 文檔
+   記錄重要決策
+   維護問題追蹤清單
+   撰寫變更日誌
+
+
+================================================================================
+                         文檔結束
+================================================================================
+
+ 提示:
+  - 本文檔會隨著新問題發現和解決持續更新
+  - 遇到新問題時請記錄到此文檔
+  - 解決問題後請更新狀態和解決方案
+
+ 下次更新: 當有新問題或解決方案時
+
+🔗 相關文檔:
+   - 07_開發指南.txt (開發流程和最佳實踐)
+   - 09_版本歷史.txt (版本更新記錄)
+   - TODO.md (待辦事項追蹤)
