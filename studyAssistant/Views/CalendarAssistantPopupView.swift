@@ -63,13 +63,32 @@ struct CalendarAssistantPopupView: View {
 
             // 輸入框區域（參考 ChatSettingView 的 TextField 樣式）
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(spacing: 8) {
                     Text("輸入日程安排")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.black)
                         .padding(.leading, 2)
 
                     Spacer()
+
+                    // 注入預設文字2按鈕
+                    Button(action: {
+                        insertDefaultText2()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "text.badge.plus")
+                                .font(.system(size: 14))
+                            Text("自適應安排（調整時長）")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(accentColor)
+                        .cornerRadius(6)
+                    }
+                    .disabled(assistantViewModel.isUpdating)
+                    .opacity(assistantViewModel.isUpdating ? 0.5 : 1.0)
 
                     // 注入預設文字按鈕
                     Button(action: {
@@ -78,7 +97,7 @@ struct CalendarAssistantPopupView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "text.badge.plus")
                                 .font(.system(size: 14))
-                            Text("預設")
+                            Text("一般安排（不調整時長）")
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .foregroundColor(.white)
@@ -301,8 +320,8 @@ struct CalendarAssistantPopupView: View {
                     .disabled(!assistantViewModel.isUpdating)
                 }
 
-                // 撤回按鈕
-                if !assistantViewModel.isUpdating && hasTaskUpdates {
+                // 撤回按鈕 - 只有在沒有撤銷過且有任務更新時才顯示
+                if !assistantViewModel.isUpdating && hasTaskUpdates && !assistantViewModel.hasUndone {
                     Button(action: {
                         Task {
                             await assistantViewModel.undoLastUpdate()
@@ -321,6 +340,62 @@ struct CalendarAssistantPopupView: View {
                         .cornerRadius(12)
                         .shadow(color: Color.orange.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
+                }
+
+                // 【新增】撤銷結果顯示區域 - 只顯示成功、部分成功或失敗的狀態
+                if assistantViewModel.undoStatus == .success ||
+                   assistantViewModel.undoStatus == .partialSuccess ||
+                   assistantViewModel.undoStatus == .failed {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            // 根據狀態顯示不同的圖示和顏色
+                            switch assistantViewModel.undoStatus {
+                            case .success:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 20))
+
+                            case .partialSuccess:
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.system(size: 20))
+
+                            case .failed:
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.system(size: 20))
+
+                            default:
+                                EmptyView()
+                            }
+
+                            Text(assistantViewModel.undoMessage)
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer()
+                        }
+                        .padding()
+                        .background(
+                            // 根據狀態顯示不同的背景顏色
+                            Group {
+                                switch assistantViewModel.undoStatus {
+                                case .success:
+                                    Color.green.opacity(0.1)
+                                case .partialSuccess:
+                                    Color.orange.opacity(0.1)
+                                case .failed:
+                                    Color.red.opacity(0.1)
+                                default:
+                                    Color.clear
+                                }
+                            }
+                        )
+                        .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
                 }
             }
             .padding()
@@ -376,6 +451,20 @@ struct CalendarAssistantPopupView: View {
             低：娛樂活動
         """
         assistantViewModel.autoUpdateInput = defaultText
+    }
+
+    /// 注入預設文字2（供「預設2」按鈕使用）
+    private func insertDefaultText2() {
+        let defaultText2 = """
+        1. 已完成任務完全保留；
+        2. 針對所有未完成子任務（不論原定時間在過去或未來），依依賴關係／截止日／工時估算，自『今天（Asia/Taipei）』起重新分配開始／結束時間與優先度，必要時自動順延避免衝突；
+        3. 逾期任務自動移到最早可行時段並標記『延期重排』；
+        4. 自動合併重複或等價子任務、補上合理工時與緩衝；
+        5. 僅在需要時調整：狀態、開始時間、結束時間、優先度、所屬計畫、依賴；標題與備註若有助於清晰與可執行性可做必要更動；若不需要則維持不變（任務ID不可變更）；
+        6. 維持行程無重疊，尊重我提供的工作時段／不可排時段與硬截止日；
+        7. 無需向我確認，直接覆寫為最新排程；若仍有無法解的衝突，保留最佳可行解，並在受影響任務加上『需決策：原因』。
+        """
+        assistantViewModel.autoUpdateInput = defaultText2
     }
 
     // MARK: - Helper Views

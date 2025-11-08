@@ -55,6 +55,12 @@ final class CalendarAssistantViewModel: ObservableObject {
     private let lastUpdateDateKey = "CalendarAssistant_LastUpdateDate"
     private let autoUpdateEnabledKey = "CalendarAssistant_AutoUpdateEnabled"
     private let autoUpdateInputKey = "CalendarAssistant_AutoUpdateInput"
+    private let hasUndoneKey = "CalendarAssistant_HasUndone"
+
+    // 撤銷相關狀態
+    @Published var undoStatus: UndoStatus = .notStarted
+    @Published var undoMessage: String = ""
+    @Published var hasUndone: Bool = false  // 追蹤是否已經撤銷過
 
     // 每日自動更新設定
     @Published var autoUpdateEnabled: Bool = false {
@@ -340,6 +346,9 @@ final class CalendarAssistantViewModel: ObservableObject {
         lastAddedTasks = decoded.addedTasks
         lastDeletedTasks = decoded.deletedTasks
         lastUpdatedTasks = decoded.updatedTasks
+
+        // 【新增】載入撤銷狀態
+        hasUndone = UserDefaults.standard.bool(forKey: hasUndoneKey)
     }
 
     /// 儲存當前更新記錄到本地端
@@ -392,17 +401,32 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     /// 撤回上一次的更新操作
     func undoLastUpdate() async {
+        // 1. 檢查是否已經撤銷過
+        guard !hasUndone else {
+            print("⚠️ 已經執行過撤銷，無法重複撤銷")
+            undoStatus = .failed
+            undoMessage = "已經執行過撤銷，無法重複撤銷"
+            return
+        }
+
+        // 2. 原有的檢查邏輯
         guard !isUpdating else {
             print("⚠️ 正在更新中，無法執行撤回操作")
+            undoStatus = .failed
+            undoMessage = "正在更新中，無法執行撤回操作"
             return
         }
 
         guard !lastAddedTasks.isEmpty || !lastDeletedTasks.isEmpty || !lastUpdatedTasks.isEmpty else {
             print("⚠️ 沒有可以撤回的操作")
-            updateError = "沒有可以撤回的操作"
+            undoStatus = .failed
+            undoMessage = "沒有可以撤回的操作"
             return
         }
 
+        // 3. 設置撤銷中狀態
+        undoStatus = .inProgress
+        undoMessage = "正在撤回上次更新..."
         isUpdating = true
         currentStatus = "正在撤回上次更新..."
         updateError = nil
@@ -504,7 +528,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
                     let result = try await functions.httpsCallable("updateTask").call([
                         "taskId": original.id,
-                        "task": convertedData
+                        "updates": convertedData
                     ])
 
                     guard let data = result.data as? [String: Any],
@@ -536,16 +560,52 @@ final class CalendarAssistantViewModel: ObservableObject {
             }
         }
 
-        if failureCount > 0 {
+        // 4. 根據結果設置最終狀態
+        if successCount > 0 && failureCount == 0 {
+            undoStatus = .success
+            undoMessage = "撤銷成功！已恢復 \(successCount) 個任務"
+            hasUndone = true
+            UserDefaults.standard.set(true, forKey: hasUndoneKey)
+
+            // 【重要】撤銷成功後清除任務卡片記錄
+            clearLastUpdateStatus()
+            lastAddedTasks = []
+            lastDeletedTasks = []
+            lastUpdatedTasks = []
+
+            currentStatus = "撤回完成"
+            updateError = nil
+        } else if successCount > 0 && failureCount > 0 {
+            undoStatus = .partialSuccess
+            undoMessage = "部分撤銷成功：\(successCount) 個成功，\(failureCount) 個失敗"
+            hasUndone = true
+            UserDefaults.standard.set(true, forKey: hasUndoneKey)
+
+            // 【重要】部分成功也清除任務卡片記錄
+            clearLastUpdateStatus()
+            lastAddedTasks = []
+            lastDeletedTasks = []
+            lastUpdatedTasks = []
+
             currentStatus = "撤回完成，但有 \(failureCount) 個操作失敗"
             updateError = "部分撤回操作失敗"
         } else {
-            currentStatus = "撤回完成"
-            // 清除上次記錄
-            clearLastUpdateStatus()
+            undoStatus = .failed
+            undoMessage = "撤銷失敗：所有操作都失敗了"
+            currentStatus = "撤回失敗"
+            updateError = "撤回操作失敗"
+            // 注意：撤銷失敗時不清除任務卡片記錄，讓用戶可以看到原本的任務
         }
 
         isUpdating = false
+    }
+
+    /// 當有新的更新完成時，重置撤銷狀態
+    private func resetUndoStatus() {
+        hasUndone = false
+        UserDefaults.standard.set(false, forKey: hasUndoneKey)
+        undoStatus = .notStarted
+        undoMessage = ""
     }
 
     private func runUpdate(userInput: String) async {
@@ -635,7 +695,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
-                model: "gpt-5-mini",
+                model: "gpt-5",
                 messages: messages,
                 temperature: 1.0,
                 stream: false,
@@ -891,6 +951,9 @@ final class CalendarAssistantViewModel: ObservableObject {
                 lastDeletedTasks = deletedTasks
                 lastUpdatedTasks = updatedTasks
                 currentStatus = "處理完成"
+
+                // 【新增】重置撤銷狀態（因為有新的更新）
+                resetUndoStatus()
 
                 // 記錄更新時間（用於每日自動更新檢查，支援測試模式）
                 lastUpdateDate = getCurrentDate()
@@ -1430,12 +1493,17 @@ final class CalendarAssistantViewModel: ObservableObject {
     private func buildSystemPrompt() -> String {
         let tone = studySettings?.tone ?? "冷靜且專業的專家"
         let currentTimeString = getCurrentDate()
+
+        // 檢查是否有設定讀書習慣
+        let studySettingsText = formatStudySettings()
+        let hasStudySettings = !studySettingsText.isEmpty
+
         var prompt = """
             你是一個日曆安排助手，會根據使用者的需求自動調整日曆任務。你的語氣是：\(tone)
 
-            \(formatStudySettings())
+            \(studySettingsText)
 
-            當前系統時間：\(currentTimeString)
+            當前時間：\(currentTimeString)
 
             你的目標：
             1. 根據需求新增、刪除或修改任務
@@ -1445,22 +1513,32 @@ final class CalendarAssistantViewModel: ObservableObject {
             1. 如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話。
             2. 不要進行不必要的更新。使用常識判斷什麼是「不必要的」：
                 - 沒有實際變化的任務不需要更新
-                - 當使用者要求「更新任務到今天」時，只更新明顯過時的任務（例如昨天或更早的日期）
                 - 今天排程的任務（即使過去幾分鐘或幾小時）通常不需要更新，除非明顯過時
                 - 範例：如果現在時間是 14:30，任務排在今天 13:00，這不需要更新
                 - 範例：如果現在時間是 14:30，任務排在昨天，這需要更新
                 - 使用實際判斷：同一天內的輕微時間差異是可以接受的，不需要更新
-            3. 如果使用者沒有指定特定時段，安排任務時必須遵循以下規則：
+            3. 更新任務時，如有其必要性，則需對標題或是備註做適當的更新（備注要標明確要做的事情）。若不必要，則不用更動標題或是備註。
+            """
+        // 只有在有設定讀書習慣時才加入第3條規則
+        if hasStudySettings {
+            prompt += """
+            3. 安排任務時必須遵循以下規則：
                 - 任務只能在使用者設定的讀書日期和時間內安排
                 - 每個任務的持續時間應該是設定的讀書時間（\(studySettings?.studyDuration ?? 60) 分鐘）
                 - 不要在設定的時間範圍外安排任務
                 - 不要與現有任務時間重疊
-            4. 安排任務時，如果使用者要求很多任務（例如一兩百個任務），你必須滿足使用者的要求，一次全部安排。
-            5. 如果沒有指定時間，表示現在。
-            6. 如果沒有要求更改時間，不要修改時間（例如使用者沒有要求更改時間時）。
-            7. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
-            8. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
+            4. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
+            5. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
+            6. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
             """
+        } else {
+            prompt += """
+
+            3. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
+            4. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
+            5. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
+            """
+        }
 
         let existingTasksInfo = formatExistingTasks()
         if !existingTasksInfo.isEmpty {
@@ -1788,4 +1866,15 @@ struct LastUpdateStatus: Codable {
 private struct UpdatedTaskPair: Codable {
     let original: TodoTask
     let updated: PendingTask
+}
+
+// MARK: - UndoStatus Enum
+
+/// 撤銷狀態枚舉
+enum UndoStatus {
+    case notStarted      // 尚未執行撤銷
+    case inProgress      // 撤銷進行中
+    case success         // 撤銷完全成功
+    case partialSuccess  // 部分成功
+    case failed          // 撤銷失敗
 }
