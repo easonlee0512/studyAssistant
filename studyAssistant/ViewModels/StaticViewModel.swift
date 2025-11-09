@@ -265,7 +265,7 @@ class StaticViewModel: ObservableObject {
             updatedStatistic.updatedAt = Date()
 
             // 準備統計數據
-            let data: [String: Any] = [
+            var data: [String: Any] = [
                 "userId": updatedStatistic.userId,
                 "category": updatedStatistic.category,
                 "progress": updatedStatistic.progress,
@@ -277,14 +277,16 @@ class StaticViewModel: ObservableObject {
                 "version": updatedStatistic.version
             ]
 
+            // 如果有 ID，加入到 data 中
+            if let statisticId = updatedStatistic.id {
+                data["id"] = statisticId
+            }
+
             // 轉換 Timestamp 為 ISO 8601 字符串
             let convertedData = convertTimestampsToStrings(data)
 
             // 調用 Cloud Functions 更新統計數據
-            var parameters: [String: Any] = ["statistic": convertedData]
-            if let statisticId = updatedStatistic.id {
-                parameters["statisticId"] = statisticId
-            }
+            let parameters: [String: Any] = ["statistic": convertedData]
 
             let result = try await functions.httpsCallable("updateStatistic").call(parameters)
 

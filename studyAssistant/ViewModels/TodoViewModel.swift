@@ -409,16 +409,16 @@ class TodoViewModel: ObservableObject {
     private func processCompletionQueue() async {
         guard !isProcessingQueue else { return }
         isProcessingQueue = true
-        
+
         while !completionUpdateQueue.isEmpty {
             // 取得並移除第一個待更新的任務
             guard let (taskId, (task, retryCount)) = completionUpdateQueue.first else { break }
             completionUpdateQueue.removeValue(forKey: taskId)
-            
+
             do {
-                // 嘗試保存到 Firebase
-                try await firebaseService.saveTodoTask(task)
-                
+                // 使用專門的 toggleTaskCompletion API 更新完成狀態
+                try await firebaseService.toggleTaskCompletion(taskId: taskId, isCompleted: task.isCompleted)
+
                 // 發送局部更新通知
                 NotificationCenter.default.post(
                     name: .todoTaskDidUpdate,
@@ -427,7 +427,7 @@ class TodoViewModel: ObservableObject {
                 )
             } catch {
                 print("Error updating task completion: \(error)")
-                
+
                 // 如果失敗且重試次數未超過限制，重新加入佇列
                 if retryCount < 3 {
                     completionUpdateQueue[taskId] = (task, retryCount + 1)
@@ -438,16 +438,16 @@ class TodoViewModel: ObservableObject {
                         originalTask.isCompleted.toggle()
                         tasks[index] = originalTask
                     }
-                    
+
                     // 通知用戶更新失敗
                     errorMessage = "更新任務狀態失敗，請稍後再試"
                 }
             }
-            
+
             // 短暫延遲，避免過於頻繁的請求
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1秒
         }
-        
+
         isProcessingQueue = false
     }
     

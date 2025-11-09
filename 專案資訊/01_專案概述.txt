@@ -265,7 +265,7 @@ Cloud Functions: 24+ endpoints
 ===========================================
 
 【1. 智能化】
-- GPT-4 驅動的 AI 助手
+- GPT-5-mini 驅動的 AI 助手
 - 自動任務規劃
 - 智能學習建議
 - Function Calling 整合

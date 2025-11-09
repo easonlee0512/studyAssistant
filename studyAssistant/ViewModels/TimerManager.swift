@@ -221,7 +221,8 @@ class TimerManager: ObservableObject {
     // Start or pause the timer
     func toggleTimer() {
         if isRunning {
-            // 暫停計時器
+            // 暫停計時器前先保存記錄
+            saveTimerRecord(isCompleted: false)
             pauseTimer()
             isRunning = false
         } else {

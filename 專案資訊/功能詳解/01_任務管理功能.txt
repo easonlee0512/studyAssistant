@@ -257,7 +257,7 @@ enum ValidationError: LocalizedError {
    - 避免頻繁網路請求
 
 2. 樂觀更新
-   - 立即更�� UI
+   - 立即更新 UI
    - 背景同步到伺服器
    - 失敗時回滾
 

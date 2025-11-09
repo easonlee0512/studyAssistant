@@ -267,6 +267,32 @@ class FirebaseService: DataServiceProtocol {
             throw error
         }
     }
+
+    // 切換非重複任務的完成狀態
+    func toggleTaskCompletion(taskId: String, isCompleted: Bool) async throws {
+        currentSyncStatus = .syncing
+
+        do {
+            // 調用 Cloud Functions 切換任務完成狀態
+            let result = try await functions.httpsCallable("toggleTaskCompletion").call([
+                "taskId": taskId,
+                "isCompleted": isCompleted
+            ])
+
+            guard let data = result.data as? [String: Any],
+                  let success = data["success"] as? Bool,
+                  success else {
+                throw NSError(domain: "FirebaseServiceErrorDomain", code: -1,
+                             userInfo: [NSLocalizedDescriptionKey: "更新任務完成狀態失敗"])
+            }
+
+            lastSync = Date()
+            currentSyncStatus = .synced
+        } catch {
+            currentSyncStatus = .error(.networkError)
+            throw error
+        }
+    }
     
     // MARK: - Private Data Access
     private func saveUserProfile(_ profile: UserProfile) async throws {

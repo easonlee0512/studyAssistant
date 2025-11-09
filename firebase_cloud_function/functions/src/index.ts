@@ -638,8 +638,9 @@ export const fetchStatistics = onCall(
 
       const statisticsSnapshot = await admin
         .firestore()
+        .collection("userStatistics")
+        .doc(userId)
         .collection("statistics")
-        .where("userId", "==", userId)
         .get();
 
       console.log(`[fetchStatistics] 查詢完成，找到 ${statisticsSnapshot.size} 條記錄`);
@@ -698,10 +699,36 @@ export const updateStatistic = onCall(
     }
 
     try {
-      const statRef = db.collection("userStatistics")
-        .doc(userId)
-        .collection("statistics")
-        .doc(statistic.id || db.collection("userStatistics").doc().id);
+      let statRef;
+
+      if (statistic.id) {
+        // 情況1：如果有 ID，直接使用該 ID 更新
+        statRef = db.collection("userStatistics")
+          .doc(userId)
+          .collection("statistics")
+          .doc(statistic.id);
+      } else {
+        // 情況2：如果沒有 ID，先檢查是否已存在相同類別的統計
+        const existingStats = await db.collection("userStatistics")
+          .doc(userId)
+          .collection("statistics")
+          .where("category", "==", statistic.category)
+          .limit(1)
+          .get();
+
+        if (!existingStats.empty) {
+          // 找到現有記錄 → 更新它
+          statRef = existingStats.docs[0].ref;
+          console.log(`找到現有統計記錄：${statistic.category}，使用 ID: ${statRef.id}`);
+        } else {
+          // 沒有現有記錄 → 建立新的
+          statRef = db.collection("userStatistics")
+            .doc(userId)
+            .collection("statistics")
+            .doc();
+          console.log(`建立新統計記錄：${statistic.category}，ID: ${statRef.id}`);
+        }
+      }
 
       await statRef.set({
         ...statistic,
