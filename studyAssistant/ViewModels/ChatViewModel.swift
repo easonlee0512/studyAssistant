@@ -91,10 +91,12 @@ struct OpenAIFunction: Codable {
         struct PropertyObject: Codable {
             let type: String
             let properties: [String: Property]?
+            let required: [String]?
 
-            init(type: String, properties: [String: Property]? = nil) {
+            init(type: String, properties: [String: Property]? = nil, required: [String]? = nil) {
                 self.type = type
                 self.properties = properties
+                self.required = required
             }
         }
     }
@@ -165,10 +167,12 @@ struct ToolFunction: Codable {
         struct PropertyObject: Codable {
             let type: String
             let properties: [String: Property]?
+            let required: [String]?
 
-            init(type: String, properties: [String: Property]? = nil) {
+            init(type: String, properties: [String: Property]? = nil, required: [String]? = nil) {
                 self.type = type
                 self.properties = properties
+                self.required = required
             }
         }
     }
@@ -537,7 +541,7 @@ final class ChatViewModel: ObservableObject {
                                 "category": .init(
                                     type: "string",
                                     description:
-                                        "Task category (required), Based on these tasks, assign an overall category,based on the all task's title and note"
+                                        "Task category (REQUIRED - must not be empty). Analyze the task content and assign a specific, meaningful category name. Do NOT use generic terms like '未分類' or 'Uncategorized'. Based on the task's title and note, provide a clear, descriptive category."
                                 ),
                                 "startDate": .init(
                                     type: "string",
@@ -570,7 +574,8 @@ final class ChatViewModel: ObservableObject {
                                         - Blue: Routine or regular tasks
                                         """
                                 ),
-                            ]
+                            ],
+                            required: ["title", "note", "category", "startDate", "endDate", "isAllDay", "isCompleted"]
                         )
                     )
                 ],
@@ -794,8 +799,8 @@ final class ChatViewModel: ObservableObject {
     private func checkAndCreateStatisticsForCategory(_ category: String) async {
         guard let staticViewModel = staticViewModel else { return }
 
-        // 如果類別為空或為「未分類」，則不創建統計
-        guard !category.isEmpty && category != "未分類" else {
+        // 如果類別為空，則不創建統計
+        guard !category.isEmpty else {
             return
         }
 
@@ -1070,35 +1075,35 @@ final class ChatViewModel: ObservableObject {
         let systemMsg = OpenAIMessage(
             role: "system",
             content: """
-                你可以安排計劃，目標是用最少的提問，為使用者排出具體且可執行的時間表。語氣為：\(tone)
-                
+                為協助使用者高效、正確地安排行程，請依以下規則進行，並盡可能減少追問。請產生具體且可執行的時間安排表。
+                執行前，請先列出3-7項簡明分解步驟（Checklist），以概念性子任務為主，不含實作細節。
+                語氣依設定：\(tone)
                 \(formatStudySettings())
-
                 特別注意：
-                1. **如果你要結束對話，請務必呼叫 end_conversation function，不要只用文字說再見。**
-                2. 在以下情況要主動結束對話：
-                    - 使用者明確表示要結束對話
-                    - 使用者的需求已完整處理完畢
-                    - 對話已經沒有明確目標或進展
-                3. 講話講重點就好了。
-                4. 不要重複呼叫同一個 function，除非有新需求或新資訊。
-                5. 不要在文字裡打出要用的function。
-                6. 詢問後不要使用任何function(除了end_conversation)，請詢問完後馬上使用end_conversation函式。
-                7. 如有疑問需要向使用者請教，那先等使用者回答之後再使用除end_conversation外的function。
-                8. 如果使用者沒有指定特別時段，那安排任務時間時必須遵守以下規則：
-                    - 只能在使用者設定的可讀書日期和時間內安排任務
-                    - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
-                    - 不要在設定的時間範圍外安排任務
-                    - 不要與原有的任務時間重疊
-                9. 新增刪除修改任務前，務必特別再確認現在時間是什麼時候，並確認使用者已經有的任務。
-                10. 新增、刪除、修改任務後要跟使用者解釋做了什麼改變。
-                11. 安排任務時如果使用者要求安排很多任務（例如一兩百個任務），必須要遵從使用者的安排一次安排好一兩百個任務，不要先安排幾個然後再問使用者是否要安排更多。
-                12. 使用者提到要幹嘛，請直接依照現在時間安排任務。
-                13. 沒有指定時間就是現在。
-                14. 不要叫使用者等待gpt安排任務。
-                15. 安排任務請直接安排，不要只用文字說明。
-                16. 安排任務就是要直接新增任務，不要只用文字說明。
-                17. 更新任務時，如有其必要性，則需對標題或是備註做適當的更新（備注要標明確要做的事情）。若不必要，則不用更動標題或是備註。
+                1. **如需結束對話，務必呼叫 end_conversation function，不要僅以文字表示再見。**
+                2. 以下情況需主動結束對話：
+                - 使用者明確表示要結束對話
+                - 需求已完整處理完畢
+                - 對話已經沒有明確目標或進展
+                3. 回答以簡明扼要為主。
+                4. 不要重複呼叫同一內容相同的function，除非有新需求或新資訊。
+                5. 不要於文字內容中輸出 function 名稱。
+                6. 執行詢問（需等使用者回應）時，詢問後「不可」立即呼叫 function（除了 end_conversation）。必須待使用者回覆所需訊息後，再依回覆呼叫相應 function。
+                7. 有疑問需向使用者澄清時，請先詢問，待回應後再根據資訊執行相關 function（除 end_conversation）。
+                8. 安排行程時，若未指定「可用時間」或「特定時段」，僅能安排行於使用者設定的可讀書日期及時間內，嚴禁超出範圍。若未設任何可用時段，僅可安排在「現在」這段時間。
+                - 每個任務的持續時間應為設定的讀書時間（\(studySettings?.studyDuration ?? 60)分鐘）
+                - 不可安排於已設時段之外。
+                - 不可與已有任務時間重疊。
+                9. 新增、刪除、修改任務前，須再次確認目前時間並檢查已有任務狀況。
+                10. 新增、刪除、修改任務後，要明確向使用者解釋做了哪些變更。
+                11. 如需安排大量任務（如一、兩百個），需一次性安排，勿分批反覆詢問是否繼續。
+                12. 使用者提出要求時，請直接依「現有可排時間」規則安排，不需再問時間。
+                13. 未指定時間時，預設「現在」為可安排時段。但若當前時間不在可用時段範圍內，則不可安排行程，直到有新的可用時段資訊。
+                14. 不要要求使用者等待 GPT 安排行程。
+                15. 安排行程務必直接執行，不要僅用文字說明。
+                16. 安排行程需直接新增任務，不要只以文字表示。
+                17. 更新任務時，如屬必要，需同步更新標題或備註（說明內容要明確）；如不必則不需修改標題或備註。
+                18. **每個任務必須指定具體且有意義的類別名稱，不可使用「未分類」、「Uncategorized」或空白。** 請根據任務內容分析並提供清晰、描述性的類別（如：「數學」、「英文」、「運動」等）。
                 """
         )
         var allMessages = [systemMsg] + apiMsgs

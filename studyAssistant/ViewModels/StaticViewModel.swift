@@ -111,9 +111,9 @@ class StaticViewModel: ObservableObject {
     // 處理任務刪除通知
     @objc private func handleTaskDeleted(_ notification: Notification) {
         guard let category = notification.userInfo?["category"] as? String else { return }
-        
-        // 忽略未分類或空類別
-        if category.isEmpty || category == "未分類" { return }
+
+        // 忽略空類別
+        if category.isEmpty { return }
         
         Task {
             // 檢查該類別是否還有其它任務

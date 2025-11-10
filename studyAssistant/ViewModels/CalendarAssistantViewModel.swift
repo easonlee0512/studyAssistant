@@ -109,7 +109,10 @@ final class CalendarAssistantViewModel: ObservableObject {
                             properties: [
                                 "title": .init(type: "string", description: "Task title (required)"),
                                 "note": .init(type: "string", description: "Task note (required)"),
-                                "category": .init(type: "string", description: "Task category (required), Based on these tasks, assign an overall category,based on the all task's title and note"),
+                                "category": .init(
+                                    type: "string",
+                                    description: "Task category (REQUIRED - must not be empty). Analyze the task content and assign a specific, meaningful category name. Do NOT use generic terms like '未分類' or 'Uncategorized'. Based on the task's title and note, provide a clear, descriptive category."
+                                ),
                                 "startDate": .init(type: "string", description: "Start date in ISO 8601 format (required)"),
                                 "endDate": .init(type: "string", description: "End date in ISO 8601 format (required)"),
                                 "isAllDay": .init(type: "string", description: "Whether the task is all day, must be 'true' or 'false' (required)"),
@@ -129,7 +132,8 @@ final class CalendarAssistantViewModel: ObservableObject {
                                         - Blue: Routine or regular tasks
                                         """
                                 )
-                            ]
+                            ],
+                            required: ["title", "note", "category", "startDate", "endDate", "isAllDay", "isCompleted"]
                         )
                     )
                 ],
@@ -1465,7 +1469,7 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     private func checkAndCreateStatisticsForCategory(_ category: String) async {
         guard let staticViewModel = staticViewModel else { return }
-        guard !category.isEmpty && category != "未分類" else { return }
+        guard !category.isEmpty else { return }
 
         let existingCategories = staticViewModel.statistics.map { $0.category }
         if !existingCategories.contains(category) {
@@ -1518,25 +1522,26 @@ final class CalendarAssistantViewModel: ObservableObject {
                 - 範例：如果現在時間是 14:30，任務排在昨天，這需要更新
                 - 使用實際判斷：同一天內的輕微時間差異是可以接受的，不需要更新
             3. 更新任務時，如有其必要性，則需對標題或是備註做適當的更新（備注要標明確要做的事情）。若不必要，則不用更動標題或是備註。
+            4. **每個任務必須指定具體且有意義的類別名稱，不可使用「未分類」、「Uncategorized」或空白。** 請根據任務內容分析並提供清晰、描述性的類別（如：「數學」、「英文」、「運動」等）。
             """
         // 只有在有設定讀書習慣時才加入第3條規則
         if hasStudySettings {
             prompt += """
-            3. 安排任務時必須遵循以下規則：
+            5. 安排任務時必須遵循以下規則：
                 - 任務只能在使用者設定的讀書日期和時間內安排
                 - 每個任務的持續時間應該是設定的讀書時間（\(studySettings?.studyDuration ?? 60) 分鐘）
                 - 不要在設定的時間範圍外安排任務
                 - 不要與現有任務時間重疊
-            4. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
-            5. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
-            6. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
+            6. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
+            7. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
+            8. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
             """
         } else {
             prompt += """
 
-            3. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
-            4. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
-            5. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
+            5. 所有要安排的任務（新增、刪除、修改）皆必須在使用end_conversation（結束對話）之前都安排完成。
+            6. 你必須完全遵循使用者的指示，不要添加額外的規則或假設。
+            7. 使用使用者的語言回應（例如使用中文時用中文回應，使用英文時用英文回應）。
             """
         }
 
