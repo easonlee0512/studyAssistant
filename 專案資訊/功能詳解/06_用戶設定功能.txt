@@ -112,9 +112,10 @@ struct UserProfile: Codable, Identifiable {
 
 資料結構:
 struct AppSettings: Codable {
-    var id: String                  // 設定唯一識別碼
-    var notificationsEnabled: Bool  // 通知開關
-    var lastModified: Date          // 最後修改時間
+    var id: String                      // 設定唯一識別碼
+    var notificationsEnabled: Bool      // 通知總開關
+    var notificationOffsetMinutes: Int  // 提前提醒時間（分鐘）
+    var lastModified: Date              // 最後修改時間
 }
 
 核心方法:
@@ -122,7 +123,8 @@ struct AppSettings: Codable {
 1. static func defaultSettings() -> AppSettings
    作用: 創建預設應用設定
    返回值:
-   - notificationsEnabled: true
+   - notificationsEnabled: false（預設關閉，讓使用者自行開啟）
+   - notificationOffsetMinutes: 10（預設提前 10 分鐘）
    - lastModified: 當前時間
 
 2. init?(documentId: String, data: [String: Any])
@@ -411,14 +413,22 @@ private var profileListener: ListenerRegistration?  // Profile 監聽器
    - 發送通知讓其他視圖更新
    - 詳細的錯誤訊息
 
-5. func updateAppSettings(notificationsEnabled: Bool) async
-   作用: 更新應用設定
+5. func updateAppSettings(
+       notificationsEnabled: Bool? = nil,
+       notificationOffsetMinutes: Int? = nil
+   ) async
+   作用: 更新應用設定（支援選擇性更新）
 
    流程:
    ┌─────────────────────────────────────┐
    │ 1. 創建更新的 Settings              │
    │    var updatedSettings = appSettings│
-   │    updatedSettings.notificationsEnabled = ...│
+   │    if let enabled = notificationsEnabled {│
+   │        updatedSettings.notificationsEnabled = enabled│
+   │    }                                │
+   │    if let offset = notificationOffsetMinutes {│
+   │        updatedSettings.notificationOffsetMinutes = offset│
+   │    }                                │
    │    updatedSettings.lastModified = Date()│
    │                                     │
    │ 2. 呼叫資料服務更新                 │
@@ -433,6 +443,10 @@ private var profileListener: ListenerRegistration?  // Profile 監聽器
    │      ├─ syncStatus = .error(.syncError)│
    │      └─ errorMessage = ...          │
    └─────────────────────────────────────┘
+
+   特點:
+   - 使用 Optional 參數，只更新傳入的欄位
+   - 其他欄位保持不變
 
 6. func clearAllData()
    作用: 清除所有用戶資料（登出時呼叫）

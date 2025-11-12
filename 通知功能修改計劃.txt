@@ -1,0 +1,1024 @@
+================================================================================
+                    iOS 任務通知功能 - 完整修改計劃
+================================================================================
+
+【專案現況分析】
+
+✓ MVVM 架構，ViewModel 和 View 分離清晰
+✓ Firebase 整合 (Firestore + Auth)
+✓ 完整的任務管理系統 (TodoTask 模型)
+✓ 應用內事件通知系統 (NotificationCenter)
+✓ UserDefaults 本地設定儲存
+✓ 支援重複任務 (每日/每週/每月)
+
+✗ 目前缺少：iOS 系統級的本地推送通知 (UNUserNotificationCenter)
+
+================================================================================
+                            實作計劃
+================================================================================
+
+
+--------------------------------------------------------------------------------
+階段一：建立通知管理器
+--------------------------------------------------------------------------------
+
+【新增檔案】
+  studyAssistant/Managers/NotificationManager.swift
+
+【功能需求】
+  1. 請求通知權限
+  2. 排程本地通知（單次 & 重複）
+  3. 取消/更新通知
+  4. 處理通知回應
+  5. 管理每個任務的通知設定
+  6. 查詢通知權限狀態
+
+【技術要點】
+  - 使用 UNUserNotificationCenter
+  - 單例模式 (Singleton)
+  - 支援前景/背景通知
+  - 與任務 ID 綁定，便於取消/更新
+
+【核心方法】
+  • requestAuthorization() -> 請求通知權限
+  • scheduleNotification(for task: TodoTask) -> 排程任務通知
+  • cancelNotification(for taskId: String) -> 取消任務通知
+  • updateNotification(for task: TodoTask) -> 更新任務通知
+  • cancelAllNotifications() -> 取消所有通知
+  • getPendingNotifications() -> 查詢待處理通知
+  • checkAuthorizationStatus() -> 檢查權限狀態
+
+【預估時間】2-3 小時
+
+
+--------------------------------------------------------------------------------
+階段二：擴展 TodoTask 模型
+--------------------------------------------------------------------------------
+
+【修改檔案】
+  studyAssistant/Models/TodoTask.swift
+
+【新增欄位】
+  var notificationEnabled: Bool = false      // 是否啟用通知
+  var notificationTime: Date?                // 通知時間（如果不同於開始時間）
+  var notificationOffset: Int = 0            // 提前多少分鐘提醒
+
+【notificationOffset 選項】
+  • 0 分鐘（準時提醒）
+  • 5 分鐘前
+  • 10 分鐘前
+  • 15 分鐘前
+  • 30 分鐘前
+  • 60 分鐘前
+
+【需要更新的方法】
+  1. init(title:note:...) - 加入新欄位初始化
+  2. init?(documentId:data:) - Firestore 反序列化
+  3. toFirestore - Firestore 序列化
+  4. encode(to:) - Codable 編碼
+  5. init(from:) - Codable 解碼
+
+【預估時間】1 小時
+
+
+--------------------------------------------------------------------------------
+階段三：擴展 TodoViewModel
+--------------------------------------------------------------------------------
+
+【修改檔案】
+  studyAssistant/ViewModels/TodoViewModel.swift
+
+【新增屬性】
+  private let notificationManager = NotificationManager.shared
+
+【新增表單狀態】
+  @Published var newTaskNotificationEnabled = false
+  @Published var newTaskNotificationOffset = 0
+
+【需要修改的方法】
+
+  1. initNewTaskForm(selectedDate:)
+     → 初始化通知相關欄位
+
+  2. saveNewTask()
+     → 儲存任務後，如果啟用通知則排程通知
+
+  3. addTask(_ task:)
+     → 新增任務後排程通知
+
+  4. deleteTask(_ task:)
+     → 刪除任務前取消通知
+
+  5. updateTask(_ task:)
+     → 更新任務時，重新排程通知
+
+  6. toggleTaskCompletion(_ task:)
+     → 完成任務時，可選擇取消通知
+
+【新增方法】
+  func scheduleNotificationForTask(_ task: TodoTask)
+  func cancelNotificationForTask(_ taskId: String)
+  func updateNotificationForTask(_ task: TodoTask)
+
+【重複任務特殊處理】
+  - 每日任務：排程接下來 7 天的通知
+  - 每週任務：排程接下來 4 週的通知
+  - 每月任務：排程接下來 3 個月的通知
+  - 注意：iOS 最多 64 個待處理通知
+
+【預估時間】2-3 小時
+
+
+--------------------------------------------------------------------------------
+階段四：更新 UI 元件
+--------------------------------------------------------------------------------
+
+【修改檔案 1】
+  studyAssistant/Views/TodoAddView.swift
+
+【新增 UI 元素】
+  1. 通知啟用開關
+     Toggle("提醒通知", isOn: $todoViewModel.newTaskNotificationEnabled)
+
+  2. 提前提醒時間選擇器
+     if todoViewModel.newTaskNotificationEnabled {
+         Picker("提前提醒", selection: $todoViewModel.newTaskNotificationOffset) {
+             Text("準時").tag(0)
+             Text("5 分鐘前").tag(5)
+             Text("10 分鐘前").tag(10)
+             Text("15 分鐘前").tag(15)
+             Text("30 分鐘前").tag(30)
+             Text("1 小時前").tag(60)
+         }
+     }
+
+  3. 權限提示（如果用戶未授權）
+     if !notificationManager.isAuthorized {
+         Text("請在設定中開啟通知權限")
+             .foregroundColor(.orange)
+     }
+
+【預估時間】1-2 小時
+
+【修改檔案 2】
+  studyAssistant/Views/TodoEditView.swift
+
+【新增 UI 元素】
+  1. 通知設定區段（與 TodoAddView 相同）
+  2. 修改通知後的即時更新邏輯
+
+【預估時間】1-2 小時
+
+【修改檔案 3】
+  studyAssistant/Views/SettingsView.swift
+
+【新增設定區段】
+  Section(header: Text("通知設定")) {
+      // 全域通知開關
+      Toggle("啟用任務通知", isOn: $enableNotifications)
+
+      // 預設提前提醒時間
+      Picker("預設提醒時間", selection: $defaultNotificationOffset) {
+          Text("準時").tag(0)
+          Text("5 分鐘前").tag(5)
+          Text("10 分鐘前").tag(10)
+          Text("15 分鐘前").tag(15)
+          Text("30 分鐘前").tag(30)
+          Text("1 小時前").tag(60)
+      }
+
+      // 通知權限狀態
+      HStack {
+          Text("通知權限")
+          Spacer()
+          Text(notificationStatus)
+              .foregroundColor(notificationAuthorized ? .green : .red)
+      }
+
+      // 前往系統設定按鈕（如果未授權）
+      if !notificationAuthorized {
+          Button("前往設定開啟通知") {
+              if let url = URL(string: UIApplication.openSettingsURLString) {
+                  UIApplication.shared.open(url)
+              }
+          }
+      }
+
+      // 查看所有待處理通知
+      Button("查看待處理通知") {
+          showPendingNotifications()
+      }
+  }
+
+【新增 UserDefaults 欄位】
+  @AppStorage("enableNotifications") var enableNotifications = true
+  @AppStorage("defaultNotificationOffset") var defaultNotificationOffset = 10
+
+【預估時間】1 小時
+
+
+--------------------------------------------------------------------------------
+階段五：應用程式生命週期整合
+--------------------------------------------------------------------------------
+
+【修改檔案】
+  studyAssistant/studyAssistantApp.swift
+
+【在 init() 中加入】
+  // 請求通知權限
+  Task {
+      await NotificationManager.shared.requestAuthorization()
+  }
+
+  // 設定通知代理
+  UNUserNotificationCenter.current().delegate = notificationDelegate
+
+【新增 UNUserNotificationCenterDelegate】
+  class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+      // 前景通知處理
+      func userNotificationCenter(
+          _ center: UNUserNotificationCenter,
+          willPresent notification: UNNotification
+      ) async -> UNNotificationPresentationOptions {
+          return [.banner, .sound, .badge]
+      }
+
+      // 通知點擊處理
+      func userNotificationCenter(
+          _ center: UNUserNotificationCenter,
+          didReceive response: UNNotificationResponse
+      ) async {
+          let taskId = response.notification.request.identifier
+
+          switch response.actionIdentifier {
+          case "COMPLETE_ACTION":
+              // 標記任務為完成
+              break
+          case "SNOOZE_ACTION":
+              // 稍後提醒（10分鐘後）
+              break
+          default:
+              // 點擊通知，導航到任務詳情
+              break
+          }
+      }
+  }
+
+【與日曆智能助手整合】
+  在 CalendarAssistantViewModel 的自動更新任務後：
+  // 任務時間被重新安排後，同步更新通知
+  for task in updatedTasks {
+      if task.notificationEnabled {
+          await NotificationManager.shared.updateNotification(for: task)
+      }
+  }
+
+【預估時間】2-3 小時
+
+
+--------------------------------------------------------------------------------
+階段六：通知設定儲存
+--------------------------------------------------------------------------------
+
+【儲存方式】
+  1. 任務的通知設定 → Firestore（隨任務一起儲存）
+  2. 全域預設值 → UserDefaults（使用 @AppStorage）
+
+【UserDefaults 欄位】
+  @AppStorage("enableNotifications") var enableNotifications = true
+  @AppStorage("defaultNotificationOffset") var defaultNotificationOffset = 10
+  @AppStorage("notificationSound") var notificationSound = "default"
+
+【Firestore 欄位】（已在階段二加入）
+  - notificationEnabled
+  - notificationTime
+  - notificationOffset
+
+【預估時間】0.5-1 小時
+
+
+--------------------------------------------------------------------------------
+階段七：特殊場景處理
+--------------------------------------------------------------------------------
+
+【1. 重複任務通知排程】
+
+策略：動態排程，避免超過 64 個限制
+
+• 每日任務：
+  - 排程接下來 7 天
+  - 使用 UNCalendarNotificationTrigger
+  - 每週自動補充新的通知
+
+• 每週任務：
+  - 排程接下來 4 週
+  - 根據 startDate 的星期幾排程
+
+• 每月任務：
+  - 排程接下來 3 個月
+  - 根據 startDate 的日期排程
+
+【實作方法範例】
+  func scheduleRepeatingNotifications(for task: TodoTask) {
+      let calendar = Calendar.current
+
+      switch task.repeatType {
+      case .daily:
+          for day in 0..<7 {
+              let notificationDate = calendar.date(
+                  byAdding: .day,
+                  value: day,
+                  to: task.startDate
+              )!
+              scheduleNotification(for: task, on: notificationDate)
+          }
+
+      case .weekly:
+          for week in 0..<4 {
+              let notificationDate = calendar.date(
+                  byAdding: .weekOfYear,
+                  value: week,
+                  to: task.startDate
+              )!
+              scheduleNotification(for: task, on: notificationDate)
+          }
+
+      case .monthly:
+          for month in 0..<3 {
+              let notificationDate = calendar.date(
+                  byAdding: .month,
+                  value: month,
+                  to: task.startDate
+              )!
+              scheduleNotification(for: task, on: notificationDate)
+          }
+
+      case .none:
+          scheduleNotification(for: task, on: task.startDate)
+      }
+  }
+
+【2. 智能更新任務後的通知同步】
+
+當日曆智能助手重新安排任務時：
+
+  // 在 CalendarAssistantViewModel 中
+  func updateTasksWithNotificationSync(
+      _ updates: [(taskId: String, updates: [String: Any])]
+  ) async throws {
+      for (taskId, updateData) in updates {
+          // 1. 取消舊通知
+          NotificationManager.shared.cancelNotification(for: taskId)
+
+          // 2. 更新任務
+          try await todoViewModel.updateTask(updates: updateData, taskId: taskId)
+
+          // 3. 如果任務啟用通知，排程新通知
+          if let task = todoViewModel.getTaskById(taskId),
+             task.notificationEnabled {
+              await NotificationManager.shared.scheduleNotification(for: task)
+          }
+      }
+  }
+
+【3. 64 個通知限制處理】
+
+優先級策略：
+  1. 近期任務優先（7 天內）
+  2. 未完成任務優先
+  3. 非重複任務優先（重複任務可以之後補充）
+
+  func manageNotificationLimit() async {
+      let pending = await UNUserNotificationCenter
+          .current()
+          .pendingNotificationRequests()
+
+      if pending.count >= 60 { // 留 4 個緩衝
+          // 取消 7 天後的通知
+          let requests = pending.filter { request in
+              if let trigger = request.trigger as? UNCalendarNotificationTrigger,
+                 let nextTriggerDate = trigger.nextTriggerDate() {
+                  return nextTriggerDate > Date().addingTimeInterval(7 * 24 * 60 * 60)
+              }
+              return false
+          }
+
+          for request in requests {
+              UNUserNotificationCenter.current()
+                  .removePendingNotificationRequests(
+                      withIdentifiers: [request.identifier]
+                  )
+          }
+      }
+  }
+
+【4. 通知內容客製化】
+
+  let content = UNMutableNotificationContent()
+  content.title = "任務提醒"
+  content.body = task.title
+  content.sound = .default
+  content.badge = 1
+
+  // 根據類別加入 emoji
+  let categoryEmoji: [String: String] = [
+      "學習": "📚",
+      "運動": "🏃",
+      "工作": "💼",
+      "生活": "🏠"
+  ]
+  if let emoji = categoryEmoji[task.category] {
+      content.body = "\(emoji) \(task.title)"
+  }
+
+  // 加入任務詳情
+  if !task.note.isEmpty {
+      content.subtitle = task.note
+  }
+
+  // 加入時間資訊
+  let timeFormatter = DateFormatter()
+  timeFormatter.dateFormat = "HH:mm"
+  content.body += "\n⏰ \(timeFormatter.string(from: task.startDate))"
+
+  // 動作按鈕
+  content.categoryIdentifier = "TASK_REMINDER"
+
+【定義通知動作】
+  let completeAction = UNNotificationAction(
+      identifier: "COMPLETE_ACTION",
+      title: "標記完成",
+      options: [.foreground]
+  )
+
+  let snoozeAction = UNNotificationAction(
+      identifier: "SNOOZE_ACTION",
+      title: "稍後提醒",
+      options: []
+  )
+
+  let category = UNNotificationCategory(
+      identifier: "TASK_REMINDER",
+      actions: [completeAction, snoozeAction],
+      intentIdentifiers: [],
+      options: .customDismissAction
+  )
+
+  UNUserNotificationCenter.current().setNotificationCategories([category])
+
+【預估時間】3-4 小時
+
+
+================================================================================
+                            檔案清單
+================================================================================
+
+【需要新增的檔案】（1個）
+  studyAssistant/Managers/NotificationManager.swift
+
+【需要修改的檔案】（7個）
+  studyAssistant/Models/TodoTask.swift
+  studyAssistant/ViewModels/TodoViewModel.swift
+  studyAssistant/Views/TodoAddView.swift
+  studyAssistant/Views/TodoEditView.swift
+  studyAssistant/Views/SettingsView.swift
+  studyAssistant/studyAssistantApp.swift
+  studyAssistant/Constants/NotificationConstants.swift (可選)
+
+
+================================================================================
+                        技術挑戰與解決方案
+================================================================================
+
+  挑戰                           | 解決方案
+  -------------------------------|--------------------------------------
+  iOS 本地通知上限 64 個         | 優先排程近期任務，定期清理過期通知
+  重複任務通知排程               | 使用 UNCalendarNotificationTrigger
+  通知與任務同步                 | 統一在 TodoViewModel 管理
+  使用者拒絕權限                 | UI 提示並引導至設定頁面
+  智能更新後通知混亂             | 實作通知批次更新邏輯
+  前景通知不顯示                 | 實作 UNUserNotificationCenterDelegate
+  通知點擊後導航                 | 使用 NotificationCenter 傳遞事件
+
+
+================================================================================
+                            預估工作量
+================================================================================
+
+  階段一：建立通知管理器           2-3 小時
+  階段二：擴展 TodoTask 模型       1 小時
+  階段三：擴展 TodoViewModel       2-3 小時
+  階段四：更新 UI 元件             3-4 小時
+  階段五：應用程式生命週期整合     2-3 小時
+  階段六：通知設定儲存             0.5-1 小時
+  階段七：特殊場景處理             3-4 小時
+  ---------------------------------------------------------------
+  總計                            14-19 小時
+
+
+================================================================================
+                            測試檢查清單
+================================================================================
+
+  [ ] 通知權限請求流程
+  [ ] 通知權限被拒絕後的 UI 處理
+  [ ] 單次任務通知排程
+  [ ] 單次任務通知觸發
+  [ ] 重複任務通知排程（每日/每週/每月）
+  [ ] 通知取消功能
+  [ ] 通知更新功能
+  [ ] 任務完成後通知自動取消
+  [ ] 任務刪除後通知自動取消
+  [ ] 智能更新任務後通知同步
+  [ ] 前景通知顯示
+  [ ] 背景通知顯示
+  [ ] 鎖定螢幕通知顯示
+  [ ] 通知點擊後導航到任務詳情
+  [ ] 通知動作按鈕（標記完成）
+  [ ] 通知動作按鈕（稍後提醒）
+  [ ] 64 個通知限制處理
+  [ ] 全天任務的通知處理
+  [ ] 提前提醒時間正確性
+  [ ] 通知內容客製化（emoji、時間等）
+  [ ] 設定頁面的通知開關
+  [ ] UserDefaults 儲存與讀取
+  [ ] Firestore 通知欄位同步
+  [ ] 應用重啟後通知保持正常
+
+
+================================================================================
+                        建議的實作順序
+================================================================================
+
+【第一階段：基礎功能】（最簡單，2-3小時）★ 推薦先做
+
+  1. 建立 NotificationManager（單例）
+  2. 實作請求權限
+  3. 實作排程單次通知
+  4. 實作取消通知
+
+  ✓ 這階段完成後，你就能發出第一個通知了！
+
+--------------------------------------------------------------------------------
+
+【第二階段：整合到任務】（簡單，2-3小時）
+
+  1. 擴展 TodoTask 模型（加3個欄位）
+  2. 在 TodoViewModel 的 addTask 中加入通知排程
+  3. 在 TodoViewModel 的 deleteTask 中加入通知取消
+  4. 簡單的 UI：在新增任務頁面加個 Toggle
+
+  ✓ 這階段完成後，基本功能就能用了！
+
+--------------------------------------------------------------------------------
+
+【第三階段：完整 UI】（中等，3-4小時）
+
+  1. 完整的通知設定介面
+  2. 提醒時間選擇器
+  3. 編輯任務時可修改通知
+  4. 設定頁面的全域通知開關
+
+--------------------------------------------------------------------------------
+
+【第四階段：進階功能】（需要思考，3-4小時）
+
+  1. 重複任務的通知排程
+  2. 智能更新任務後的通知同步
+  3. 64個通知限制的優先排程
+  4. 通知動作按鈕（標記完成等）
+
+
+================================================================================
+                            實作建議
+================================================================================
+
+  ✓ 分階段實作，每個階段都能看到成果
+  ✓ 風險低，隨時可以停下來
+  ✓ 每個階段都有可用的功能
+  ✓ 出問題容易定位
+  ✓ 不會一次改太多檔案
+
+  建議先完成第一+第二階段，讓基本功能跑起來，再決定是否繼續！
+
+
+================================================================================
+                         相關文件與參考
+================================================================================
+
+Apple 官方文件：
+
+  • UNUserNotificationCenter
+    https://developer.apple.com/documentation/usernotifications/unusernotificationcenter
+
+  • UNNotificationRequest
+    https://developer.apple.com/documentation/usernotifications/unnotificationrequest
+
+  • UNCalendarNotificationTrigger
+    https://developer.apple.com/documentation/usernotifications/uncalendarnotificationtrigger
+
+  • Scheduling Local Notifications
+    https://developer.apple.com/documentation/usernotifications/scheduling_a_notification_locally_from_your_app
+
+
+================================================================================
+                            修改紀錄
+================================================================================
+
+  2025-11-10  建立初始計劃文件
+
+  2025-11-11  完成通知功能實作（全域設定版本）
+
+
+================================================================================
+                        實際實作記錄（2025-11-11）
+================================================================================
+
+【實作策略變更】
+  原計劃：每個任務獨立設定通知選項
+  實際採用：全域統一設定（更符合使用者體驗）
+
+  優點：
+    ✓ 使用者操作更簡單（一次設定，全部生效）
+    ✓ UI 更乾淨（不需在新增任務時設定通知）
+    ✓ 設定集中管理（統一在設定頁面）
+
+--------------------------------------------------------------------------------
+【階段一：建立通知管理器】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/Managers/NotificationManager.swift（新增）
+
+實作內容：
+  ✓ 單例模式（NotificationManager.shared）
+  ✓ 請求通知權限（requestAuthorization）
+  ✓ 排程單次通知（scheduleOneTimeNotification）
+  ✓ 排程重複任務通知（scheduleRepeatingNotifications）
+  ✓ 取消通知（cancelNotification）
+  ✓ 註冊通知類別與動作按鈕（registerNotificationCategories）
+  ✓ 通知內容客製化（createNotificationContent）
+    - 根據類別顯示 emoji 圖示
+    - 顯示任務標題、備註、時間
+    - 支援「標記完成」和「稍後提醒」動作按鈕
+
+核心方法：
+  • requestAuthorization() async -> Bool
+  • scheduleNotification(for task: TodoTask) async
+  • cancelNotification(for taskId: String) async
+  • registerNotificationCategories()
+  • createNotificationContent(for task: TodoTask) -> UNMutableNotificationContent
+
+重複任務策略：
+  • 每日任務：排程接下來 7 天
+  • 每週任務：排程接下來 4 週
+  • 每月任務：排程接下來 3 個月
+  • 自動處理 iOS 64 個通知限制
+
+實際程式碼行數：約 200 行
+
+--------------------------------------------------------------------------------
+【階段二：擴展 TodoTask 模型】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/Models/TodoTask.swift
+
+新增欄位：
+  var notificationEnabled: Bool = false      // 是否啟用通知（預設關閉）
+  var notificationOffset: Int = 10           // 提前提醒分鐘數（預設 10 分鐘）
+
+修改方法：
+  ✓ init(...) - 加入通知參數
+  ✓ init?(documentId:data:) - Firestore 反序列化（含預設值處理）
+  ✓ toFirestore() - Firestore 序列化
+  ✓ encode(to:) - Codable 編碼
+  ✓ init(from:) - Codable 解碼
+
+實際修改位置：
+  • 第 99-100 行：欄位定義
+  • 第 106 行：init 參數
+  • 第 163-164 行：Firestore 載入預設值
+  • 第 218-219 行：Firestore 儲存
+  • 第 372-373 行：Codable 解碼預設值
+
+--------------------------------------------------------------------------------
+【階段三：擴展 TodoViewModel】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/ViewModels/TodoViewModel.swift
+
+新增屬性：
+  private let notificationManager = NotificationManager.shared
+  @Published var newTaskNotificationEnabled = false  // 預設關閉
+  @Published var newTaskNotificationOffset = 10      // 預設 10 分鐘
+
+整合通知的方法：
+  ✓ saveNewTask() - 儲存後排程通知（第 267-269 行）
+  ✓ addTask(_ task:) - 新增後排程通知（第 386-388 行）
+  ✓ deleteTask(_ task:) - 刪除前取消通知（第 338 行）
+  ✓ updateTask() - 更新時重新排程通知（第 494-498 行）
+  ✓ toggleTaskCompletion() - 完成時取消通知（第 419-421 行）
+
+通知同步邏輯：
+  • 任務啟用通知 → 排程通知
+  • 任務關閉通知 → 取消通知
+  • 任務完成 → 自動取消通知
+  • 任務刪除 → 自動取消通知
+  • 任務更新 → 先取消再重新排程
+
+--------------------------------------------------------------------------------
+【階段四：整合 CalendarAssistantViewModel】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/ViewModels/CalendarAssistantViewModel.swift
+
+新增屬性：
+  private let notificationManager = NotificationManager.shared
+
+智能更新任務後的通知同步：
+  ✓ executeSaveTask() - 自動新增任務後排程通知（第 1109-1112 行）
+  ✓ executeDeleteTask() - 自動刪除任務前取消通知（第 1156-1157 行）
+  ✓ executeUpdateTask() - 自動更新任務後重新排程（第 1319-1324 行）
+  ✓ 撤銷操作也會正確同步通知（第 455-559 行）
+
+確保日曆智能助手的所有任務操作都會自動維護通知狀態。
+
+--------------------------------------------------------------------------------
+【階段五：應用程式生命週期整合】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/studyAssistantApp.swift
+
+新增內容：
+  ✓ 匯入 UserNotifications 框架（第 14 行）
+  ✓ 建立 NotificationDelegate 類別（第 87-131 行）
+  ✓ 建立 delegate 實例（第 158 行）
+  ✓ 設定 delegate（第 165 行）
+  ✓ 請求權限並註冊類別（第 168-174 行）
+
+NotificationDelegate 實作：
+  • willPresent - 前景通知處理（顯示橫幅、聲音、角標）
+  • didReceive - 通知點擊處理
+    - COMPLETE_ACTION: 標記任務完成
+    - SNOOZE_ACTION: 10 分鐘後再次提醒
+    - default: 開啟 app
+
+通知動作按鈕：
+  • 「標記完成」- 直接完成任務
+  • 「稍後提醒」- 10 分鐘後再次提醒
+
+--------------------------------------------------------------------------------
+【階段六：全域通知設定 UI】✅ 完成（採用全域設定策略）
+--------------------------------------------------------------------------------
+
+檔案 1：studyAssistant/Views/SettingsView.swift
+
+新增內容：
+  ✓ 通知開關（第 108-120 行）
+  ✓ 提前提醒時間選擇器（第 124-141 行）
+  ✓ NotificationOffsetPicker 元件（第 212-269 行）
+
+UI 元素：
+  • Toggle: 「任務通知」全域開關
+  • Picker: 提前提醒時間選擇
+    - 準時（0 分鐘）
+    - 5 分鐘前
+    - 10 分鐘前
+    - 15 分鐘前
+    - 30 分鐘前
+    - 1 小時前（60 分鐘）
+
+互動設計：
+  • 點擊「提前提醒時間」彈出 ActionSheet
+  • 選擇後即時更新設定
+  • 通知關閉時顯示灰色（禁用狀態）
+
+檔案 2：studyAssistant/Models/AppSettings.swift
+
+新增欄位：
+  var notificationOffsetMinutes: Int = 10  // 預設提前 10 分鐘
+
+修改內容：
+  ✓ 加入欄位定義（第 7 行）
+  ✓ defaultSettings 預設值（第 14-15 行）
+  ✓ Firestore 反序列化（第 29 行）
+  ✓ init 參數（第 34 行）
+  ✓ Firestore 序列化（第 45 行）
+
+檔案 3：studyAssistant/ViewModels/UserSettingsViewModel.swift
+
+修改方法：
+  func updateAppSettings(
+      notificationsEnabled: Bool? = nil,
+      notificationOffsetMinutes: Int? = nil
+  ) async
+
+特點：
+  ✓ 支援選擇性更新參數（Optional parameters）
+  ✓ 只更新傳入的欄位，其他保持不變
+  ✓ 自動更新 lastModified 時間戳
+  ✓ 同步儲存到 Firestore
+
+--------------------------------------------------------------------------------
+【階段七：TodoAddView 讀取全域設定】✅ 完成
+--------------------------------------------------------------------------------
+
+檔案：studyAssistant/Views/TodoAddView.swift
+
+修改內容：
+  ✓ 注入 UserSettingsViewModel（第 22 行）
+    @EnvironmentObject var settingsViewModel: UserSettingsViewModel
+
+  ✓ 從全域設定讀取通知參數（第 553-554 行）
+    notificationEnabled: settingsViewModel.appSettings.notificationsEnabled,
+    notificationOffset: settingsViewModel.appSettings.notificationOffsetMinutes
+
+效果：
+  • 所有新建任務自動使用全域通知設定
+  • 不需在新增任務時額外設定
+  • 修改全域設定後，新任務立即生效
+
+Environment Object 傳遞：
+  ✓ studyAssistantApp.swift 已在第 236 行注入 settingsViewModel
+  ✓ 所有子 View 都能透過 @EnvironmentObject 存取
+
+
+================================================================================
+                        實作成果總結
+================================================================================
+
+【完成的檔案】
+
+新增檔案（1個）：
+  ✓ studyAssistant/Managers/NotificationManager.swift
+
+修改檔案（8個）：
+  ✓ studyAssistant/Models/TodoTask.swift
+  ✓ studyAssistant/ViewModels/TodoViewModel.swift
+  ✓ studyAssistant/ViewModels/CalendarAssistantViewModel.swift
+  ✓ studyAssistant/Views/TodoAddView.swift
+  ✓ studyAssistant/Views/SettingsView.swift
+  ✓ studyAssistant/Models/AppSettings.swift
+  ✓ studyAssistant/ViewModels/UserSettingsViewModel.swift
+  ✓ studyAssistant/studyAssistantApp.swift
+
+【實作的功能】
+
+基礎功能：
+  ✓ iOS 系統級本地通知（UNUserNotificationCenter）
+  ✓ 通知權限請求與管理
+  ✓ 通知排程（單次任務）
+  ✓ 通知排程（重複任務：每日/每週/每月）
+  ✓ 通知取消
+  ✓ 通知更新
+
+進階功能：
+  ✓ 全域通知設定（開關 + 提前提醒時間）
+  ✓ 智能更新任務後自動同步通知
+  ✓ 任務完成/刪除後自動取消通知
+  ✓ 通知內容客製化（emoji + 任務資訊）
+  ✓ 通知動作按鈕（標記完成、稍後提醒）
+  ✓ 前景/背景/鎖定螢幕通知支援
+  ✓ 64 個通知限制自動管理（重複任務分批排程）
+
+使用者體驗：
+  ✓ 一鍵全域設定，無需每個任務單獨設定
+  ✓ 設定頁面統一管理
+  ✓ 6 種提前提醒時間選項（0/5/10/15/30/60 分鐘）
+  ✓ 預設關閉，讓使用者自行決定是否啟用
+
+【測試狀態】
+
+已測試項目：
+  ✓ 通知權限請求
+  ✓ 單次任務通知排程
+  ✓ 通知觸發與顯示
+  ✓ 全域設定讀取
+  ✓ 任務建立時套用全域設定
+
+待使用者測試：
+  • 重複任務通知
+  • 通知動作按鈕
+  • 智能更新後通知同步
+  • 撤銷操作的通知同步
+  • 64 個通知限制處理
+  • 提前提醒時間準確性
+
+【實際開發時間】
+
+  階段一：NotificationManager         已完成
+  階段二：TodoTask 模型擴展           已完成
+  階段三：TodoViewModel 整合          已完成
+  階段四：CalendarAssistantViewModel  已完成
+  階段五：App 生命週期整合            已完成
+  階段六：全域設定 UI                 已完成
+  階段七：TodoAddView 整合            已完成
+
+【遇到的問題與解決】
+
+問題 1：NotificationDelegate 不符合 ObservableObject
+  原因：錯誤使用 @StateObject
+  解決：改用 private let 直接初始化
+
+問題 2：無法找到 NotificationManager
+  原因：檔案未加入 Xcode 專案 target
+  解決：在 Xcode 中手動新增檔案
+
+問題 3：通知參數未正確傳遞
+  原因：TodoAddView 未傳遞 notificationEnabled 參數
+  解決：在 TodoTask init 時加入參數（第 552-553 行）
+  狀態：使用者確認「有收到通知了」✅
+
+問題 4：文字編碼亂碼
+  原因：特殊字符編碼問題
+  解決：使用 UTF-8 編碼與 ASCII 框線
+
+【架構設計決策】
+
+決策 1：全域設定 vs 個別任務設定
+  選擇：全域設定
+  理由：
+    • 使用者操作更簡單
+    • UI 更乾淨
+    • 符合大多數待辦事項 app 的設計模式
+
+決策 2：Singleton vs Dependency Injection
+  選擇：Singleton（NotificationManager.shared）
+  理由：
+    • 通知管理器全域唯一
+    • 簡化 ViewModel 之間的共享
+    • 避免多實例導致的通知重複
+
+決策 3：Environment Object vs StateObject
+  選擇：Environment Object（settingsViewModel）
+  理由：
+    • 已在 App 層級建立
+    • 多個 View 需要存取
+    • 避免重複建立實例
+
+決策 4：64 通知限制處理策略
+  選擇：分批動態排程
+  理由：
+    • 重複任務不一次排程所有通知
+    • 近期任務優先
+    • 之後可加入背景更新機制補充
+
+
+================================================================================
+                        使用說明
+================================================================================
+
+【使用者操作流程】
+
+1. 首次使用：
+   - 開啟 app 會自動請求通知權限
+   - 允許權限以接收任務提醒
+
+2. 設定通知：
+   - 進入「設定」頁面
+   - 開啟「任務通知」開關
+   - 選擇「提前提醒時間」（例如：15 分鐘前）
+
+3. 建立任務：
+   - 正常建立任務，設定標題、時間、類別等
+   - 不需額外設定通知（自動使用全域設定）
+
+4. 接收通知：
+   - 系統會在設定的時間自動發送通知
+   - 通知包含任務標題、類別圖示、時間
+   - 可點擊「標記完成」或「稍後提醒」
+
+【開發者注意事項】
+
+1. 環境變數注入：
+   - UserSettingsViewModel 必須在 App 層級注入
+   - 確保 .environmentObject(settingsViewModel) 存在
+
+2. 通知同步：
+   - 任務的 CRUD 操作都會自動同步通知
+   - 智能助手的自動更新也會同步通知
+   - 不需手動管理通知生命週期
+
+3. 測試建議：
+   - 測試時建議設定「1-2 分鐘後」的任務
+   - 檢查系統通知中心是否收到通知
+   - 測試前景/背景/鎖定螢幕的通知顯示
+
+4. Debug 日誌：
+   - 已清理所有 debug print 語句
+   - 生產環境乾淨無冗餘輸出
+
+【未來擴展建議】
+
+可選增強功能：
+  • 允許使用者選擇通知音效
+  • 支援多個提前提醒時間（例如：30 分鐘前 + 5 分鐘前）
+  • 通知歷史記錄
+  • 批次重新排程所有現有任務的通知
+  • 通知統計（已發送、已點擊等）
+  • 自訂通知文案模板
+  • 支援靜音時段（例如：晚上 11 點到早上 7 點）
+
+
+================================================================================
+                              END
+================================================================================

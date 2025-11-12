@@ -129,6 +129,14 @@
 		E8E897412DC0980D00027E88 /* TodoTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoTask.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		9BC7687D2EC393AB00BC8E2B /* Managers */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Managers;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
 		9BC1533D2D78771600FCA465 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -270,6 +278,7 @@
 		E82A79C42DB13265007ED175 /* studyAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				9BC7687D2EC393AB00BC8E2B /* Managers */,
 				9B70AE8C2DCA27B4002AEF32 /* studyAssistant.entitlements */,
 				9BF0B3932DC5CD30006131DD /* Constants */,
 				9BD7A98F2DC4F98600B3FF29 /* Info.plist */,
@@ -312,6 +321,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9BC7687D2EC393AB00BC8E2B /* Managers */,
 			);
 			name = studyAssistant;
 			packageProductDependencies = (

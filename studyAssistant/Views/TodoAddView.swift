@@ -19,6 +19,7 @@ struct TodoAddView: View {
     @Environment(\.presentationMode) var presentationMode
     @ObservedObject var viewModel: TodoViewModel
     @EnvironmentObject var staticViewModel: StaticViewModel
+    @EnvironmentObject var settingsViewModel: UserSettingsViewModel
     @Binding var isPresented: Bool
     
     // 額外的資料欄位
@@ -548,7 +549,9 @@ struct TodoAddView: View {
                         repeatType: viewModel.newTaskRepeatType,
                         startDate: viewModel.newTaskStartDate,
                         endDate: viewModel.newTaskEndDate,
-                        userId: userId
+                        userId: userId,
+                        notificationEnabled: settingsViewModel.appSettings.notificationsEnabled,
+                        notificationOffset: settingsViewModel.appSettings.notificationOffsetMinutes
                     )
                     
                     // 使用 addTask 而非 saveNewTask 以確保處理好 userId

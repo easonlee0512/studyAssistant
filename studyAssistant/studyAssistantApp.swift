@@ -11,6 +11,7 @@ import Firebase
 import FirebaseAuth
 import GoogleSignIn
 import Foundation // 確保可以訪問 NotificationConstants
+import UserNotifications
 
 /// 身份驗證狀態管理類別
 class AuthState: ObservableObject {
@@ -83,19 +84,66 @@ extension Notification.Name {
     // userProfileDidChange 已在 NotificationConstants.swift 中定義，透過 Foundation 導入
 }
 
+/// 通知代理類別
+class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    // 前景通知處理
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // 在前景時也顯示通知
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // 通知點擊處理
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let taskId = response.notification.request.identifier
+
+        switch response.actionIdentifier {
+        case "COMPLETE_ACTION":
+            // 標記任務為完成
+            print("用戶點擊：標記完成 - taskId: \(taskId)")
+            // TODO: 實作標記完成邏輯
+            break
+        case "SNOOZE_ACTION":
+            // 稍後提醒（10分鐘後）
+            print("用戶點擊：稍後提醒 - taskId: \(taskId)")
+            // TODO: 實作稍後提醒邏輯
+            break
+        default:
+            // 點擊通知，導航到任務詳情
+            print("用戶點擊通知 - taskId: \(taskId)")
+            // 發送通知以導航到任務詳情
+            NotificationCenter.default.post(
+                name: NSNotification.Name("NavigateToTask"),
+                object: nil,
+                userInfo: ["taskId": taskId]
+            )
+            break
+        }
+
+        completionHandler()
+    }
+}
+
 /// 處理 URL 回調的類別
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ app: UIApplication,
                      open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         print("收到 URL 回調: \(url)")
-        
+
         // 檢查是否是 Google Sign In 的回調
         if GIDSignIn.sharedInstance.handle(url) {
             print("已處理 Google Sign In 回調")
             return true
         }
-        
+
         print("無法處理 URL 回調")
         return false
     }
@@ -105,10 +153,25 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct studyAssistantApp: App {
     // 註冊 AppDelegate 以處理 URL 回調
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
+
+    // 通知代理（不需要 @StateObject）
+    private let notificationDelegate = NotificationDelegate()
+
     // 初始化 Firebase
     init() {
         FirebaseApp.configure()
+
+        // 設置通知代理
+        UNUserNotificationCenter.current().delegate = notificationDelegate
+
+        // 註冊通知動作類別
+        Task { @MainActor in
+            NotificationManager.shared.registerNotificationCategories()
+
+            // 請求通知權限
+            let granted = await NotificationManager.shared.requestAuthorization()
+            print(granted ? "✅ 通知權限已授予" : "❌ 通知權限被拒絕")
+        }
 
         // 設置 TabBar 外觀 - 使用項目的橘色調
         let appearance = UITabBarAppearance()
@@ -185,6 +248,10 @@ struct studyAssistantApp: App {
                             await MainActor.run {
                                 calendarAssistantViewModel.todoViewModel = todoViewModel
                                 calendarAssistantViewModel.staticViewModel = staticViewModel
+
+                                // 同步全域通知設定到 NotificationManager
+                                let offset = settingsViewModel.appSettings.notificationOffsetMinutes
+                                NotificationManager.shared.globalNotificationOffsetMinutes = offset
                             }
 
                             // 檢查並執行每日自動更新

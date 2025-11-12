@@ -78,6 +78,9 @@ struct TodoTask: Identifiable, Codable, Equatable {
     var focusTime: Int          // 專注時間(分鐘)
     var createdAt: Date         // 建立時間
     var userId: String          // 使用者ID
+
+    // 通知設定 (v1.0 新增)
+    var notificationEnabled: Bool // 是否啟用通知
 }
 
 【重要方法】

@@ -92,13 +92,18 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     var repeatEndDate: Date?           // 重複任務的結束日期
     var createdAt: Date                // 任務建立時間
     var userId: String                 // 使用者 ID
-    
+
     var instances: [TaskInstance]
+
+    // 通知相關欄位
+    var notificationEnabled: Bool      // 是否啟用通知
+    var notificationOffset: Int        // 提前多少分鐘提醒（0, 5, 10, 15, 30, 60）
     
     // 建立新任務的初始化方法
     init(title: String, note: String, color: Color, focusTime: Int = 0, category: String,
          isAllDay: Bool, isCompleted: Bool, repeatType: RepeatType,
-         startDate: Date, endDate: Date, repeatEndDate: Date? = nil, userId: String = Auth.auth().currentUser?.uid ?? "") {
+         startDate: Date, endDate: Date, repeatEndDate: Date? = nil, userId: String = Auth.auth().currentUser?.uid ?? "",
+         notificationEnabled: Bool = false, notificationOffset: Int = 10) {
         self.id = UUID().uuidString
         self.title = title
         self.note = note
@@ -114,6 +119,8 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         self.createdAt = Date()
         self.userId = userId.isEmpty ? (Auth.auth().currentUser?.uid ?? "default") : userId
         self.instances = []
+        self.notificationEnabled = notificationEnabled
+        self.notificationOffset = notificationOffset
     }
     
     // 從 Firestore 資料建立任務
@@ -151,7 +158,11 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.userId = userId
         self.instances = []
-        
+
+        // 解析通知相關欄位（可選，預設值）
+        self.notificationEnabled = data["notificationEnabled"] as? Bool ?? false
+        self.notificationOffset = data["notificationOffset"] as? Int ?? 10
+
         // 解析 RepeatType
         if let type = repeatTypeRaw["type"] as? String {
             switch type {
@@ -203,7 +214,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
             "startDate": Timestamp(date: startDate),
             "endDate": Timestamp(date: endDate),
             "createdAt": Timestamp(date: createdAt),
-            "userId": userId
+            "userId": userId,
+            "notificationEnabled": notificationEnabled,
+            "notificationOffset": notificationOffset
         ]
         
         // 如果有重複結束日期，加入資料中
@@ -307,6 +320,7 @@ public struct TodoTask: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, note, focusTime, category, isAllDay, isCompleted, repeatType, startDate, endDate, createdAt, userId, instances
         case color // 特別處理
+        case notificationEnabled, notificationOffset // 通知欄位
     }
     
     // 編碼
@@ -325,7 +339,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(userId, forKey: .userId)
         try container.encode(instances, forKey: .instances)
-        
+        try container.encode(notificationEnabled, forKey: .notificationEnabled)
+        try container.encode(notificationOffset, forKey: .notificationOffset)
+
         // 編碼顏色
         let colorComponents = UIColor(color).cgColor.components ?? [0, 0, 0, 1]
         let colorData: [String: CGFloat] = [
@@ -353,7 +369,9 @@ public struct TodoTask: Identifiable, Codable, Equatable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         userId = try container.decode(String.self, forKey: .userId)
         instances = try container.decode([TaskInstance].self, forKey: .instances)
-        
+        notificationEnabled = try container.decodeIfPresent(Bool.self, forKey: .notificationEnabled) ?? false
+        notificationOffset = try container.decodeIfPresent(Int.self, forKey: .notificationOffset) ?? 10
+
         // 解碼顏色
         let colorData = try container.decode([String: CGFloat].self, forKey: .color)
         color = Color(

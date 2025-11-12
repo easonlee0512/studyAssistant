@@ -14,7 +14,10 @@ import Foundation // 確保可以訪問 NotificationConstants
 class TodoViewModel: ObservableObject {
     @Published private(set) var tasks: [TodoTask] = []
     private let firebaseService = FirebaseService.shared
+    private let notificationManager = NotificationManager.shared
     private var authStateListener: AuthStateDidChangeListenerHandle?
+
+    // 全域通知設定（從 UserSettingsViewModel 取得）
     
     // 新增任務相關狀態
     @Published var newTaskTitle = ""
@@ -29,6 +32,8 @@ class TodoViewModel: ObservableObject {
     @Published var newTaskRepeatEndDate: Date? = nil
     @Published var newTaskSelectedDays: Set<Int> = []
     @Published var newTaskSelectedMonthDays: Set<Int> = []
+    @Published var newTaskNotificationEnabled = false  // 預設關閉，由全域設定控制
+    @Published var newTaskNotificationOffset = 10      // 預設提前 10 分鐘
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published private(set) var hasLoadedInitialTasks = false
@@ -196,6 +201,8 @@ class TodoViewModel: ObservableObject {
         newTaskRepeatEndDate = nil
         newTaskSelectedDays.removeAll()
         newTaskSelectedMonthDays.removeAll()
+        newTaskNotificationEnabled = false  // 預設關閉，由全域設定控制
+        newTaskNotificationOffset = 10      // 預設提前 10 分鐘
         errorMessage = nil
     }
     
@@ -251,14 +258,23 @@ class TodoViewModel: ObservableObject {
             startDate: newTaskStartDate,
             endDate: newTaskEndDate,
             repeatEndDate: newTaskRepeatType != .none ? newTaskRepeatEndDate : nil,
-            userId: currentUserId
+            userId: currentUserId,
+            notificationEnabled: newTaskNotificationEnabled,
+            notificationOffset: newTaskNotificationOffset
         )
-        
+
         try await firebaseService.saveTodoTask(task)
-        tasks.append(task)
-        
-        // 發送資料變更通知
-        postDataChangeNotification()
+
+        // 排程通知（如果啟用）- 使用全域設定
+        if task.notificationEnabled {
+            await notificationManager.scheduleNotification(for: task)
+        }
+
+        // 延遲一下再重新載入，確保 Cloud Functions 完成
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+        // 強制重新載入任務
+        try? await forceReloadTasks()
     }
     
     // 載入所有任務
@@ -322,15 +338,18 @@ class TodoViewModel: ObservableObject {
         defer { isLoading = false }
         
         do {
+            // 取消通知
+            await notificationManager.cancelNotification(for: task.id)
+
             // 從 Firestore 刪除任務
             try await firebaseService.deleteTodoTask(task.id)
-            
+
             // 從本地陣列中移除任務
             tasks.removeAll { $0.id == task.id }
-            
+
             // 發送資料變更通知
             postDataChangeNotification()
-            
+
             // 發送任務刪除通知（包含類別資訊）
             NotificationCenter.default.post(
                 name: .taskDeleted,
@@ -365,6 +384,11 @@ class TodoViewModel: ObservableObject {
 
             try await firebaseService.saveTodoTask(updatedTask)
 
+            // 排程通知（如果啟用）- 使用全域設定
+            if updatedTask.notificationEnabled {
+                await notificationManager.scheduleNotification(for: updatedTask)
+            }
+
             // 清空錯誤訊息
             errorMessage = nil
 
@@ -390,11 +414,16 @@ class TodoViewModel: ObservableObject {
         // 1. 立即更新本地狀態
         var updatedTask = task
         updatedTask.isCompleted.toggle()
-        
+
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[index] = updatedTask
         }
-        
+
+        // 如果任務完成且啟用通知，取消通知
+        if updatedTask.isCompleted && updatedTask.notificationEnabled {
+            await notificationManager.cancelNotification(for: updatedTask.id)
+        }
+
         // 2. 將更新加入佇列
         completionUpdateQueue[task.id] = (updatedTask, 0)
         
@@ -469,12 +498,19 @@ class TodoViewModel: ObservableObject {
             
             // 在背景執行保存操作
             try await firebaseService.saveTodoTask(updatedTask)
-            
+
+            // 更新通知 - 使用全域設定
+            if updatedTask.notificationEnabled {
+                await notificationManager.scheduleNotification(for: updatedTask)
+            } else {
+                await notificationManager.cancelNotification(for: updatedTask.id)
+            }
+
             // 更新本地任務列表
             if let index = tasks.firstIndex(where: { $0.id == task.id }) {
                 tasks[index] = updatedTask
             }
-            
+
             // 發送資料變更通知
             NotificationCenter.default.post(name: .todoDataDidChange, object: nil)
         } catch {
@@ -601,6 +637,7 @@ class TodoViewModel: ObservableObject {
             try await updateTask(updatedTask)
         }
     }
+
 }
 
 // 驗證錯誤

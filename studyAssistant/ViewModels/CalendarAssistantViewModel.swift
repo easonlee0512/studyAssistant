@@ -19,9 +19,12 @@ final class CalendarAssistantViewModel: ObservableObject {
 
     private let proxyURL = URL(string: "https://asia-east1-studyassistant-f7172.cloudfunctions.net/chatProxy")!
     private let functions = Functions.functions(region: "asia-east1")
+    private let notificationManager = NotificationManager.shared
 
     @Published var staticViewModel: StaticViewModel?
     @Published var todoViewModel: TodoViewModel?
+
+    // 全域通知設定（從 UserSettingsViewModel 取得）
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -451,6 +454,9 @@ final class CalendarAssistantViewModel: ObservableObject {
                 $0.endDate == pendingTask.endDate
             }) {
                 do {
+                    // 取消通知
+                    await notificationManager.cancelNotification(for: taskToDelete.id)
+
                     let result = try await functions.httpsCallable("deleteTask").call([
                         "taskId": taskToDelete.id
                     ])
@@ -503,6 +509,11 @@ final class CalendarAssistantViewModel: ObservableObject {
                                 userInfo: [NSLocalizedDescriptionKey: "創建任務失敗"])
                 }
 
+                // 重新排程通知（如果原本啟用）- 使用全域設定
+                if restoredTask.notificationEnabled {
+                    await notificationManager.scheduleNotification(for: restoredTask)
+                }
+
                 successCount += 1
                 print("  ✅ 已恢復先前刪除的任務：\(restoredTask.title)")
             } catch {
@@ -540,6 +551,13 @@ final class CalendarAssistantViewModel: ObservableObject {
                           success else {
                         throw NSError(domain: "CalendarAssistant", code: -1,
                                     userInfo: [NSLocalizedDescriptionKey: "更新任務失敗"])
+                    }
+
+                    // 恢復原始通知狀態 - 使用全域設定
+                    if restoredTask.notificationEnabled {
+                        await notificationManager.scheduleNotification(for: restoredTask)
+                    } else {
+                        await notificationManager.cancelNotification(for: restoredTask.id)
                     }
 
                     successCount += 1
@@ -1105,6 +1123,11 @@ final class CalendarAssistantViewModel: ObservableObject {
                         self.updateCurrentStatus()
                     }
 
+                    // 排程通知（如果啟用）- 使用全域設定
+                    if todoTask.notificationEnabled {
+                        await notificationManager.scheduleNotification(for: todoTask)
+                    }
+
                     successCount += 1
                     print("    ✅ 已新增任務：\(task.title)")
                 } catch {
@@ -1147,6 +1170,9 @@ final class CalendarAssistantViewModel: ObservableObject {
             var failureCount = 0
 
             for taskId in args.taskIds {
+                // 取消通知
+                await notificationManager.cancelNotification(for: taskId)
+
                 // 直接呼叫 Cloud Functions 刪除任務
                 do {
                     let result = try await functions.httpsCallable("deleteTask").call([
@@ -1305,6 +1331,13 @@ final class CalendarAssistantViewModel: ObservableObject {
                     await MainActor.run {
                         self.updatedTasks.append((original: originalTask, updated: updatedTask))
                         self.updateCurrentStatus()
+                    }
+
+                    // 更新通知 - 使用全域設定
+                    if updatedTodoTask.notificationEnabled {
+                        await notificationManager.scheduleNotification(for: updatedTodoTask)
+                    } else {
+                        await notificationManager.cancelNotification(for: updatedTodoTask.id)
                     }
 
                     successCount += 1

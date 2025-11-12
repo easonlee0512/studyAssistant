@@ -102,18 +102,43 @@ struct SettingsView: View {
                         }
                         .padding(.top, 8)
 
-                        // 設定選項卡片 - 只保留通知
+                        // 設定選項卡片 - 通知設定
                         VStack(spacing: 0) {
-                            // 通知
+                            // 通知總開關
                             SettingRowNew(
                                 iconName: "bell.fill",
-                                title: "通知",
+                                title: "任務通知",
                                 isOn: Binding(
                                     get: { viewModel.appSettings.notificationsEnabled },
                                     set: { newValue in
                                         Task {
                                             await viewModel.updateAppSettings(
                                                 notificationsEnabled: newValue
+                                            )
+                                        }
+                                    }
+                                )
+                            )
+
+                            // 分隔線
+                            Divider()
+                                .background(Color.black.opacity(0.1))
+                                .padding(.horizontal, 20)
+
+                            // 提前提醒時間設定
+                            NotificationOffsetPicker(
+                                notificationsEnabled: viewModel.appSettings.notificationsEnabled,
+                                selectedOffset: Binding(
+                                    get: { viewModel.appSettings.notificationOffsetMinutes },
+                                    set: { newValue in
+                                        // ⚠️ 重要：立即同步到 ViewModels（必須在主執行緒同步執行）
+                                        NotificationManager.shared.globalNotificationOffsetMinutes = newValue
+                                        
+
+                                        // 然後異步更新 Firestore
+                                        Task {
+                                            await viewModel.updateAppSettings(
+                                                notificationOffsetMinutes: newValue
                                             )
                                         }
                                     }
@@ -188,7 +213,67 @@ struct SettingsView: View {
     }
 }
 
-// 其他輔助視圖保持不變... 
+// 通知提前時間選擇器
+struct NotificationOffsetPicker: View {
+    let notificationsEnabled: Bool
+    @Binding var selectedOffset: Int
+    @State private var showPicker = false
+
+    private let offsetOptions = [
+        (value: 0, label: "準時"),
+        (value: 5, label: "5 分鐘前"),
+        (value: 10, label: "10 分鐘前"),
+        (value: 15, label: "15 分鐘前"),
+        (value: 30, label: "30 分鐘前"),
+        (value: 60, label: "1 小時前")
+    ]
+
+    var body: some View {
+        Button(action: {
+            if notificationsEnabled {
+                showPicker.toggle()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 22))
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(notificationsEnabled ? .black : .black.opacity(0.3))
+
+                Text("提前提醒")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(notificationsEnabled ? .black : .black.opacity(0.3))
+
+                Spacer()
+
+                Text(offsetOptions.first(where: { $0.value == selectedOffset })?.label ?? "10 分鐘前")
+                    .font(.system(size: 15))
+                    .foregroundColor(notificationsEnabled ? .black.opacity(0.5) : .black.opacity(0.3))
+
+                if notificationsEnabled {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.black.opacity(0.3))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .disabled(!notificationsEnabled)
+        .actionSheet(isPresented: $showPicker) {
+            ActionSheet(
+                title: Text("選擇提前提醒時間"),
+                buttons: offsetOptions.map { option in
+                    .default(Text(option.label)) {
+                        selectedOffset = option.value
+                    }
+                } + [.cancel(Text("取消"))]
+            )
+        }
+    }
+}
+
+// 其他輔助視圖保持不變...
 
 // 預覽提供者
 #Preview {

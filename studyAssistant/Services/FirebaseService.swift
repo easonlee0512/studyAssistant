@@ -149,17 +149,33 @@ class FirebaseService: DataServiceProtocol {
             // 轉換 Timestamp 為 ISO 8601 字符串以便序列化
             let convertedTaskData = convertTimestampsToStrings(taskData)
 
-            // 調用 Cloud Functions 創建任務（實例將由服務端生成）
-            let result = try await functions.httpsCallable("createTask").call([
-                "task": convertedTaskData
-            ])
+            // 檢查任務 ID 是否為空來判斷是新增還是更新
+            // TodoTask 的 id 在新建時會自動生成 UUID，但如果是從 Firestore 載入的任務則會有 Firestore document ID
+            // 我們需要檢查這個任務是否已經存在於 Firestore
+            let isExistingTask = !task.id.isEmpty && task.id.count < 36 // Firestore ID 長度通常是 20 字符，UUID 是 36
+
+            let result: HTTPSCallableResult
+
+            if isExistingTask {
+                // 更新現有任務
+                result = try await functions.httpsCallable("updateTask").call([
+                    "taskId": task.id,
+                    "updates": convertedTaskData
+                ])
+            } else {
+                // 創建新任務
+                result = try await functions.httpsCallable("createTask").call([
+                    "task": convertedTaskData
+                ])
+            }
 
             guard let data = result.data as? [String: Any],
                   let success = data["success"] as? Bool,
                   success else {
                 let errorMsg = (result.data as? [String: Any])?["error"] as? String ?? "未知錯誤"
+                let operation = isExistingTask ? "更新" : "創建"
                 throw NSError(domain: "FirebaseServiceErrorDomain", code: -1,
-                             userInfo: [NSLocalizedDescriptionKey: "創建任務失敗: \(errorMsg)"])
+                             userInfo: [NSLocalizedDescriptionKey: "\(operation)任務失敗: \(errorMsg)"])
             }
 
             lastSync = Date()

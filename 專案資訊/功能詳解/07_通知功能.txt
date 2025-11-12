@@ -1,0 +1,610 @@
+================================================================================
+                          通知功能 (Notification System)
+                                  功能詳解文檔
+================================================================================
+
+版本：1.0
+建立日期：2025-11-12
+最後更新：2025-11-12
+
+================================================================================
+                                目錄
+================================================================================
+
+1. 功能概述
+2. 核心檔案與架構
+3. 功能特色
+4. 使用流程
+5. 技術實作細節
+6. 資料結構
+7. 通知樣式規範
+8. 重複任務處理
+9. 限制與注意事項
+10. 未來改進方向
+
+================================================================================
+                              1. 功能概述
+================================================================================
+
+通知功能提供 iOS 系統級本地推送通知，在任務開始前自動提醒使用者。採用全域設定
+模式，所有任務共用統一的通知設定，確保使用體驗簡潔一致。
+
+【主要功能】
+  ✓ 任務提前提醒（可設定 0/5/10/15/30/60 分鐘）
+  ✓ 全域通知開關與設定
+  ✓ 支援單次與重複任務
+  ✓ 通知動作按鈕（標記完成、稍後提醒）
+  ✓ 智能處理 64 個通知限制
+  ✓ 與日曆智能助手整合
+
+【設計理念】
+  • 簡單易用：一次設定，全部生效
+  • 資訊清晰：任務標題、時間、備註一目了然
+  ✓ 自動同步：任務變更時自動更新通知
+
+================================================================================
+                          2. 核心檔案與架構
+================================================================================
+
+【新增檔案】
+
+1. NotificationManager.swift (studyAssistant/Managers/)
+   - 通知管理器單例
+   - 負責所有通知的排程、取消、更新
+   - 處理權限管理與 64 個通知限制
+
+【修改檔案】
+
+1. TodoTask.swift (studyAssistant/Models/)
+   - 新增 notificationEnabled: Bool 欄位
+   - 移除 notificationOffset 欄位（改用全域設定）
+
+2. AppSettings.swift (studyAssistant/Models/)
+   - 新增 notificationsEnabled: Bool 欄位
+   - 新增 notificationOffsetMinutes: Int 欄位
+
+3. TodoViewModel.swift (studyAssistant/ViewModels/)
+   - 整合 NotificationManager
+   - 在任務 CRUD 時同步通知
+
+4. CalendarAssistantViewModel.swift (studyAssistant/ViewModels/)
+   - 整合 NotificationManager
+   - 智能更新任務時同步通知
+
+5. UserSettingsViewModel.swift (studyAssistant/ViewModels/)
+   - 支援更新通知設定
+   - 同步設定到 NotificationManager
+
+6. SettingsView.swift (studyAssistant/Views/)
+   - 新增通知開關與提前提醒時間設定 UI
+   - NotificationOffsetPicker 元件
+
+7. TodoAddView.swift (studyAssistant/Views/)
+   - 新增任務時套用全域通知設定
+
+8. studyAssistantApp.swift
+   - App 啟動時初始化通知設定
+   - 註冊 NotificationDelegate
+   - 處理通知動作
+
+【架構圖】
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                      studyAssistantApp                       │
+  │  • 初始化 NotificationManager.globalNotificationOffsetMinutes│
+  │  • 註冊 NotificationDelegate                                 │
+  └──────────────┬──────────────────────────────────────────────┘
+                 │
+                 ├──────────────────────────────────────────────┐
+                 │                                              │
+  ┌──────────────▼────────────┐              ┌─────────────────▼──────────┐
+  │  UserSettingsViewModel     │              │   NotificationManager       │
+  │  • appSettings.            │─────────────>│   (Singleton)              │
+  │    notificationsEnabled    │   同步設定    │   • globalNotificationOff… │
+  │  • appSettings.            │              │   • scheduleNotification() │
+  │    notificationOffsetMin…  │              │   • cancelNotification()   │
+  └────────────┬──────────────┘              └────────────┬───────────────┘
+               │                                           │
+               │                                           │ 呼叫
+  ┌────────────▼────────────┐              ┌─────────────▼───────────────┐
+  │      SettingsView        │              │   TodoViewModel             │
+  │  • 通知開關 Toggle        │              │   CalendarAssistantViewModel│
+  │  • 提前提醒時間 Picker    │              │   • 新增任務 → 排程通知      │
+  │  • 變更時同步到           │              │   • 更新任務 → 重新排程      │
+  │    NotificationManager   │              │   • 刪除任務 → 取消通知      │
+  └─────────────────────────┘              └─────────────────────────────┘
+
+================================================================================
+                              3. 功能特色
+================================================================================
+
+【3.1 全域設定模式】
+
+  優點：
+    ✓ 使用者操作簡單（一次設定，全部生效）
+    ✓ UI 更乾淨（不需在每個任務設定通知）
+    ✓ 設定集中管理（統一在設定頁面）
+    ✓ 減少資料庫欄位（不在任務中儲存 offset）
+
+  實作方式：
+    • NotificationManager.globalNotificationOffsetMinutes
+    • App 啟動時從 AppSettings 載入
+    • 修改設定時立即同步（主執行緒）
+
+【3.2 簡潔的通知樣式】
+
+  格式：
+    標題：[任務標題]  [開始時間] - [結束時間]
+    內文：[備註內容]
+
+  範例：
+    標題：複習微積分  14:00 - 16:00
+    內文：複習第三章極限與連續性
+
+  特色：
+    • 無 emoji 圖示（簡潔專業）
+    • 資訊清晰（標題、時間、備註）
+    • 支援全天/跨日任務
+
+【3.3 智能重複任務處理】
+
+  每日任務：排程接下來 7 天
+  每週任務：排程接下來 4 週
+  每月任務：排程接下來 3 個月
+
+  優點：
+    ✓ 避免超過 iOS 64 個通知限制
+    ✓ 自動跳過已過期的通知
+    ✓ 尊重 repeatEndDate 設定
+    ✓ 每個實例有唯一 ID（taskId_index）
+
+【3.4 自動同步機制】
+
+  任務操作 → 通知同步：
+    • 新增任務 → 自動排程通知
+    • 更新任務 → 自動重新排程
+    • 刪除任務 → 自動取消通知
+    • 完成任務 → 自動取消通知
+    • 智能助手自動更新 → 通知同步
+    • 撤銷操作 → 通知恢復
+
+================================================================================
+                              4. 使用流程
+================================================================================
+
+【4.1 首次使用】
+
+  1. App 啟動時自動請求通知權限
+  2. 使用者允許權限
+  3. 通知功能啟用
+
+【4.2 設定通知】
+
+  1. 進入「設定」頁面
+  2. 開啟「任務通知」開關
+  3. 選擇「提前提醒時間」：
+     - 準時（0 分鐘）
+     - 5 分鐘前
+     - 10 分鐘前
+     - 15 分鐘前
+     - 30 分鐘前
+     - 1 小時前（60 分鐘）
+
+【4.3 建立任務】
+
+  1. 正常建立任務（標題、時間、類別等）
+  2. 不需額外設定通知
+  3. 系統自動使用全域設定排程通知
+
+【4.4 接收通知】
+
+  1. 系統在設定的時間發送通知
+  2. 通知包含任務標題、時間、備註
+  3. 可點擊動作按鈕：
+     - 「標記完成」：直接完成任務
+     - 「稍後提醒」：10 分鐘後再次提醒
+
+================================================================================
+                          5. 技術實作細節
+================================================================================
+
+【5.1 NotificationManager 單例】
+
+  ```swift
+  @MainActor
+  class NotificationManager: NSObject, ObservableObject {
+      static let shared = NotificationManager()
+
+      var globalNotificationOffsetMinutes: Int = 10
+
+      func scheduleNotification(for task: TodoTask) async
+      func cancelNotification(for taskId: String) async
+      func requestAuthorization() async -> Bool
+      func registerNotificationCategories()
+  }
+  ```
+
+【5.2 權限管理】
+
+  請求權限：
+    - App 啟動時自動請求
+    - 使用 UNUserNotificationCenter
+    - 請求 .alert, .sound, .badge 權限
+
+  權限檢查：
+    - 排程前檢查 isAuthorized
+    - 無權限時自動跳過排程
+
+【5.3 通知排程流程】
+
+  單次任務：
+    1. 計算通知時間（startDate - offsetMinutes）
+    2. 檢查時間是否已過
+    3. 建立通知內容（title, body）
+    4. 建立觸發器（UNCalendarNotificationTrigger）
+    5. 排程通知
+
+  重複任務：
+    1. 根據 repeatType 決定排程數量
+    2. 迭代建立多個通知實例
+    3. 檢查 repeatEndDate 限制
+    4. 跳過已過期的實例
+    5. 為每個實例建立唯一 ID
+
+【5.4 全域設定同步】
+
+  App 啟動時：
+    ```swift
+    // studyAssistantApp.swift
+    let offset = settingsViewModel.appSettings.notificationOffsetMinutes
+    NotificationManager.shared.globalNotificationOffsetMinutes = offset
+    ```
+
+  設定變更時：
+    ```swift
+    // SettingsView.swift
+    NotificationManager.shared.globalNotificationOffsetMinutes = newValue
+    ```
+
+  特點：
+    • 主執行緒同步執行（立即生效）
+    • Firestore 更新為異步（不阻塞 UI）
+
+【5.5 通知內容建立】
+
+  ```swift
+  private func createNotificationContent(
+      for task: TodoTask,
+      offsetMinutes: Int
+  ) -> UNMutableNotificationContent {
+      let content = UNMutableNotificationContent()
+
+      // 標題：任務標題 + 時間
+      if task.isAllDay {
+          content.title = "\(task.title)  全天"
+      } else {
+          let startTime = timeFormatter.string(from: task.startDate)
+          let endTime = timeFormatter.string(from: task.endDate)
+          content.title = "\(task.title)  \(startTime) - \(endTime)"
+      }
+
+      // 內文：備註
+      content.body = task.note.isEmpty ? " " : task.note
+
+      return content
+  }
+  ```
+
+【5.6 通知動作按鈕】
+
+  註冊動作：
+    - COMPLETE_ACTION：標記完成
+    - SNOOZE_ACTION：稍後提醒
+
+  處理動作：
+    ```swift
+    // NotificationDelegate
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let taskId = response.notification.request.content.userInfo["taskId"]
+
+        switch response.actionIdentifier {
+        case "COMPLETE_ACTION":
+            // 標記任務完成
+        case "SNOOZE_ACTION":
+            // 10 分鐘後再次提醒
+        default:
+            // 開啟 App
+        }
+    }
+    ```
+
+================================================================================
+                              6. 資料結構
+================================================================================
+
+【6.1 TodoTask 通知欄位】
+
+  ```swift
+  struct TodoTask {
+      var notificationEnabled: Bool = false  // 是否啟用通知
+
+      // notificationOffset 已移除（使用全域設定）
+  }
+  ```
+
+  Firestore 欄位：
+    - notificationEnabled: Bool
+
+【6.2 AppSettings 通知欄位】
+
+  ```swift
+  struct AppSettings {
+      var notificationsEnabled: Bool = false
+      var notificationOffsetMinutes: Int = 10
+  }
+  ```
+
+  Firestore 欄位：
+    - notificationsEnabled: Bool
+    - notificationOffsetMinutes: Int
+
+【6.3 NotificationManager 屬性】
+
+  ```swift
+  class NotificationManager {
+      var globalNotificationOffsetMinutes: Int = 10
+      @Published var isAuthorized: Bool = false
+      @Published var authorizationStatus: UNAuthorizationStatus
+  }
+  ```
+
+================================================================================
+                          7. 通知樣式規範
+================================================================================
+
+【7.1 標題格式】
+
+  一般任務（同一天）：
+    格式：[標題]  [開始時間] - [結束時間]
+    範例：複習微積分  14:00 - 16:00
+
+  跨日任務：
+    格式：[標題]  [開始日期] [開始時間] - [結束日期] [結束時間]
+    範例：專案開發  11/12 14:00 - 11/13 16:00
+
+  全天任務：
+    格式：[標題]  全天
+    範例：公司團建  全天
+
+【7.2 內文格式】
+
+  有備註：
+    顯示備註內容
+
+  無備註：
+    顯示一個空格（iOS 要求）
+
+【7.3 不使用的元素】
+
+  ✗ emoji 圖示
+  ✗ 類別標籤
+  ✗ 專注時間
+  ✗ 提前提醒提示
+
+  原因：保持簡潔專業的風格
+
+================================================================================
+                          8. 重複任務處理
+================================================================================
+
+【8.1 排程策略】
+
+  每日任務（RepeatType.daily）：
+    • 排程數量：7 個通知（接下來 7 天）
+    • 計算方式：每次加 1 天
+    • 適用場景：每日例行任務
+
+  每週任務（RepeatType.weekly）：
+    • 排程數量：4 個通知（接下來 4 週）
+    • 計算方式：每次加 1 週
+    • 適用場景：每週固定時間的任務
+
+  每月任務（RepeatType.monthly）：
+    • 排程數量：3 個通知（接下來 3 個月）
+    • 計算方式：每次加 1 個月
+    • 適用場景：每月定期任務
+
+【8.2 唯一 ID 策略】
+
+  格式：[taskId]_[index]
+  範例：
+    - ABC123_0 （第 1 個實例）
+    - ABC123_1 （第 2 個實例）
+    - ABC123_2 （第 3 個實例）
+
+  用途：
+    • 取消通知時可批次刪除
+    • 辨識同一任務的不同實例
+
+【8.3 限制處理】
+
+  iOS 64 個通知限制：
+    1. 檢查目前待處理通知數量
+    2. 計算可用插槽（64 - 當前數量）
+    3. 限制排程數量不超過可用插槽
+    4. 優先排程近期的通知
+
+  已過期通知：
+    • 排程前檢查時間
+    • 自動跳過已過期的實例
+
+  repeatEndDate：
+    • 檢查是否超過結束日期
+    • 超過則停止排程
+
+【8.4 補充機制】
+
+  目前狀態：
+    • 無自動補充機制
+    • 需要使用者開啟 App 或更新任務
+
+  未來改進：
+    • 加入背景更新機制
+    • App 啟動時自動補充通知
+    • 通知數量低於閾值時自動補充
+
+================================================================================
+                          9. 限制與注意事項
+================================================================================
+
+【9.1 系統限制】
+
+  iOS 通知限制：
+    • 最多 64 個待處理通知
+    • 超過會導致新通知無法排程
+
+  權限限制：
+    • 使用者必須允許通知權限
+    • 無權限時通知無法運作
+
+【9.2 重複任務限制】
+
+  預先排程數量有限：
+    • 每日任務只排程 7 天
+    • 每週任務只排程 4 週
+    • 每月任務只排程 3 個月
+
+  影響：
+    • 7 天後的每日任務不會有通知
+    • 需要使用者定期開啟 App
+
+  解決方案：
+    • 建議使用者每週至少開啟一次 App
+    • 更新任務時會重新排程所有通知
+
+【9.3 既有任務】
+
+  問題：
+    • 通知功能上線前建立的任務沒有通知欄位
+    • 需要手動更新或重新建立
+
+  解決方案：
+    • TodoTask.notificationEnabled 預設為 false
+    • Firestore 反序列化時提供預設值
+    • 使用者可手動開啟通知後更新任務
+
+【9.4 時間精準度】
+
+  通知時間：
+    • 以任務 startDate 為基準
+    • 減去 globalNotificationOffsetMinutes
+    • 可能有 1-2 秒誤差（系統排程延遲）
+
+【9.5 通知樣式限制】
+
+  iOS 限制：
+    • body 不能為空字串（至少需要一個空格）
+    • 標題最多 178 個字元
+    • 內文最多 4000 個字元
+
+================================================================================
+                          10. 未來改進方向
+================================================================================
+
+【10.1 背景更新機制】
+
+  功能：
+    • App 進入背景時檢查通知數量
+    • 自動補充重複任務的通知
+    • 清理過期通知
+
+  實作方式：
+    • 使用 Background Tasks framework
+    • BGAppRefreshTask 定期執行
+    • 補充接下來 7 天/4 週/3 個月的通知
+
+【10.2 智能通知管理】
+
+  功能：
+    • 分析使用者完成任務的習慣
+    • 調整通知時間建議
+    • 自動清理未使用的通知
+
+【10.3 個別任務設定】
+
+  功能：
+    • 允許特定任務使用不同的提前提醒時間
+    • 保留全域設定作為預設值
+    • UI 加入「使用自訂設定」選項
+
+  資料結構：
+    ```swift
+    struct TodoTask {
+        var notificationEnabled: Bool
+        var useCustomOffset: Bool = false
+        var customNotificationOffset: Int?
+    }
+    ```
+
+【10.4 通知樣式增強】
+
+  可選功能：
+    • 允許使用者選擇通知樣式（簡潔/詳細）
+    • 加入類別 emoji（可選）
+    • 顯示專注時間（可選）
+    • 顯示任務進度（已完成 X%）
+
+【10.5 通知統計】
+
+  功能：
+    • 記錄通知發送數量
+    • 記錄使用者互動（點擊、完成、延遲）
+    • 分析通知效果
+    • 提供統計報告
+
+【10.6 多重提醒】
+
+  功能：
+    • 允許一個任務設定多個提醒時間
+    • 例如：30 分鐘前 + 5 分鐘前
+
+  資料結構：
+    ```swift
+    struct TodoTask {
+        var notificationOffsets: [Int] = []  // [30, 5]
+    }
+    ```
+
+【10.7 靜音時段】
+
+  功能：
+    • 設定免打擾時段（例如：晚上 11 點到早上 7 點）
+    • 此時段內的通知延後到時段結束後發送
+
+【10.8 通知音效】
+
+  功能：
+    • 允許使用者選擇通知音效
+    • 不同類別使用不同音效
+    • 支援自訂音效
+
+================================================================================
+                              版本歷史
+================================================================================
+
+v1.0 (2025-11-12)
+  • 初始版本
+  • 實作基本通知功能
+  • 全域設定模式
+  • 支援單次與重複任務
+  • 簡潔的通知樣式
+  • 智能處理 64 個通知限制
+
+
+================================================================================
+                                END
+================================================================================

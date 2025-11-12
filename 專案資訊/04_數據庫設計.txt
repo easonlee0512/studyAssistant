@@ -20,64 +20,67 @@
 【集合層次結構】
 
 Root
-├── users/{userId}                    // 用戶基本資訊
-├── profiles/{userId}                 // 用戶個人檔案
-├── settings/{userId}                 // 應用設定
-├── studySettings/{userId}            // 學習偏好設定
-├── tasks/{taskId}                    // 任務資料
-├── statistics/{statisticId}          // 學習統計
-├── timerRecords/{recordId}           // 計時記錄（摘要）
-└── chatHistories/{userId}            // 聊天歷史
+├── users/{userId}                           // 用戶基本資訊
+├── settings/{userId}                        // 應用設定
+├── studySettings/{userId}                   // 學習偏好設定
+├── tasks/{userId}                           // 任務容器（按用戶分層）
+│   └── userTasks/{taskId}                   // 用戶任務
+│       └── instances/{instanceId}           // 重複任務實例
+├── userStatistics/{userId}                  // 統計容器（按用戶分層）
+│   └── statistics/{statisticId}             // 學習統計
+└── chatHistories/{userId}                   // 聊天歷史
+    └── messages/{messageId}                 // 聊天訊息子集合
+
+註：TimerRecord 使用 UserDefaults 本地儲存，不同步到 Firestore
 
 【集合詳細說明】
 
 1. users/{userId}
-   用途: 儲存用戶基本資訊
+   用途: 儲存用戶基本資訊和個人資料
    文檔ID: Firebase Auth UID
    索引: email
+   操作: 通過 Cloud Functions (getUserProfile, updateUserProfile)
 
-2. profiles/{userId}
-   用途: 儲存用戶個人資料
+2. settings/{userId}
+   用途: 應用全域設定（包含通知設定）
    文檔ID: Firebase Auth UID
    索引: 無
+   操作: 通過 Cloud Functions (getAppSettings, updateAppSettings)
 
-3. settings/{userId}
-   用途: 應用偏好設定
+3. studySettings/{userId}
+   用途: 學習計劃偏好設定
    文檔ID: Firebase Auth UID
    索引: 無
+   操作: 通過 Cloud Functions (getStudySettings, updateStudySettings)
 
-4. studySettings/{userId}
-   用途: 學習計劃設定
-   文檔ID: Firebase Auth UID
-   索引: 無
-
-5. tasks/{taskId}
-   用途: 待辦任務
+4. tasks/{userId}/userTasks/{taskId}
+   用途: 用戶待辦任務（按用戶分層）
    文檔ID: 自動生成
    索引:
-   - userId + createdAt (降序)
-   - userId + isCompleted
-   - userId + category + createdAt
-   - userId + dueDate
+   - createdAt (降序)
+   操作: 通過 Cloud Functions (createTask, updateTask, deleteTask, fetchTasks)
 
-6. statistics/{statisticId}
-   用途: 學習統計數據
+5. tasks/{userId}/userTasks/{taskId}/instances/{instanceId}
+   用途: 重複任務實例
    文檔ID: 自動生成
-   索引:
-   - userId + date (降序)
-   - userId + category + date
+   索引: date (升序)
+   操作: 通過 Cloud Functions (updateTaskInstance, createTaskInstance, deleteTaskInstance)
 
-7. timerRecords/{recordId}
-   用途: 計時記錄摘要
-   文檔ID: 自動生成
+6. userStatistics/{userId}/statistics/{statisticId}
+   用途: 學習統計數據（按用戶分層）
+   文檔ID: 自動生成（或使用 category 作為 ID）
    索引:
-   - userId + startTime (降序)
-   - userId + subject + startTime
+   - category
+   - updatedAt (降序)
+   操作: 通過 Cloud Functions (getStatistics, saveStatistic, deleteStatistic)
 
-8. chatHistories/{userId}
-   用途: AI 聊天歷史
+7. chatHistories/{userId}
+   用途: AI 聊天歷史容器
    文檔ID: Firebase Auth UID
    子集合: messages/{messageId}
+   操作: 直接操作或通過 Cloud Functions
+
+註：TimerRecord 使用 UserDefaults 本地儲存，由 TimerRecordManager.shared 管理
 
 ===========================================
 二、數據模型定義
@@ -111,13 +114,18 @@ Root
 
 {
   "id": "string",                    // 與 userId 相同
-  "notificationsEnabled": boolean,   // 通知開關
+  "notificationsEnabled": boolean,   // 通知全域開關
+  "notificationOffsetMinutes": number, // 提前提醒時間（0/5/10/15/30/60 分鐘）
   "lastModified": Timestamp          // 最後修改時間
 }
 
 用途:
-- 應用偏好設定
-- 通知控制
+- 應用全域設定
+- 通知控制（全域開關 + 統一提前時間）
+
+註：
+- 預設值: notificationsEnabled=false, notificationOffsetMinutes=10
+- 所有任務使用統一的通知設定，簡化用戶體驗
 
 【3. StudySettings - 學習偏好設定】
 集合: studySettings/{userId}
@@ -158,45 +166,85 @@ Root
 - 任務規劃建議
 
 【4. TodoTask - 待辦任務】
-集合: tasks/{taskId}
+集合: tasks/{userId}/userTasks/{taskId}
 
 {
-  "id": "string",                    // 自動生成
+  "id": "string",                    // Firestore 文檔 ID（~20 字符）
   "userId": "string",                // 用戶 ID
   "title": "string",                 // 任務標題
-  "description": "string",           // 任務描述
+  "note": "string",                  // 任務備註
   "category": "string",              // 分類（科目）
-  "isCompleted": boolean,            // 是否完成
+  "isCompleted": boolean,            // 是否完成（非重複任務）
   "isAllDay": boolean,               // 是否全天任務
-  "dueDate": Timestamp?,             // 到期日期
-  "startDate": Timestamp?,           // 開始日期
-  "endDate": Timestamp?,             // 結束日期
-  "color": "string",                 // 顏色代碼 (hex)
+  "startDate": Timestamp,            // 開始日期時間
+  "endDate": Timestamp,              // 結束日期時間
+  "repeatEndDate": Timestamp?,       // 重複結束日期（重複任務專用）
+  "color": {                         // 顏色資料
+    "red": number,
+    "green": number,
+    "blue": number,
+    "opacity": number
+  },
   "focusTime": number,               // 預估專注時間（分鐘）
-  "repeatType": "string",            // 重複類型
-  "repeatDays": [number]?,           // 重複日期（weekly 使用）
-  "repeatDates": [number]?,          // 重複日期（monthly 使用）
-  "parentId": "string"?,             // 父任務 ID（重複任務）
-  "instanceDate": Timestamp?,        // 實例日期（重複任務實例）
-  "createdAt": Timestamp,            // 創建時間
-  "updatedAt": Timestamp,            // 更新時間
-  "version": number,                 // 版本號
-  "isDeleted": boolean               // 軟刪除標記
+  "repeatType": {                    // 重複類型物件
+    "type": "string"                 // "none"/"daily"/"weekly"/"monthly"
+  },
+  "notificationEnabled": boolean,    // 是否啟用通知
+  "notificationOffset": number,      // 提前提醒時間（分鐘，保留欄位但不使用）
+  "createdAt": Timestamp             // 創建時間
 }
+
+客戶端模型（iOS）:
+- id: 新建時為 UUID（36 字符），從 Firestore 載入時為文檔 ID（~20 字符）
+- instances: [TaskInstance] - 重複任務實例陣列（僅客戶端）
 
 RepeatType 枚舉:
 - "none" - 不重複
-- "daily" - 每天
-- "weekly" - 每週（配合 repeatDays）
-- "monthly" - 每月（配合 repeatDates）
+- "daily" - 每天重複
+- "weekly" - 每週重複
+- "monthly" - 每月重複
+
+重要說明:
+- 重複任務會自動生成 instances 子集合
+- 每個實例代表特定日期的出現
+- 實例數量限制：daily(365天), weekly(52週), monthly(12個月)
+- 通知使用全域設定（notificationOffset 欄位保留但實際使用全域值）
 
 用途:
 - 任務管理
 - 學習計劃
 - 進度追蹤
 
+【4.1. TaskInstance - 任務實例】
+集合: tasks/{userId}/userTasks/{taskId}/instances/{instanceId}
+
+{
+  "id": "string",                    // Firestore 文檔 ID
+  "date": Timestamp,                 // 實例日期
+  "isCompleted": boolean,            // 此實例是否完成
+  "parentTaskId": "string",          // 父任務 ID
+  "createdAt": Timestamp             // 建立時間
+}
+
+說明:
+- 僅用於重複任務（repeatType != "none"）
+- 每個實例代表重複任務在特定日期的一次出現
+- 完成狀態獨立管理（不影響父任務的 isCompleted）
+- 由 Cloud Functions 自動生成和管理
+
+生成規則:
+- 每天重複：生成 365 個實例（一年份）
+- 每週重複：生成 52 個實例
+- 每月重複：生成 12 個實例
+- 超過 repeatEndDate 的實例不生成
+
+用途:
+- 重複任務的日期特定實例
+- 獨立追蹤每個實例的完成狀態
+- 支援「今天完成」而不影響未來的實例
+
 【5. LearningStatistic - 學習統計】
-集合: statistics/{statisticId}
+集合: userStatistics/{userId}/statistics/{statisticId}
 
 {
   "id": "string",                    // 自動生成
@@ -217,27 +265,45 @@ RepeatType 枚舉:
 - 成就追蹤
 
 【6. TimerRecord - 計時記錄】
-集合: timerRecords/{recordId}
+儲存位置: UserDefaults（本地儲存，不同步到 Firestore）
 
 {
-  "id": "string",                    // 自動生成
+  "id": "string",                    // UUID（36 字符）
   "userId": "string",                // 用戶 ID
   "subject": "string",               // 科目
-  "startTime": Timestamp,            // 開始時間
-  "endTime": Timestamp,              // 結束時間
+  "startTime": Date,                 // 開始時間
+  "endTime": Date,                   // 結束時間
   "duration": number,                // 持續時間（秒）
   "isCompleted": boolean,            // 是否完成
-  "createdAt": Timestamp,            // 創建時間
-  "lastModifiedAt": Timestamp,       // 最後修改時間
+  "createdAt": Date,                 // 創建時間
+  "lastModifiedAt": Date,            // 最後修改時間
   "isDeleted": boolean               // 軟刪除標記
 }
 
-註: 目前主要使用 UserDefaults 本地儲存，僅選擇性同步到 Firestore
+管理類: TimerRecordManager.shared（單例）
+
+方法:
+- addRecord(_:)
+- getAllRecords() -> [TimerRecord]
+- getRecords(userId:) -> [TimerRecord]
+- getRecords(userId:from:to:) -> [TimerRecord]
+- updateRecord(_:)
+- deleteRecord(id:)
+- getStatistics(userId:) -> TimerStatistics
+
+計算屬性:
+- durationInMinutes: 持續時間轉換為分鐘
+
+為什麼使用本地儲存:
+- 計時資料為即時性資料，不需雲端同步
+- 減少 Firestore 讀寫次數
+- 降低成本
+- 提升效能
 
 用途:
-- 計時歷史
-- 時間統計
-- 學習分析
+- 計時歷史記錄
+- 時間統計分析
+- 學習時長追蹤
 
 【7. ChatHistory - 聊天歷史】
 集合: chatHistories/{userId}
@@ -293,22 +359,22 @@ User ←→ ChatHistory
 
 User ←→ Tasks
 - 一個用戶可以有多個任務
-- 透過 userId 關聯
-- 查詢: whereField("userId", isEqualTo: userId)
+- 路徑: tasks/{userId}/userTasks/{taskId}
+- 透過路徑層次關聯
 
 User ←→ Statistics
 - 一個用戶可以有多個統計記錄
-- 透過 userId 關聯
-- 按日期和分類分組
+- 路徑: userStatistics/{userId}/statistics/{statisticId}
+- 按類別分組
 
 User ←→ TimerRecords
 - 一個用戶可以有多個計時記錄
-- 透過 userId 關聯
+- 本地儲存，透過 userId 過濾
 - 按開始時間排序
 
 ChatHistory ←→ Messages
 - 一個聊天歷史包含多條訊息
-- 子集合關係
+- 子集合關係: chatHistories/{userId}/messages/{messageId}
 - 按時間順序排列
 
 【多對多關係】
@@ -317,10 +383,16 @@ ChatHistory ←→ Messages
 
 【父子關係】
 
-Task (Parent) ←→ Task (Instance)
+Task (Parent) ←→ TaskInstance (Child)
 - 重複任務的父任務和實例
-- 透過 parentId 關聯
-- instanceDate 標識特定日期實例
+- 路徑: tasks/{userId}/userTasks/{taskId}/instances/{instanceId}
+- 透過路徑層次和 parentTaskId 關聯
+- date 標識特定日期實例
+
+重要特性:
+- 實例由 Cloud Functions 自動生成
+- 更新任務時，保留已完成實例，重新生成未完成實例
+- 每個實例獨立追蹤完成狀態
 
 ===========================================
 四、資料同步策略
@@ -328,38 +400,64 @@ Task (Parent) ←→ Task (Instance)
 
 【同步機制】
 
+架構: Cloud Functions 作為中間層
+- 客戶端不直接操作 Firestore
+- 所有操作通過 Cloud Functions (asia-east1)
+- 統一業務邏輯和資料驗證
+
 1. 樂觀更新 (Optimistic Update)
    流程:
    - 立即更新本地 UI
-   - 異步保存到 Firestore
+   - 調用 Cloud Function 異步保存
    - 失敗時回滾本地狀態
+
+   範例: 任務完成切換
+   - 立即更新 UI 顯示為已完成
+   - 加入更新佇列
+   - 調用 toggleTaskCompletion Cloud Function
+   - 失敗時恢復狀態（最多重試 3 次）
 
    優勢:
    - 即時反饋
    - 良好的用戶體驗
+   - 離線友好
 
-2. 即時監聽 (Real-time Listener)
+2. 快取機制 (Cache Strategy)
    實現:
-   - Firestore Snapshot Listener
-   - 自動同步遠端變化
-   - 更新本地狀態
+   - 任務列表快取時間: 60 秒
+   - 檢查 lastTasksLoadTime
+   - 快取期內直接返回本地資料
 
-   範例:
-   db.collection("profiles").document(userId)
-       .addSnapshotListener { snapshot, error in
-           // 處理變化
-       }
+   強制刷新:
+   - forceReloadTasks() 忽略快取
+   - 用於資料變更後立即同步
 
-3. 版本控制 (Version Control)
-   機制:
-   - 每次更新 version++
-   - 服務端檢查版本號
-   - 衝突時拒絕舊版本
+3. 手動刷新 (Manual Refresh)
+   註: 停用即時監聽 (Real-time Listener)
 
-   範例:
-   if (newData.version <= currentData.version) {
-       throw new Error("資料已過期");
-   }
+   原因:
+   - Cloud Functions 管理資料，路徑結構不同
+   - 避免雙重載入和衝突
+   - 減少網絡開銷
+
+   替代方案:
+   - 下拉刷新
+   - 操作完成後自動重新載入
+   - 定期輪詢（未實現）
+
+4. 更新佇列機制 (Update Queue)
+   用於: 任務完成狀態切換
+
+   流程:
+   - 將更新加入 completionUpdateQueue
+   - processCompletionQueue() 處理佇列
+   - 失敗時重試（最多 3 次）
+   - 超過重試次數恢復本地狀態
+
+   優勢:
+   - 避免頻繁網路請求
+   - 自動重試機制
+   - 錯誤恢復
 
 【同步觸發點】
 
@@ -433,29 +531,40 @@ SyncStatus 枚舉:
 
 【查詢範例】
 
-1. 獲取用戶未完成任務（按日期排序）:
-db.collection("tasks")
-    .whereField("userId", isEqualTo: userId)
-    .whereField("isCompleted", isEqualTo: false)
-    .order(by: "createdAt", descending: true)
-    .limit(50)
+註: 所有查詢通過 Cloud Functions 執行
 
-2. 獲取特定科目的統計（最近 30 天）:
-let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 3600)
+1. 獲取用戶所有任務（包含實例）:
+   Cloud Function: fetchTasks
+   客戶端調用:
+   let result = try await functions.httpsCallable("fetchTasks").call()
 
-db.collection("statistics")
-    .whereField("userId", isEqualTo: userId)
-    .whereField("category", isEqualTo: category)
-    .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: thirtyDaysAgo))
-    .order(by: "date", descending: true)
+   後端實現（參考）:
+   db.collection("tasks")
+       .doc(userId)
+       .collection("userTasks")
+       .orderBy("createdAt", "desc")
+       .get()
+
+2. 獲取特定科目的統計:
+   Cloud Function: getStatistics
+   客戶端調用:
+   let result = try await functions.httpsCallable("getStatistics").call()
+
+   後端實現（參考）:
+   db.collection("userStatistics")
+       .doc(userId)
+       .collection("statistics")
+       .where("category", "==", category)
+       .get()
 
 3. 獲取今日計時記錄:
-let startOfDay = Calendar.current.startOfDay(for: Date())
-
-db.collection("timerRecords")
-    .whereField("userId", isEqualTo: userId)
-    .whereField("startTime", isGreaterThanOrEqualTo: Timestamp(date: startOfDay))
-    .order(by: "startTime", descending: true)
+   本地查詢（UserDefaults）:
+   let startOfDay = Calendar.current.startOfDay(for: Date())
+   let records = TimerRecordManager.shared.getRecords(
+       userId: userId,
+       from: startOfDay,
+       to: Date()
+   )
 
 【分頁載入】
 
@@ -503,6 +612,14 @@ Version 1.2:
 Version 1.3:
 - 遷移至 Cloud Functions
 - 數據驗證加強
+- 資料結構調整為按用戶分層
+
+Version 1.4 (2025-11-12):
+- 新增通知功能
+- AppSettings 新增 notificationOffsetMinutes
+- TodoTask 新增 notificationEnabled 和 notificationOffset
+- 修復任務更新 bug（區分 createTask 和 updateTask）
+- NotificationManager 使用全域設定單一來源
 
 【資料遷移腳本】
 
@@ -547,7 +664,131 @@ export const migrateTasksV1toV2 = functions
 }
 
 ===========================================
-七、安全規則
+七、重要技術決策與問題修復
+===========================================
+
+【1. 任務 ID 設計與更新判斷】
+
+問題背景:
+- 修改已存在任務時，系統會新增一個新任務而非更新原有任務
+
+根本原因:
+- FirebaseService.saveTodoTask() 總是調用 createTask Cloud Function
+- 沒有區分新增和更新的邏輯
+
+解決方案:
+- 透過 task.id 長度判斷是否為現有任務
+  * UUID (新任務): 36 字符（含連字符）
+  * Firestore ID (現有任務): ~20 字符
+- 根據判斷結果調用不同的 Cloud Function:
+  * ID 長度 = 36 → createTask
+  * ID 長度 < 36 → updateTask
+
+實現代碼（FirebaseService.swift）:
+let isExistingTask = !task.id.isEmpty && task.id.count < 36
+
+if isExistingTask {
+    result = try await functions.httpsCallable("updateTask").call([
+        "taskId": task.id,
+        "updates": convertedTaskData
+    ])
+} else {
+    result = try await functions.httpsCallable("createTask").call([
+        "task": convertedTaskData
+    ])
+}
+
+【2. 通知全域設定設計】
+
+設計決策: 使用全域設定而非個別任務設定
+
+原因:
+1. 簡化使用者體驗
+   - 避免每個任務都要設定通知
+   - 統一管理更直觀
+
+2. 減少資料儲存
+   - 不需要為每個任務儲存 notificationOffset
+   - 僅保留 notificationEnabled 標記
+
+3. 方便同步
+   - 單一來源（NotificationManager.globalNotificationOffsetMinutes）
+   - 避免多處設定不一致
+
+4. 避免競爭條件
+   - 同步更新在主執行緒完成
+   - 然後異步更新 Firestore
+
+實現:
+- AppSettings 儲存全域設定
+- NotificationManager.shared.globalNotificationOffsetMinutes 為單一來源
+- App 啟動時同步設定值
+- SettingsView 同步更新（避免 race condition）
+
+【3. Cloud Functions 中間層設計】
+
+設計決策: 客戶端透過 Cloud Functions 操作 Firestore
+
+原因:
+1. 集中業務邏輯
+   - 重複任務實例生成
+   - 資料驗證
+   - 權限檢查
+
+2. 防止資料不一致
+   - 統一的實例生成規則
+   - 避免客戶端直接操作導致錯誤
+
+3. 安全性
+   - 服務端驗證
+   - 防止惡意操作
+
+4. 更新任務智能處理
+   - 自動判斷是否需要重新生成實例
+   - 保留已完成實例，重新生成未完成實例
+
+【4. TimerRecord 本地儲存設計】
+
+設計決策: 使用 UserDefaults 而非 Firestore
+
+原因:
+1. 即時性資料
+   - 計時資料不需雲端同步
+   - 主要用於本地統計
+
+2. 成本考量
+   - 減少 Firestore 讀寫次數
+   - 降低運營成本
+
+3. 效能考量
+   - 本地讀取更快
+   - 無網路延遲
+
+4. 隱私考量
+   - 敏感的學習時間資料
+   - 僅保存在本地
+
+【5. 重複任務實例預生成設計】
+
+設計決策: 預先生成有限數量的實例
+
+原因:
+1. iOS 通知限制
+   - 系統限制 64 個通知
+   - 需要動態管理
+
+2. 效能考量
+   - 避免每次查詢時動態計算
+   - 支援離線場景
+
+3. 實現細節
+   - 每天: 7 天份通知
+   - 每週: 4 週份通知
+   - 每月: 3 個月份通知
+   - Firestore 實例: 更長期（365天/52週/12個月）
+
+===========================================
+八、安全規則
 ===========================================
 
 【Firestore Security Rules】
@@ -637,7 +878,7 @@ match /tasks/{taskId} {
 }
 
 ===========================================
-八、備份與還原
+九、備份與還原
 ===========================================
 
 【備份策略】
@@ -679,7 +920,7 @@ match /tasks/{taskId} {
 5. 恢復正常服務
 
 ===========================================
-九、性能監控
+十、性能監控
 ===========================================
 
 【監控指標】
@@ -717,7 +958,7 @@ match /tasks/{taskId} {
    - 定期審查
 
 ===========================================
-十、資料庫成本估算
+十一、資料庫成本估算
 ===========================================
 
 【Firestore 定價】

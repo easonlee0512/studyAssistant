@@ -88,11 +88,19 @@ class UserSettingsViewModel: ObservableObject {
     
     // MARK: - App Settings Methods
     
-    func updateAppSettings(notificationsEnabled: Bool) async {
+    func updateAppSettings(notificationsEnabled: Bool? = nil, notificationOffsetMinutes: Int? = nil) async {
         var updatedSettings = appSettings
-        updatedSettings.notificationsEnabled = notificationsEnabled
+
+        if let enabled = notificationsEnabled {
+            updatedSettings.notificationsEnabled = enabled
+        }
+
+        if let offset = notificationOffsetMinutes {
+            updatedSettings.notificationOffsetMinutes = offset
+        }
+
         updatedSettings.lastModified = Date()
-        
+
         do {
             try await dataService.updateAppSettings(updatedSettings)
             appSettings = updatedSettings
