@@ -722,9 +722,9 @@ final class CalendarAssistantViewModel: ObservableObject {
                 temperature: 1.0,
                 stream: false,
                 tools: [saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
-                tool_choice: "required",  // 強制 GPT 必須調用函數，不允許純文字回應
+                tool_choice: "auto",  // 讓 GPT 自主決定使用文字或 function calling
                 stream_options: nil,
-                reasoning_effort: "low"
+                reasoning_effort: "minimal"
             )
 
             guard let data = try? encoder.encode(reqBody) else {
@@ -924,7 +924,12 @@ final class CalendarAssistantViewModel: ObservableObject {
                     // 若沒有 tool calls，只有文字回覆，繼續下一輪
                     let content = choice.message.content
                     if !content.isEmpty {
-                        print("\n💬 GPT 回覆：\(content)")
+                        print("\n" + String(repeating: "─", count: 80))
+                        print("💬 GPT 選擇純文字回應（未呼叫 function）")
+                        print("內容：\(content)")
+                        print(String(repeating: "─", count: 80) + "\n")
+                    } else {
+                        print("\n⚠️ 收到空的文字回應，可能是 GPT 未正確回應")
                     }
                     messages.append(choice.message)
                 }
@@ -1543,8 +1548,9 @@ final class CalendarAssistantViewModel: ObservableObject {
             當前時間：\(currentTimeString)
 
             你的目標：
-            1. 根據需求新增、刪除或修改任務
-            2. 完成所有操作後立即調用 end_conversation（如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話）
+            1. 根據使用者提供的規則，綜合調研規劃方法並用思考鏈整理出要做的報告
+            2. 根據前面的報告，執行新增、刪除或修改任務
+            3. 完成所有操作後立即調用 end_conversation（如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話）
 
             重要規則：
             1. 如果沒有任務需要新增/刪除/更新，直接調用 end_conversation 結束對話。
