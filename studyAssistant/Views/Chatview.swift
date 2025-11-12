@@ -117,12 +117,16 @@ struct ChatDemoDynamicView: View {
             }
         }
         .onDisappear {
-            // 離開視圖時取消生成
-            if isGenerating {
-                cancelGeneration()
-            }
+            // 注意：不再取消正在進行的對話，允許在後端繼續執行
+            // 使用者可以透過以下方式取消對話：
+            // 1. 切換聊天室（在 onChange(of: viewModel.selectedRoomIndex) 中處理）
+            // 2. 點擊停止按鈕（在 cancelGeneration() 中處理）
+            // 3. 發送新訊息（在 sendMessage() 中處理）
+
+            // 重置日曆相關狀態
             isCalendarSending = false
             updateCalendarStatus(message: nil, isLoading: false, autoDismiss: false)
+
             // 移除鍵盤通知觀察者
             NotificationCenter.default.removeObserver(self)
         }
