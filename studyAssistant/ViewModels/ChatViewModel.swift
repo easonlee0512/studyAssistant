@@ -1076,7 +1076,7 @@ final class ChatViewModel: ObservableObject {
             role: "system",
             content: """
                 為協助使用者高效、正確地安排行程，請依以下規則進行，並盡可能減少追問。請產生具體且可執行的時間安排表。
-                執行前，請先列出3-7項簡明分解步驟（Checklist），以概念性子任務為主，不含實作細節。
+                如果要執行任務安排前，才要先先列出3-7項簡明分解步驟（Checklist），以概念性子任務為主，不含實作細節。
                 語氣依設定：\(tone)
                 \(formatStudySettings())
                 特別注意：
