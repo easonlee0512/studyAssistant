@@ -672,8 +672,9 @@ struct CalendarAssistantPopupView: View {
             Text("已完成: " + (task.isCompleted ? "是" : "否"))
                 .font(.system(size: taskContentSize))
         }
+        .foregroundColor(Color.black)
         .padding()
-        .background(Color.green.opacity(0.1))
+        .background(Color.green.opacity(0.2))
         .cornerRadius(8)
     }
 
@@ -701,8 +702,9 @@ struct CalendarAssistantPopupView: View {
             Text("已完成: " + (task.isCompleted ? "是" : "否"))
                 .font(.system(size: taskContentSize))
         }
+        .foregroundColor(Color.black)
         .padding()
-        .background(Color.red.opacity(0.1))
+        .background(Color.red.opacity(0.2))
         .cornerRadius(8)
     }
 
@@ -752,7 +754,7 @@ struct CalendarAssistantPopupView: View {
                         .foregroundColor(Color.black)
                 }
                 .padding()
-                .background(Color.gray.opacity(0.1))
+                .background(Color.gray.opacity(0.2))
                 .cornerRadius(8)
                 .frame(maxWidth: .infinity)
 
@@ -791,7 +793,7 @@ struct CalendarAssistantPopupView: View {
                         .foregroundColor(Color.black)
                 }
                 .padding()
-                .background(Color.blue.opacity(0.1))
+                .background(Color.blue.opacity(0.2))
                 .cornerRadius(8)
                 .frame(maxWidth: .infinity)
             }
