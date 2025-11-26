@@ -717,14 +717,14 @@ final class CalendarAssistantViewModel: ObservableObject {
 
             // 呼叫 GPT
             let reqBody = OpenAIRequest(
-                model: "gpt-5",
+                model: "gpt-5.1",
                 messages: messages,
                 temperature: 1.0,
                 stream: false,
                 tools: [saveTaskFunction, deleteTaskFunction, updateTaskFunction, endConversationFunction],
                 tool_choice: "auto",  // 讓 GPT 自主決定使用文字或 function calling
                 stream_options: nil,
-                reasoning_effort: "minimal"
+                reasoning_effort: "low"
             )
 
             guard let data = try? encoder.encode(reqBody) else {
