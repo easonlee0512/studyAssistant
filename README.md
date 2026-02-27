@@ -12,7 +12,7 @@
 
 ### Demo 影片
 
-[Demo 影片（MP4）](影片與圖片/專題demo影片.mp4)
+[YouTube](https://youtube.com/shorts/gLgCwytt8Ok?feature=share) | [本地下載（MP4）](影片與圖片/專題demo影片.mp4)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ### 發表影片
 
-[D7-林哲維-studyAssistant-您的智能學習夥伴（MP4）](<專題成果-報告及海報展示與影片說明/D7-林哲維-studyAssistant-您的智能學習夥伴 - Cho (1080p, h264).mp4>)
+[YouTube](https://youtu.be/Sswmhg5Y1qE) | [本地下載（MP4）](<專題成果-報告及海報展示與影片說明/D7-林哲維-studyAssistant-您的智能學習夥伴 - Cho (1080p, h264).mp4>)
 
 ### 專題報告
 
@@ -34,7 +34,7 @@
 
 ### 簡報
 
-[發表簡報（PPTX）](專題成果-報告及海報展示與影片說明/基於人工智慧之自適應學習規劃助理.pptx)
+[發表簡報（PDF）](專題成果-報告及海報展示與影片說明/基於人工智慧之自適應學習規劃助理.pdf)
 
 ---
 
