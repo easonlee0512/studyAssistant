@@ -12,9 +12,7 @@
 
 ### Demo 影片
 
-<video src="影片與圖片/專題demo影片.mp4" controls width="100%"></video>
-
-> 若影片無法在上方直接播放，可[點此下載觀看](影片與圖片/專題demo影片.mp4)。
+[Demo 影片（MP4）](影片與圖片/專題demo影片.mp4)
 
 ---
 
@@ -24,9 +22,7 @@
 
 ### 發表影片
 
-<video src="專題成果-報告及海報展示與影片說明/D7-林哲維-studyAssistant-您的智能學習夥伴 - Cho (1080p, h264).mp4" controls width="100%"></video>
-
-> 若影片無法在上方直接播放，可[點此下載觀看](專題成果-報告及海報展示與影片說明/D7-林哲維-studyAssistant-您的智能學習夥伴%20-%20Cho%20(1080p,%20h264).mp4)。
+[D7-林哲維-studyAssistant-您的智能學習夥伴（MP4）](<專題成果-報告及海報展示與影片說明/D7-林哲維-studyAssistant-您的智能學習夥伴 - Cho (1080p, h264).mp4>)
 
 ### 專題報告
 
