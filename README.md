@@ -20,11 +20,11 @@
 
 ### 介面截圖
 
-![app介面展示](影片與圖片/app介面展示.png)
+![app介面展示](專題成果-報告及海報展示與影片說明/app介面展示.png)
 
 ### Demo 影片
 
-[YouTube](https://youtube.com/shorts/gLgCwytt8Ok?feature=share) | [本地下載（MP4）](影片與圖片/專題demo影片.mp4)
+[YouTube](https://youtube.com/shorts/gLgCwytt8Ok?feature=share) | [本地下載（MP4）](專題成果-報告及海報展示與影片說明/專題demo影片.mp4)
 
 ---
 
