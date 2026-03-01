@@ -110,3 +110,5 @@ Icon
 
 # Firebase 配置文件 (如需忽略)
 # GoogleService-Info.plist 
+
+Config.swift
